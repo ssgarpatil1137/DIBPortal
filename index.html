@@ -289,7 +289,6 @@
                     <table class="nested" ng-if="project.pets.length">
                       <thead>
                         <tr>
-                          <th></th>
                           <th>Code</th>
                           <th>Status</th>
                           <th>Budget source</th>
@@ -302,16 +301,6 @@
                       </thead>
                       <tbody ng-repeat="pet in project.pets">
                         <tr>
-                          <td>
-                            <button ng-if="pet.budgetLines.length||vm.canAddBudgetLine(pet)"
-                              class="icon-btn disclosure"
-                              ng-class="{expanded:pet.expanded}"
-                              title="View budget lines"
-                              ng-click="vm.togglePet(pet)"
-                            >
-                              <i data-lucide="chevron-right"></i>
-                            </button>
-                          </td>
                           <td><b>{{pet.code}}</b></td>
                           <td>
                             <span
@@ -396,17 +385,7 @@
                             </div>
                           </td>
                         </tr>
-                        <tr class="grandchild" ng-if="pet.expanded&&!pet.budgetLines.length">
-                          <td></td>
-                          <td colspan="8">
-                            <div class="empty">
-                              <i data-lucide="landmark"></i>
-                              <strong>No budget lines yet for this PET.</strong>
-                            </div>
-                          </td>
-                        </tr>
-                        <tr class="grandchild" ng-if="pet.expanded&&pet.budgetLines.length">
-                          <td></td>
+                        <tr class="grandchild" ng-if="pet.budgetLines.length">
                           <td colspan="8">
                             <div class="budget-wrap">
                               <table class="nested budget">
@@ -428,7 +407,6 @@
                                     <th>Action</th>
                                   </tr>
                                 </thead>
-                                <caption><button class="icon-btn accent" title="Add budget line" ng-click="vm.openBudgetLine(pet)"><i data-lucide="plus"></i></button></caption>
                                 <tbody ng-repeat="line in pet.budgetLines">
                                   <tr>
                                     <td>
