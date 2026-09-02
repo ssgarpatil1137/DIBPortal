@@ -698,10 +698,6 @@
         if (project.petsLoaded || vm.demo) { project.expanded = true; redraw(); return; }
         loadProjectPets(project, true);
       };
-      vm.toggleBudgetLine = function (line) {
-        line.expanded = !line.expanded;
-        redraw();
-      };
       function loadProjectPets(project, expandRegardless) {
         project.loading = true;
         return $http.get("api/portfolio/projects/" + project.projectId).then(function (response) {
