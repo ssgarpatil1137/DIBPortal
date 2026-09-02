@@ -733,7 +733,6 @@
             projectSize: "Medium",
             budgetType: "CAPEX",
             requiresPet: true,
-            skipReview: false,
           },
         );
         vm.form.isJira = project ? !!project.jiraKey : true;
@@ -981,7 +980,6 @@
             projectManager: vm.form.projectManager,
             budgetType: vm.form.budgetType,
             budgetSourceId: vm.form.budgetSourceId,
-            skipReview: !!vm.form.skipReview,
           };
           $http.post("api/portfolio/projects", payload).then(function () {
             notice(payload.projectId ? "Project updated" : "Project registered");

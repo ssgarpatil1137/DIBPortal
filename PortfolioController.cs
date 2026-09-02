@@ -84,12 +84,14 @@ namespace DFM.Web.Controllers
             try
             {
                 var requiresPet = true;
+                var skipReview = false;
                 if (value.ProjectId.HasValue)
                 {
-                    var existing = Db.Query("SELECT RequiresPet FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+                    var existing = Db.Query("SELECT RequiresPet,SkipReview FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
                     if (existing != null && existing["RequiresPet"] != null) requiresPet = Convert.ToBoolean(existing["RequiresPet"]);
+                    if (existing != null && existing["SkipReview"] != null) skipReview = Convert.ToBoolean(existing["SkipReview"]);
                 }
-                var rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", value.SkipReview), P("@User", User.Identity.Name));
+                var rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
                 return Ok(rows.FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
