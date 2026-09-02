@@ -435,37 +435,48 @@
             if (rows.length < 2) return;
             var headers = rows[0].map(function (h) { return (h || "").replace(/[^a-z0-9]/gi, "").toLowerCase(); });
             var col = function (name) { return headers.indexOf(name); };
+            var colAny = function (names) {
+              for (var index = 0; index < names.length; index++) {
+                var found = col(names[index]);
+                if (found >= 0) return found;
+              }
+              return -1;
+            };
             var sum = 0;
             var preview = [];
             for (var r = 1; r < rows.length; r++) {
               var row = rows[r];
               if (!row.some(function (c) { return c && c.trim(); })) continue;
-              var units = parseFloat(row[col("units")]) || 1;
-              var unitPrice = parseFloat(row[col("unitprice")]) || 0;
-              var foreign = parseFloat(row[col("fcyamount")]) || units * unitPrice;
-              var aed = parseFloat(row[col("aedamount")]) || foreign;
-              var contingency = parseFloat(row[col("contingency")]) || 0;
-              var finalAedIdx = col("finalaed");
-              var finalAed = finalAedIdx >= 0 && row[finalAedIdx] ? parseFloat(row[finalAedIdx]) : aed * (1 + contingency / 100);
+              var units = parseUploadNumber(row[colAny(["units", "unit"])], 1);
+              var unitPrice = parseUploadNumber(row[col("unitprice")], 0);
+              var foreign = parseUploadNumber(row[colAny(["fcyamount", "amtfcy", "amountfcy", "foreignamount"])], units * unitPrice);
+              var aed = parseUploadNumber(row[colAny(["aedamount", "amtlcy", "amountlcy", "lcyamount", "localamount"])], foreign);
+              var contingency = parseUploadNumber(row[colAny(["contingency", "contingencypercent", "cont", "contpercent"])], 0);
+              var finalAedIdx = colAny(["finalaed", "finalaedamount", "finalamountaed", "finalamtlcy", "finalamountlcy"]);
+              var finalAed = finalAedIdx >= 0 && row[finalAedIdx] ? parseUploadNumber(row[finalAedIdx], 0) : aed * (1 + contingency / 100);
               if (isNaN(finalAed)) finalAed = 0;
               sum += finalAed;
+              var petReference = row[col("petreference")];
+              var currency = row[colAny(["currency", "basecy", "basecurrency"])] || "AED";
               preview.push({
-                head: row[col("head")],
+                projectCode: row[colAny(["projectid", "projectcode", "jirakey"])] || vm.projectDisplayId(vm.selectedProject),
+                petReference: petReference,
+                currency: currency,
+                head: row[colAny(["head", "exphead", "expensehead"])],
                 topic: row[col("topic")],
                 vendor: row[col("vendor")],
                 costType: row[col("costtype")],
                 unitType: row[col("unittype")],
                 units: units,
                 unitPrice: unitPrice,
-                currency: row[col("currency")] || "AED",
                 foreignAmount: foreign,
                 aedAmount: aed,
                 contingencyPercent: contingency,
                 finalAed: finalAed,
                 glNumber: row[col("glnumber")],
               });
-              var refIdx = col("petreference");
-              if (!vm.form.code && refIdx >= 0 && row[refIdx]) vm.form.code = row[refIdx];
+              if (petReference && !vm.selectedPet && (!vm.form.code || /^PET-\d{4}-\d{4}$/.test(vm.form.code))) vm.form.code = petReference;
+              if (currency && (!vm.form.currency || vm.form.currency === "AED")) vm.form.currency = currency;
             }
             vm.uploadPreview = preview;
             vm.form.requestedAmount = Math.round(sum * 100) / 100;
@@ -474,6 +485,10 @@
         };
         reader.readAsText(file);
       };
+      function parseUploadNumber(value, fallback) {
+        var parsed = parseFloat(String(value || "").replace(/,/g, ""));
+        return isNaN(parsed) ? fallback : parsed;
+      }
       vm.recalculateUploadPreview = function () {
         var sum = 0;
         (vm.uploadPreview || []).forEach(function (row) {
