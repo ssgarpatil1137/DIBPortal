@@ -782,10 +782,11 @@
           type: "pet",
           kicker: "PET REQUEST",
           title: pet ? "Edit " + pet.code : "Create PET for " + vm.projectDisplayId(project),
-          submit: pet ? "Save PET" : "Submit for review",
+          submit: pet && pet.status === "Approved" ? "Save vendor name" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
       };
+      vm.petVendorOnly = function () { return vm.selectedPet && vm.selectedPet.status === "Approved"; };
       vm.openSpend = function (pet) {
         vm.selectedPet = pet;
         vm.selectedProject = vm.projects.filter(function (project) { return project.pets.indexOf(pet) >= 0; })[0];
@@ -1030,6 +1031,7 @@
             code: vm.form.code,
             requestedAmount: vm.form.requestedAmount,
             currency: vm.form.currency,
+            vendorName: vm.form.vendorName,
           };
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
