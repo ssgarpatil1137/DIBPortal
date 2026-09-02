@@ -1,0 +1,1142 @@
+<!doctype html>
+<html lang="en" ng-app="dfmApp">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Falcon Portfolio</title>
+    <link rel="stylesheet" href="vendor/select2.min.css" />
+    <link rel="stylesheet" href="app/styles.css?v=8" />
+  </head>
+  <body ng-controller="PortfolioController as vm" ng-cloak>
+    <section class="auth-shell" ng-if="!vm.session">
+      <div class="auth-brand"><img class="falcon-logo hero-logo" src="assets/falcon-logo.svg" alt="Falcon" /><p class="eyebrow">FALCON FINANCE PORTFOLIO</p><h1>Control PET from demand to settlement.</h1><p>Register projects, route PET approvals, and keep CAPEX, OPEX, commitments, and invoices in one governed workspace.</p></div>
+      <form class="auth-panel" ng-submit="vm.authenticate()">
+        <p class="eyebrow">SECURE ACCESS</p><h2>{{vm.authTitle()}}</h2><p class="auth-help">{{vm.authHelp()}}</p>
+        <label>Email ID<input type="email" ng-model="vm.auth.email" autocomplete="username" required /></label>
+        <label ng-if="vm.auth.mode==='login'">Password<input type="password" ng-model="vm.auth.password" autocomplete="current-password" required /></label>
+        <label ng-if="vm.auth.mode!=='login'">Security question<select ng-model="vm.auth.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" required></select></label>
+        <label ng-if="vm.auth.mode!=='login'">Security answer<input ng-model="vm.auth.securityAnswer" required /></label>
+        <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>
+        <p class="form-error" ng-if="vm.auth.error">{{vm.auth.error}}</p><button class="btn primary auth-submit" type="submit">{{vm.authAction()}}</button>
+        <div class="auth-links"><button type="button" ng-click="vm.auth.mode='setup'">First-time setup</button><button type="button" ng-click="vm.auth.mode='reset'">Reset password</button></div>
+        <div class="preview-divider"><span>Design review</span></div><button type="button" class="btn secondary preview-button" ng-click="vm.enterPreview()">Preview workspace</button>
+      </form>
+    </section>
+    <header class="topbar" ng-if="vm.session">
+      <div class="brand">
+        <img class="falcon-logo" src="assets/falcon-logo.svg" alt="Falcon" />
+        <div>
+          <strong>Falcon</strong
+          ><small>Demand &amp; PET control</small>
+        </div>
+      </div>
+      <nav class="tabs" aria-label="Workspace">
+        <button
+          ng-repeat="tab in vm.navTabs"
+          ng-class="{active:vm.tab===tab.id}"
+          ng-click="vm.setTab(tab.id)"
+        >
+          <i data-lucide="{{tab.icon}}"></i>{{tab.label}}
+        </button>
+      </nav>
+      <div class="user-area">
+        <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
+        <button class="avatar" title="Sign out" ng-click="vm.signOut()">{{vm.session.initials}}</button>
+      </div>
+    </header>
+
+    <main ng-if="vm.session">
+      <section class="page-head">
+        <div>
+          <p class="eyebrow">PORTFOLIO CONTROL DESK</p>
+          <h1>{{vm.pageTitle()}}</h1>
+          <p class="subhead">
+            {{vm.today | date:'EEEE, dd MMMM yyyy'}}
+            <span class="api-state" ng-class="{live:!vm.demo}"
+              >{{vm.demo ? 'Preview data' : 'Connected'}}</span
+            >
+          </p>
+        </div>
+        <div class="head-actions" ng-if="vm.tab==='portfolio'">
+          <button class="btn secondary" ng-click="vm.download('pet')">
+            <i data-lucide="download"></i>PET template</button
+          ><button
+            class="btn primary"
+            ng-if="vm.can('request')"
+            ng-click="vm.openProject()"
+          >
+            <i data-lucide="plus"></i>New project
+          </button>
+        </div>
+      </section>
+
+      <section class="metrics" ng-if="vm.tab==='reports'">
+        <article class="metric">
+          <div class="metric-icon green">
+        <i data-lucide="folder-kanban"></i>
+          </div>
+          <div>
+            <span>Registered projects</span
+            ><strong>{{vm.metrics.projectsRegistered}}</strong
+            ><small>{{vm.metrics.activeProjects}} currently active</small>
+          </div>
+        </article>
+        <article class="metric">
+          <div class="metric-icon gold"><i data-lucide="file-check-2"></i></div>
+          <div>
+            <span>Approved PETs</span
+            ><strong>{{vm.metrics.petsApproved}}</strong
+            ><small>{{vm.metrics.petsOnTrack}} awaiting action</small>
+          </div>
+        </article>
+        <article class="metric">
+          <div class="metric-icon blue"><i data-lucide="receipt-text"></i></div>
+          <div>
+            <span>Invoices raised</span
+            ><strong>{{vm.metrics.invoicesRaised}}</strong
+            ><small>{{vm.metrics.invoicesOutstanding}} outstanding</small>
+          </div>
+        </article>
+        <article class="metric wide">
+          <div class="metric-top">
+            <span>CAPEX utilization</span
+            ><b
+              >{{vm.percent(vm.metrics.capexUtilized,vm.metrics.capexBudget)}}%</b
+            >
+          </div>
+          <div class="progress">
+            <span
+              style="width:{{vm.percent(vm.metrics.capexUtilized,vm.metrics.capexBudget)}}%"
+            ></span>
+          </div>
+          <small
+            >{{vm.money(vm.metrics.capexUtilized)}} of
+            {{vm.money(vm.metrics.capexBudget)}}</small
+          >
+        </article>
+        <article class="metric wide">
+          <div class="metric-top">
+            <span>OPEX utilization</span
+            ><b
+              >{{vm.percent(vm.metrics.opexUtilized,vm.metrics.opexBudget)}}%</b
+            >
+          </div>
+          <div class="progress goldbar">
+            <span
+              style="width:{{vm.percent(vm.metrics.opexUtilized,vm.metrics.opexBudget)}}%"
+            ></span>
+          </div>
+          <small
+            >{{vm.money(vm.metrics.opexUtilized)}} of
+            {{vm.money(vm.metrics.opexBudget)}}</small
+          >
+        </article>
+      </section>
+
+      <section ng-if="vm.tab==='portfolio'" class="workspace">
+        <div class="section-bar">
+          <div>
+            <h2>Project register</h2>
+            <span>{{vm.filteredCount}} projects in view</span>
+          </div>
+          <div class="filters">
+            <label class="search"
+              ><i data-lucide="search"></i
+              ><input
+                ng-model="vm.search"
+                ng-change="vm.updateView()"
+                placeholder="Search ID, project, owner" /></label
+              ><select ng-model="vm.statusFilter" ng-change="vm.updateView()">
+              <option value="">All statuses</option>
+              <option>Active</option>
+              <option>Registered</option>
+              <option>Pending Review</option>
+              <option>Pending Approval</option>
+              <option>Approved</option>
+              <option>Rejected</option>
+            </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option></select>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table projects">
+            <thead>
+              <tr>
+                <th class="expander"></th>
+                <th>Project ID</th>
+                <th>Project name</th>
+                <th>Type</th>
+                <th>Accountable Exec Lead</th>
+                <th>SME Lead</th>
+                <th>Size</th>
+                <th>Project Manager</th>
+                <th>Requestor</th>
+                <th>PET items</th>
+                <th>Budget lines</th>
+                <th>Invoices</th>
+                <th>Status</th>
+                <th>Created</th>
+                <th class="actions">Action</th>
+              </tr>
+            </thead>
+            <tbody
+              ng-repeat="project in vm.visibleProjects track by project.projectId"
+            >
+              <tr class="project-row">
+                <td>
+                  <button ng-if="project.petCount"
+                    class="icon-btn disclosure"
+                    ng-class="{expanded:project.expanded}"
+                    title="Expand project"
+                    ng-click="vm.toggleProject(project)"
+                  >
+                    <i data-lucide="chevron-right"></i>
+                  </button>
+                </td>
+                <td>
+                  <b>{{vm.projectDisplayId(project)}}</b>
+                </td>
+                <td>
+                  <button class="text-link project-name" title="{{project.projectName}}" ng-click="vm.openJira(project)">
+                    {{project.projectName}}
+                  </button>
+                </td>
+                <td>{{project.projectType}}</td>
+                <td>{{project.accountableExecLead}}</td>
+                <td>{{project.smeLead}}</td>
+                <td>{{project.projectSize}}</td>
+                <td>{{project.projectManager}}</td>
+                <td title="{{project.requestorEmail}}">{{project.requestorName||project.requestorEmail}}</td>
+                <td><span class="count-chip">{{project.spendRequestCount}}</span></td>
+                <td><span class="count-chip">{{project.budgetLineCount}}</span></td>
+                <td><span class="count-chip">{{project.invoiceCount}}</span></td>
+                <td>
+                  <span class="status" ng-class="vm.statusClass(project.status)"
+                    >{{project.status}}</span
+                  ><small class="jira-key" ng-if="vm.pendingWithName(project)">Pending with {{vm.pendingWithName(project)}}</small>
+                </td>
+                <td>{{project.createdUtc | date:'dd-MMM-yyyy'}}</td>
+                <td>
+                  <div class="row-actions">
+                    <button class="btn compact review" ng-if="vm.hasRole('Reviewer')&&vm.isReviewerFor(project)&&vm.pendingPet(project,'Pending Review')" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Review'),'review')">Review</button>
+                    <button class="btn compact" ng-if="vm.hasRole('Approver')&&vm.isApproverFor(project)&&vm.pendingPet(project,'Pending Approval')" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Approval'),'approve')">Approve</button>
+                    <button
+                      class="icon-btn"
+                      title="View JIRA details"
+                      ng-click="vm.openJira(project)"
+                    >
+                      <i data-lucide="eye"></i></button
+                    ><button
+                      class="icon-btn"
+                      title="Edit project"
+                      ng-if="vm.can('request')"
+                      ng-click="vm.openProject(project)"
+                    >
+                      <i data-lucide="pencil"></i></button
+                    ><button
+                      class="icon-btn accent"
+                      title="Add PET"
+                      ng-if="vm.can('request')&&project.requiresPet!==false"
+                      ng-click="vm.openPet(project)"
+                    >
+                      <i data-lucide="file-plus-2"></i></button
+                    ><button
+                      class="icon-btn"
+                      title="Upload PET template"
+                      ng-if="vm.can('request')&&project.requiresPet!==false"
+                      ng-click="vm.openUpload('pet',project)"
+                    >
+                      <i data-lucide="upload"></i></button
+                    ><button
+                      class="icon-btn"
+                      title="View PET grid"
+                      ng-click="vm.toggleProject(project)"
+                    >
+                      <i data-lucide="table"></i></button
+                    ><button
+                      class="icon-btn"
+                      title="Delete project"
+                      ng-if="vm.can('request')&&!project.petCount"
+                      ng-click="vm.deleteProject(project)"
+                    >
+                      <i data-lucide="trash-2"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+              <tr class="child-row" ng-if="project.expanded">
+                <td></td>
+                <td colspan="14">
+                  <div class="child-panel">
+                    <div class="child-title">
+                      <div>
+                        <span class="level-label">PET REQUESTS</span
+                        ><strong>{{project.projectName}}</strong>
+                      </div>
+                      <button
+                        class="btn compact"
+                        ng-if="vm.can('request')&&project.requiresPet!==false"
+                        ng-click="vm.openPet(project)"
+                      >
+                        <i data-lucide="plus"></i>Add PET
+                      </button>
+                    </div>
+                    <div class="empty" ng-if="!project.pets.length">
+                      <i data-lucide="file-plus-2"></i>
+                      <strong>No PET requests yet for this project.</strong>
+                    </div>
+                    <table class="nested" ng-if="project.pets.length">
+                      <thead>
+                        <tr>
+                          <th></th>
+                          <th>Code</th>
+                          <th>Status</th>
+                          <th>Budget source</th>
+                          <th>Final request (AED)</th>
+                          <th>Reviewer</th>
+                          <th>Approver</th>
+                          <th>Submitted</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody ng-repeat="pet in project.pets">
+                        <tr>
+                          <td>
+                            <button ng-if="pet.budgetLines.length||vm.canAddBudgetLine(pet)"
+                              class="icon-btn disclosure"
+                              ng-class="{expanded:pet.expanded}"
+                              title="View budget lines"
+                              ng-click="vm.togglePet(pet)"
+                            >
+                              <i data-lucide="chevron-right"></i>
+                            </button>
+                          </td>
+                          <td><b>{{pet.code}}</b></td>
+                          <td>
+                            <span
+                              class="status"
+                              ng-class="vm.statusClass(pet.status)"
+                              >{{pet.status}}</span
+                            >
+                          </td>
+                          <td>
+                            {{project.budgetType}} · {{project.budgetSource}}
+                          </td>
+                          <td>{{vm.money(pet.requestedAmount)}}</td>
+                          <td>
+                            {{pet.reviewerEmail||project.accountableExecLead}}
+                          </td>
+                          <td>
+                            {{pet.approverEmail||project.accountableExec}}
+                          </td>
+                          <td>{{pet.createdUtc|date:'dd-MMM-yyyy'}}</td>
+                          <td>
+                            <div class="row-actions">
+                              <button
+                                class="btn compact review"
+                                ng-if="vm.hasRole('Reviewer')&&vm.isReviewerFor(project)&&pet.status==='Pending Review'"
+                                ng-click="vm.openDecision(pet,'review')"
+                              >
+                                Review</button
+                              ><button
+                                class="btn compact"
+                                ng-if="vm.hasRole('Approver')&&vm.isApproverFor(project)&&pet.status==='Pending Approval'"
+                                ng-click="vm.openDecision(pet,'approve')"
+                              >
+                                Approve</button
+                              ><button
+                                class="icon-btn"
+                                title="Edit PET"
+                                ng-if="vm.can('request')&&pet.status==='Pending Review'"
+                                ng-click="vm.openPet(project,pet)"
+                              >
+                                <i data-lucide="pencil"></i></button
+                              ><button
+                                class="icon-btn"
+                                title="Workflow history"
+                                ng-click="vm.openHistory(project,pet)"
+                              >
+                                <i data-lucide="history"></i></button
+                              ><button
+                                class="icon-btn"
+                                title="{{pet.status==='Pending Review'?'Maintain PET line items':'View PET line items'}}"
+                                ng-if="pet.spendItems.length||(vm.can('request')&&pet.status==='Pending Review')"
+                                ng-click="vm.openSpend(pet)"
+                              >
+                                <i data-lucide="list-plus"></i></button
+                              ><button
+                                class="icon-btn"
+                                title="Upload attachment"
+                                ng-click="vm.openUpload('attachment',pet)"
+                              >
+                                <i data-lucide="paperclip"></i></button
+                              ><button
+                                class="icon-btn"
+                                title="Upload budget lines"
+                                ng-if="vm.canAddBudgetLine(pet)"
+                                ng-click="vm.openUpload('budget',pet)"
+                              >
+                                <i data-lucide="upload"></i></button
+                              ><button
+                                class="icon-btn accent"
+                                title="Add budget line"
+                                ng-if="vm.canAddBudgetLine(pet)"
+                                ng-click="vm.openBudgetLine(pet)"
+                              >
+                                <i data-lucide="plus"></i></button
+                              ><button
+                                class="icon-btn"
+                                title="Delete PET"
+                                ng-if="vm.can('request')&&pet.status==='Pending Review'"
+                                ng-click="vm.deletePet(project,pet)"
+                              >
+                                <i data-lucide="trash-2"></i>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr class="grandchild" ng-if="pet.expanded&&!pet.budgetLines.length">
+                          <td></td>
+                          <td colspan="8">
+                            <div class="empty">
+                              <i data-lucide="landmark"></i>
+                              <strong>No budget lines yet for this PET.</strong>
+                              <button class="icon-btn accent" title="Add budget line" ng-click="vm.openBudgetLine(pet)"><i data-lucide="plus"></i></button>
+                            </div>
+                          </td>
+                        </tr>
+                        <tr class="grandchild" ng-if="pet.expanded&&pet.budgetLines.length">
+                          <td></td>
+                          <td colspan="8">
+                            <div class="budget-wrap">
+                              <table class="nested budget">
+                                <thead>
+                                  <tr>
+                                    <th></th>
+                                    <th>#</th>
+                                    <th>Vendor</th>
+                                    <th>Justification</th>
+                                    <th>Cost</th>
+                                    <th>CCY</th>
+                                    <th>GL</th>
+                                    <th>PET Ref</th>
+                                    <th>CAM ID</th>
+                                    <th>CAM Status</th>
+                                    <th>LPO Request</th>
+                                    <th>LPO Status</th>
+                                    <th>Invoices</th>
+                                    <th>Action</th>
+                                  </tr>
+                                </thead>
+                                <caption><button class="icon-btn accent" title="Add budget line" ng-click="vm.openBudgetLine(pet)"><i data-lucide="plus"></i></button></caption>
+                                <tbody ng-repeat="line in pet.budgetLines">
+                                  <tr>
+                                    <td>
+                                      <button
+                                        class="icon-btn disclosure"
+                                        ng-class="{expanded:line.expanded}"
+                                        title="View invoices"
+                                        ng-click="vm.toggleBudgetLine(line)"
+                                      >
+                                        <i data-lucide="chevron-right"></i>
+                                      </button>
+                                    </td>
+                                    <td>{{$index+1}}</td>
+                                    <td>{{line.vendor}}</td>
+                                    <td>{{line.justification}}</td>
+                                    <td>{{vm.money(line.cost)}}</td>
+                                    <td>{{line.currency}}</td>
+                                    <td>{{line.glNumber}}</td>
+                                    <td>{{line.petReference}}</td>
+                                    <td>{{line.camId}}</td>
+                                    <td>
+                                      <span
+                                        class="status"
+                                        ng-class="vm.statusClass(line.camStatus)"
+                                        >{{line.camStatus}}</span
+                                      >
+                                    </td>
+                                    <td>{{line.lpoRequest}}</td>
+                                    <td>{{line.lpoStatus}}</td>
+                                    <td>{{line.invoices.length}}</td>
+                                    <td>
+                                      <div class="row-actions">
+                                        <button
+                                          class="icon-btn"
+                                          ng-click="vm.openBudgetLine(pet,line)"
+                                          title="Edit budget line"
+                                        >
+                                          <i data-lucide="pencil"></i></button
+                                        ><button
+                                          class="icon-btn"
+                                          ng-click="vm.openUpload('invoice',line)"
+                                          title="Upload invoices"
+                                        >
+                                          <i data-lucide="upload"></i></button
+                                        ><button
+                                          class="icon-btn accent"
+                                          ng-click="vm.openInvoice(line)"
+                                          title="Add invoice"
+                                        >
+                                          <i data-lucide="receipt-text"></i>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                  <tr ng-if="line.expanded" class="invoice-row">
+                                    <td></td>
+                                    <td colspan="13">
+                                      <table class="nested invoices">
+                                        <thead>
+                                          <tr>
+                                            <th>Row #</th>
+                                            <th>Vendor name</th>
+                                            <th>Justification</th>
+                                            <th>GL number</th>
+                                            <th>Invoice ID</th>
+                                            <th>Invoice number</th>
+                                            <th>Invoice amount</th>
+                                            <th>Status</th>
+                                            <th>Payment date</th>
+                                            <th>Action</th>
+                                          </tr>
+                                        </thead>
+                                        <caption><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="receipt-text"></i></button></caption>
+                                        <tbody>
+                                          <tr
+                                            ng-repeat="invoice in line.invoices"
+                                          >
+                                            <td>{{$index+1}}</td>
+                                            <td>{{invoice.vendorName}}</td>
+                                            <td>{{invoice.justification}}</td>
+                                            <td>{{invoice.glNumber}}</td>
+                                            <td>INV-{{invoice.invoiceId}}</td>
+                                            <td>{{invoice.invoiceNumber}}</td>
+                                            <td>
+                                              {{vm.money(invoice.invoiceAmount)}}
+                                            </td>
+                                            <td>
+                                              <span
+                                                class="status"
+                                                ng-class="vm.statusClass(invoice.invoiceStatus)"
+                                                >{{invoice.invoiceStatus}}</span
+                                              >
+                                            </td>
+                                            <td>
+                                              {{invoice.paymentDate|date:'dd-MMM-yyyy'}}
+                                            </td>
+                                            <td>
+                                              <button
+                                                class="icon-btn"
+                                                title="Edit invoice"
+                                                ng-click="vm.openInvoice(line,invoice)"
+                                              >
+                                                <i data-lucide="pencil"></i>
+                                              </button>
+                                            </td>
+                                          </tr>
+                                          <tr ng-if="!line.invoices.length"><td colspan="10"><div class="empty inline-empty"><i data-lucide="receipt-text"></i><strong>No invoices yet for this budget line.</strong><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="plus"></i></button></div></td></tr>
+                                        </tbody>
+                                      </table>
+                                    </td>
+                                  </tr>
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
+      <section ng-if="vm.tab==='approvals'" class="workspace">
+        <div class="section-bar">
+          <div>
+            <h2>Approval queue</h2>
+            <span>{{vm.approvalFilteredCount}} PETs awaiting your action</span>
+          </div>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.approvalSearch" ng-change="vm.updateApprovalView()" placeholder="Search PET, project, owner" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table approvals-table">
+            <thead><tr><th>Project ID</th><th>Project name</th><th>PET reference</th><th>Status</th><th>Amount</th><th>Budget source</th><th>Requestor</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="item in vm.visibleApprovalItems track by item.pet.petId">
+                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.pet.code}}</td><td><span class="status pending">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td>{{item.project.budgetSource}}</td><td>{{item.project.requestorEmail}}</td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.action}}</button></td>
+              </tr>
+              <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="8"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.approvalPageCount>1"><button class="icon-btn" ng-disabled="vm.approvalPage===1" ng-click="vm.changeApprovalPage(vm.approvalPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.approvalPage}} of {{vm.approvalPageCount}}</span><button class="icon-btn" ng-disabled="vm.approvalPage===vm.approvalPageCount" ng-click="vm.changeApprovalPage(vm.approvalPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
+      <section ng-if="vm.tab==='budgets'" class="workspace">
+        <div class="section-bar">
+          <div>
+            <h2>CAPEX &amp; OPEX register</h2>
+            <span>Offline synchronized source balances</span>
+          </div>
+          <button
+            class="btn secondary"
+            ng-if="vm.hasRole('Admin')"
+            ng-click="vm.openUpload('sources')"
+          >
+            <i data-lucide="refresh-cw"></i>Synchronize CSV
+          </button>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.budgetSearch" ng-change="vm.updateBudgetView()" placeholder="Search source, type, description" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table budget-register">
+            <thead><tr><th>Type</th><th>Source</th><th>Description</th><th>Budget</th><th>Utilized</th><th>Available</th><th>Locked</th><th>Net balance</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="budget in vm.visibleBudgets track by budget.budgetSourceId"><td><span class="budget-type">{{budget.budgetType}}</span></td><td>{{budget.externalId}}</td><td title="{{budget.description}}"><span class="truncate-cell wide-cell">{{budget.description}}</span></td><td>{{vm.money(budget.budget)}}</td><td>{{vm.money(budget.utilization)}}</td><td>{{vm.money(budget.availableBudget)}}</td><td>{{vm.money(budget.lockedAmount)}}</td><td>{{vm.money(budget.netBalance)}}</td><td><button class="icon-btn" ng-if="vm.hasRole('Admin')" title="Edit budget" ng-click="vm.openBudget(budget)"><i data-lucide="pencil"></i></button></td></tr>
+              <tr ng-if="!vm.visibleBudgets.length"><td colspan="9"><div class="empty inline-empty"><i data-lucide="landmark"></i><strong>No budget sources match the search.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.budgetPageCount>1"><button class="icon-btn" ng-disabled="vm.budgetPage===1" ng-click="vm.changeBudgetPage(vm.budgetPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.budgetPage}} of {{vm.budgetPageCount}}</span><button class="icon-btn" ng-disabled="vm.budgetPage===vm.budgetPageCount" ng-click="vm.changeBudgetPage(vm.budgetPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
+      <section ng-if="vm.tab==='roles'" class="workspace">
+        <div class="section-bar">
+          <div><h2>Role management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.roleSearch" ng-change="vm.updateRoleView()" placeholder="Search user, email, role" /></label>
+            <select ng-model="vm.roleFilter" ng-change="vm.updateRoleView()"><option value="">All roles</option><option value="Reviewer">Reviewers</option><option value="Approver">Approvers</option><option value="Admin">Admins</option><option value="Requestor">Requestor only</option></select>
+          </div>
+        </div>
+        <div class="role-summary"><span><b>{{vm.roleSummary.reviewer}}</b> Reviewers</span><span><b>{{vm.roleSummary.approver}}</b> Approvers</span><span><b>{{vm.roleSummary.admin}}</b> Admins</span><span><b>{{vm.roleFilteredCount}}</b> users in view</span></div>
+        <div class="table-scroll">
+          <table class="data-table role-table">
+            <thead><tr><th>User</th><th>Email</th><th>Current roles</th><th>Elevated role</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="user in vm.visibleRoleUsers track by user.userId"><td>{{user.displayName}}</td><td>{{user.email}}</td><td>{{user.roleList}}</td><td><select ng-model="user.elevatedRole"><option value="">Requestor only</option><option ng-repeat="role in vm.availableManagedRoles" value="{{role}}">{{role}}</option></select></td><td><button class="btn compact primary" ng-click="vm.saveUserRoles(user)">Save roles</button></td></tr>
+              <tr ng-if="!vm.visibleRoleUsers.length"><td colspan="5"><div class="empty inline-empty"><i data-lucide="users"></i><strong>No users match the selected filter.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.rolePageCount>1"><button class="icon-btn" ng-disabled="vm.rolePage===1" ng-click="vm.changeRolePage(vm.rolePage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.rolePage}} of {{vm.rolePageCount}}</span><button class="icon-btn" ng-disabled="vm.rolePage===vm.rolePageCount" ng-click="vm.changeRolePage(vm.rolePage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
+      <section ng-if="vm.tab==='reports'" class="reports">
+        <div class="report-band">
+          <div>
+            <p class="eyebrow">MANAGEMENT SNAPSHOT</p>
+            <h2>Portfolio position</h2>
+            <p>
+              Approval throughput and committed PET across the active
+              register.
+            </p>
+          </div>
+          <div class="report-score">
+            <strong
+              >{{vm.percent(vm.metrics.capexUtilized+vm.metrics.opexUtilized,vm.metrics.capexBudget+vm.metrics.opexBudget)}}%</strong
+            ><span>Total budget utilized</span>
+          </div>
+        </div>
+        <div class="report-grid">
+          <article>
+            <h3>PET disposition</h3>
+            <div
+              class="donut"
+              style="--value:{{vm.percent(vm.metrics.petsApproved,vm.metrics.petsApproved+vm.metrics.petsOnTrack+vm.metrics.petsRejected)}}"
+            >
+              <span>{{vm.metrics.petsApproved}}</span>
+            </div>
+            <div class="legend">
+              <span
+                ><i class="dot green-dot"></i>Approved
+                {{vm.metrics.petsApproved}}</span
+              ><span
+                ><i class="dot gold-dot"></i>On track
+                {{vm.metrics.petsOnTrack}}</span
+              ><span
+                ><i class="dot red-dot"></i>Rejected
+                {{vm.metrics.petsRejected}}</span
+              >
+            </div>
+          </article>
+          <article>
+            <h3>Invoice position</h3>
+            <div class="bar-pair">
+              <div>
+                <span>Outstanding</span><b>{{vm.metrics.invoicesOutstanding}}</b
+                ><i
+                  style="width:{{vm.percent(vm.metrics.invoicesOutstanding,vm.metrics.invoicesRaised)}}%"
+                ></i>
+              </div>
+              <div>
+                <span>Settled</span><b>{{vm.metrics.invoicesSettled}}</b
+                ><i
+                  style="width:{{vm.percent(vm.metrics.invoicesSettled,vm.metrics.invoicesRaised)}}%"
+                ></i>
+              </div>
+            </div>
+          </article>
+          <article class="report-table">
+            <h3>Budget utilization</h3>
+            <table>
+              <tr>
+                <th>Fund</th>
+                <th>Budget</th>
+                <th>Used</th>
+                <th>Remaining</th>
+              </tr>
+              <tr>
+                <td>CAPEX</td>
+                <td>{{vm.money(vm.metrics.capexBudget)}}</td>
+                <td>{{vm.money(vm.metrics.capexUtilized)}}</td>
+                <td>
+                  {{vm.money(vm.metrics.capexBudget-vm.metrics.capexUtilized)}}
+                </td>
+              </tr>
+              <tr>
+                <td>OPEX</td>
+                <td>{{vm.money(vm.metrics.opexBudget)}}</td>
+                <td>{{vm.money(vm.metrics.opexUtilized)}}</td>
+                <td>
+                  {{vm.money(vm.metrics.opexBudget-vm.metrics.opexUtilized)}}
+                </td>
+              </tr>
+            </table>
+          </article>
+          <article class="report-table source-utilization">
+            <h3>CAPEX budget source utilization by project</h3>
+            <table><thead><tr><th>Budget source</th><th>Project</th><th>PET reference</th><th>Approved amount</th></tr></thead><tbody><tr ng-repeat="row in vm.budgetUsage track by $index"><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><button class="text-link truncate-cell" ng-click="vm.openBudgetUsageProject(row)">{{row.projectName}}</button></td><td>{{row.petCode}}</td><td>{{vm.money(row.amount||row.approvedAmount)}}</td></tr><tr ng-if="!vm.budgetUsage.length"><td colspan="4">No approved CAPEX utilization.</td></tr></tbody></table>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <div
+      class="modal-backdrop"
+      ng-if="vm.modal"
+    >
+      <section
+        class="modal"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'}"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header>
+          <div>
+            <p class="eyebrow">{{vm.modal.kicker}}</p>
+            <h2>{{vm.modal.title}}</h2>
+          </div>
+          <button class="icon-btn" ng-click="vm.close()" title="Close">
+            <i data-lucide="x"></i>
+          </button>
+        </header>
+        <form ng-submit="vm.saveModal()">
+          <div class="modal-body">
+            <div ng-if="vm.modal.type==='project'" class="form-grid">
+              <label class="full"
+                >Project source
+                <div class="segmented">
+                  <button
+                    type="button"
+                    ng-class="{active:vm.form.isJira}"
+                    ng-click="vm.form.isJira=true"
+                  >
+                    JIRA</button
+                  ><button
+                    type="button"
+                    ng-class="{active:!vm.form.isJira}"
+                    ng-click="vm.form.isJira=false"
+                  >
+                    Non-JIRA
+                  </button>
+                </div></label
+              ><label ng-if="vm.form.isJira" class="full"
+                >JIRA ID<select falcon-select2 data-placeholder="Search JIRA ID or project name"
+                  ng-model="vm.form.jiraKey"
+                  ng-change="vm.pickJira()"
+                  required
+                >
+                  <option value="">
+                    Select an offline synchronized JIRA issue
+                  </option>
+                  <option ng-repeat="jira in vm.jira" value="{{jira.jiraKey}}">
+                    {{jira.jiraKey}} · {{jira.summary}}
+                  </option>
+                </select></label
+              ><label
+                >Project name<input
+                  ng-model="vm.form.projectName"
+                  ng-readonly="vm.form.isJira"
+                  required /></label
+              ><label
+                >Project type<input
+                  ng-model="vm.form.projectType"
+                  ng-readonly="vm.form.isJira"
+                  required /></label
+              ><label
+                >Accountable Exec Lead<input
+                  ng-model="vm.form.accountableExecLead"
+                  ng-readonly="vm.form.isJira"
+                  required /></label
+              ><label
+                >Accountable Executive<input
+                  ng-model="vm.form.accountableExec"
+                  ng-readonly="vm.form.isJira"
+                  required /></label
+              ><label>SME Lead<input ng-model="vm.form.smeLead" ng-readonly="vm.form.isJira" /></label
+              ><label
+                >Project size<select ng-model="vm.form.projectSize" ng-disabled="vm.form.isJira">
+                  <option>Small</option>
+                  <option>Medium</option>
+                  <option>Large</option>
+                  <option>Strategic</option>
+                </select></label
+              ><label
+                >Project manager<input
+                  ng-readonly="vm.form.isJira"
+                  ng-model="vm.form.projectManager" /></label
+              ><label class="full option-check"><input type="checkbox" ng-model="vm.form.skipReview" />Skip reviewer and send PET directly to the approver</label><label
+                >Budget type<select ng-model="vm.form.budgetType" required>
+                  <option>CAPEX</option>
+                  <option>OPEX</option>
+                </select></label
+              ><label class="full"
+                >Budget source<select falcon-select2 data-placeholder="Search budget source"
+                  ng-model="vm.form.budgetSourceId"
+                  ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:vm.form.budgetType}"
+                  required
+                ></select
+              ></label>
+              <div class="full budget-split" ng-if="vm.selectedBudgetSource()">
+                <table class="nested">
+                  <thead>
+                    <tr><th>Budget</th><th>Utilization</th><th>Locked</th><th>Budget after locked</th><th>Claim</th><th>Net balance</th><th>Available</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>{{vm.money(vm.selectedBudgetSource().budget)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().utilization)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().lockedAmount)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().budgetAfterLocked)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().claimAmount)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().netBalance)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().availableBudget)}}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div ng-if="vm.modal.type==='jira'" class="jira-detail">
+              <div class="jira-hero">
+                <div>
+                  <span class="status approved">{{vm.form.status}}</span>
+                  <h3>{{vm.form.projectName}}</h3>
+                  <a>{{vm.form.jiraKey}}</a>
+                </div>
+                <div class="rag">
+                  <small>PROJECT RAG</small
+                  ><b>{{vm.form.projectRAG||'GREEN'}}</b>
+                </div>
+              </div>
+              <div class="detail-grid">
+                <div>
+                  <small>Accountable Exec Lead</small
+                  ><strong>{{vm.form.accountableExecLead}}</strong>
+                </div>
+                <div>
+                  <small>Accountable Executive</small
+                  ><strong>{{vm.form.accountableExec}}</strong>
+                </div>
+                <div>
+                  <small>SME Lead</small><strong>{{vm.form.smeLead}}</strong>
+                </div>
+                <div>
+                  <small>Project Manager</small
+                  ><strong>{{vm.form.projectManager}}</strong>
+                </div>
+                <div>
+                  <small>Platform</small
+                  ><strong>{{vm.form.platform||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>Demand type</small
+                  ><strong>{{vm.form.demandType||'Not supplied'}}</strong>
+                </div>
+              </div>
+              <div class="narrative">
+                <h4>Project requirements</h4>
+                <p>{{vm.form.requirements||'No requirements synchronized.'}}</p>
+              </div>
+              <div class="narrative">
+                <h4>Portfolio executive summary</h4>
+                <p>
+                  {{vm.form.portfolioExecutiveSummary||'No executive summary
+                  synchronized.'}}
+                </p>
+              </div>
+              <div class="timeline">
+                <span ng-repeat="stage in vm.stages" class="done"
+                  ><i data-lucide="check"></i>{{stage}}</span
+                >
+              </div>
+            </div>
+            <div ng-if="vm.modal.type==='pet'" class="form-grid">
+              <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
+              </div>
+              <label class="full file-field"
+                >Upload PET template (optional)<input type="file" accept=".csv" file-change="vm.setUploadFile($file)" /><span
+                  ><i data-lucide="upload"></i>{{vm.uploadFile ? vm.uploadFile.name : 'Choose the PET CSV template'}}</span
+                ></label
+              ><div class="full table-scroll spend-preview" ng-if="vm.uploadPreview.length">
+                <table class="nested">
+                  <thead><tr><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Units</th><th>Unit price</th><th>AED amount</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
+                  <tbody><tr ng-repeat="row in vm.uploadPreview"><td><input ng-model="row.head" /></td><td><input ng-model="row.topic" /></td><td><input ng-model="row.vendor" required /></td><td><input ng-model="row.costType" /></td><td><input type="number" step="0.01" ng-model="row.units" ng-change="vm.recalculateUploadPreview()" /></td><td><input type="number" step="0.01" ng-model="row.unitPrice" ng-change="vm.recalculateUploadPreview()" /></td><td><input type="number" step="0.01" ng-model="row.aedAmount" ng-change="vm.recalculateUploadPreview()" /></td><td><input type="number" step="0.01" ng-model="row.contingencyPercent" ng-change="vm.recalculateUploadPreview()" /></td><td>{{vm.money(row.finalAed)}}</td><td><input ng-model="row.glNumber" /></td></tr></tbody>
+                </table>
+              </div
+              ><label
+                >PET reference<input ng-model="vm.form.code" required /></label
+              ><label
+                >Currency<select ng-model="vm.form.currency">
+                  <option>AED</option>
+                  <option>USD</option>
+                  <option>EUR</option>
+                  <option>GBP</option>
+                </select></label
+              ><label class="full"
+                >Final Request AED Amount<input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  ng-model="vm.form.requestedAmount"
+                  required
+              /></label>
+              <div class="balance full">
+                <span>Available after approval</span
+                ><strong
+                  >{{vm.money(vm.selectedProject.availableBudget-vm.form.requestedAmount)}}</strong
+                >
+              </div>
+              <label class="full file-field"
+                >Attachment<input type="file" /><span
+                  ><i data-lucide="paperclip"></i>Select supporting
+                  document</span
+                ></label
+              >
+            </div>
+            <div ng-if="vm.modal.type==='spend'">
+              <div class="table-scroll spend-preview" ng-if="vm.selectedPet.spendItems.length">
+                <table class="nested">
+                  <thead><tr><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Units</th><th>Unit price</th><th>CCY</th><th>FCY amt</th><th>AED amt</th><th>Cont.%</th><th>Final AED</th><th>GL#</th><th>Action</th></tr></thead>
+                  <tbody><tr ng-repeat="item in vm.selectedPet.spendItems"><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.costType}}</td><td>{{item.units}}</td><td>{{vm.money(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.money(item.foreignAmount)}}</td><td>{{vm.money(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.money(item.aedAmount*(1+item.contingencyPercent/100))}}</td><td>{{item.glNumber}}</td><td><button type="button" class="icon-btn" ng-if="vm.spendEditable" ng-click="vm.editSpend(item)" title="Edit PET line item"><i data-lucide="pencil"></i></button></td></tr></tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.selectedPet.spendItems.length&&!vm.spendFormVisible">
+                <i data-lucide="list-plus"></i>
+                <strong>No PET line items yet.</strong>
+              </div>
+              <button type="button" class="btn secondary" ng-if="vm.spendEditable&&!vm.spendFormVisible" ng-click="vm.addSpend()">
+                <i data-lucide="plus"></i>Add PET line item
+              </button>
+              <div class="form-grid spend-form" ng-if="vm.spendEditable&&vm.spendFormVisible">
+                <label>Head<input ng-model="vm.form.head" required /></label><label>Topic<input ng-model="vm.form.topic" /></label><label>Vendor<input ng-model="vm.form.vendor" required /></label><label>Cost type<input ng-model="vm.form.costType" /></label><label>Units<input type="number" step="0.01" ng-model="vm.form.units" required /></label><label>Unit price<input type="number" step="0.01" ng-model="vm.form.unitPrice" required /></label><label>Currency<select ng-model="vm.form.currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></label><label>AED amount<input type="number" step="0.01" ng-model="vm.form.aedAmount" /></label><label>Contingency %<input type="number" step="0.01" ng-model="vm.form.contingencyPercent" /></label><label>GL number<input ng-model="vm.form.glNumber" /></label>
+                <div class="full head-actions" style="justify-content:flex-start">
+                  <button type="button" class="btn secondary" ng-click="vm.spendFormVisible=false">Cancel</button
+                  ><button type="button" class="btn primary" ng-click="vm.saveModal()"><i data-lucide="check"></i>Save PET line item</button>
+                </div>
+              </div>
+            </div>
+            <div ng-if="vm.modal.type==='decision'" class="decision">
+              <div class="decision-amount">
+                <span>{{vm.form.code}}</span
+                ><strong>{{vm.money(vm.form.requestedAmount)}}</strong
+                ><small
+                  >Requested from {{vm.selectedProject.budgetSource}}</small
+                >
+              </div>
+              <label
+                >Decision comments<textarea
+                  ng-model="vm.form.comments"
+                  rows="5"
+                  required
+                ></textarea>
+              </label>
+              <div class="decision-choice">
+                <label
+                  ><input
+                    type="radio"
+                    ng-model="vm.form.approve"
+                    ng-value="true"
+                  />Approve and forward</label
+                ><label
+                  ><input
+                    type="radio"
+                    ng-model="vm.form.approve"
+                    ng-value="false"
+                  />Reject request</label
+                >
+              </div>
+            </div>
+            <div ng-if="vm.modal.type==='budgetLine'" class="form-grid">
+              <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
+              </div>
+              <label>Vendor<input ng-model="vm.form.vendor" required /></label
+              ><label
+                >Cost<input
+                  type="number"
+                  step="0.01"
+                  ng-model="vm.form.cost"
+                  required /></label
+              ><label class="full"
+                >Justification<textarea
+                  ng-model="vm.form.justification"
+                  required
+                ></textarea></label
+              ><label
+                >Currency<select ng-model="vm.form.currency">
+                  <option>AED</option>
+                  <option>USD</option>
+                  <option>EUR</option>
+                </select></label
+              ><label>GL number<input ng-model="vm.form.glNumber" /></label
+              ><label
+                >PET reference<input ng-model="vm.form.petReference" /></label
+              ><label>CAM ID<input ng-model="vm.form.camId" /></label
+              ><label
+                >CAM status<select ng-model="vm.form.camStatus">
+                  <option>Pending</option>
+                  <option>Approved</option>
+                  <option>Rejected</option>
+                </select></label
+              ><label
+                >CAM comments<input ng-model="vm.form.camComments" /></label
+              ><label>LPO request<input ng-model="vm.form.lpoRequest" /></label
+              ><label
+                >LPO status<select ng-model="vm.form.lpoStatus">
+                  <option>Not Raised</option>
+                  <option>Pending</option>
+                  <option>Issued</option>
+                </select></label
+              ><label class="full"
+                >LPO comments<input ng-model="vm.form.lpoComments"
+              /></label>
+            </div>
+            <div ng-if="vm.modal.type==='invoice'" class="form-grid">
+              <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
+              </div>
+              <label
+                >Vendor name<input
+                  ng-model="vm.form.vendorName"
+                  required /></label
+              ><label
+                >Invoice number<input
+                  ng-model="vm.form.invoiceNumber"
+                  required /></label
+              ><label class="full"
+                >Justification<input ng-model="vm.form.justification" /></label
+              ><label>GL number<input ng-model="vm.form.glNumber" readonly /></label
+              ><label
+                >Invoice amount<input
+                  type="number"
+                  step="0.01"
+                  ng-model="vm.form.invoiceAmount"
+                  required /></label
+              ><label
+                >Invoice status<select ng-model="vm.form.invoiceStatus">
+                  <option>Raised</option>
+                  <option>Received</option>
+                  <option>Outstanding</option>
+                  <option>Settled</option>
+                  <option>Paid</option>
+                </select></label
+              ><label
+                >Payment date<input type="date" ng-model="vm.form.paymentDate"
+              /></label>
+            </div>
+            <div ng-if="vm.modal.type==='budget'" class="form-grid">
+              <label class="full"
+                >Description<input
+                  ng-model="vm.form.description"
+                  required /></label
+              ><label
+                >Budget<input
+                  type="number"
+                  ng-model="vm.form.budget"
+                  required /></label
+              ><label
+                >Utilization<input
+                  type="number"
+                  ng-model="vm.form.utilization"
+                  required /></label
+              ><label
+                >Available budget<input
+                  type="number"
+                  ng-model="vm.form.availableBudget"
+                  required
+              /></label>
+            </div>
+            <div ng-if="vm.modal.type==='upload'" class="upload-zone">
+              <i data-lucide="cloud-upload"></i>
+              <h3>Drop CSV or attachments here</h3>
+              <p>{{vm.modal.help}}</p>
+              <input type="file" ng-if="vm.modal.kind!=='attachment'&&vm.modal.kind!=='sources'" accept=".csv" file-change="vm.setUploadFile($file)" />
+              <input type="file" ng-if="vm.modal.kind==='attachment'||vm.modal.kind==='sources'" multiple />
+              <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}</p>
+              <a
+                ng-if="vm.modal.template"
+                href="{{vm.modal.template}}"
+                download
+                ><i data-lucide="download"></i>Download CSV template</a
+              >
+            </div>
+            <div ng-if="vm.modal.type==='history'">
+              <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
+              </div>
+              <table class="nested">
+                <thead><tr><th>From</th><th>To</th><th>Action by</th><th>Comments</th><th>When</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="entry in vm.history"><td>{{entry.fromStatus||'—'}}</td><td>{{entry.toStatus}}</td><td>{{entry.actionByName}}</td><td>{{entry.comments||'—'}}</td><td>{{entry.actionUtc|date:'dd-MMM-yyyy HH:mm'}}</td></tr>
+                </tbody>
+              </table>
+              <div class="empty" ng-if="!vm.history.length">
+                <i data-lucide="history"></i>
+                <strong>No workflow history recorded yet.</strong>
+              </div>
+            </div>
+          </div>
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'">
+            <button type="button" class="btn secondary" ng-click="vm.close()">
+              Cancel</button
+            ><button type="submit" class="btn primary">
+              <i data-lucide="check"></i>{{vm.modal.submit}}
+            </button>
+          </footer>
+        </form>
+      </section>
+    </div>
+    <div class="toast" ng-class="{error:vm.toastIsError}" ng-if="vm.toast">
+      <i data-lucide="{{vm.toastIsError?'alert-triangle':'check-circle-2'}}"></i><span>{{vm.toast}}</span
+      ><button ng-if="vm.toastIsError" class="icon-btn" title="Dismiss" ng-click="vm.dismissToast()"><i data-lucide="x"></i></button>
+    </div>
+    <script src="vendor/jquery.min.js"></script>
+    <script src="vendor/select2.min.js"></script>
+    <script src="vendor/angular.min.js"></script>
+    <script src="vendor/lucide.min.js"></script>
+    <script src="app/app.js?v=8"></script>
+  </body>
+</html>
