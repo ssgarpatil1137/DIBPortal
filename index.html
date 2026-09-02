@@ -947,20 +947,27 @@
                 >PET reference<input ng-model="vm.form.petReference" /></label
               ><label>CAM ID<input ng-model="vm.form.camId" /></label
               ><label
-                >CAM status<select ng-model="vm.form.camStatus">
-                  <option>Pending</option>
-                  <option>Approved</option>
-                  <option>Rejected</option>
+                >Status<select ng-model="vm.form.camStatus">
+                  <option>Raised to Vendor</option>
+                  <option>Memo in Progress</option>
+                  <option>Memo Approved</option>
+                  <option>LPO in Progress</option>
+                  <option>LPO Approved</option>
+                  <option>Completed</option>
                 </select></label
+              ><label
+                >CAM Created Date<input type="date" ng-model="vm.form.camCreatedDate"
+              /></label
+              ><label
+                >CAM Approved Date<input type="date" ng-model="vm.form.camApprovedDate"
+              /></label
               ><label
                 >CAM comments<input ng-model="vm.form.camComments" /></label
-              ><label>LPO request<input ng-model="vm.form.lpoRequest" /></label
               ><label
-                >LPO status<select ng-model="vm.form.lpoStatus">
-                  <option>Not Raised</option>
-                  <option>Pending</option>
-                  <option>Issued</option>
-                </select></label
+                >LPO Number<input ng-model="vm.form.lpoRequest" /></label
+              ><label
+                >LPO Issue Date<input type="date" ng-model="vm.form.lpoIssueDate"
+              /></label
               ><label class="full"
                 >LPO comments<input ng-model="vm.form.lpoComments"
               /></label>

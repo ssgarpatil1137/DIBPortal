@@ -841,10 +841,12 @@
           line || {
             petId: pet.petId,
             currency: "AED",
-            camStatus: "Pending",
-            lpoStatus: "Not Raised",
+            camStatus: "Raised to Vendor",
           },
         );
+        if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
+        if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
+        if (vm.form.lpoIssueDate) vm.form.lpoIssueDate = new Date(vm.form.lpoIssueDate);
         vm.modal = {
           type: "budgetLine",
           kicker: "APPROVED PET",
