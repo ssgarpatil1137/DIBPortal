@@ -379,6 +379,13 @@
                               >
                                 <i data-lucide="upload"></i></button
                               ><button
+                                class="icon-btn accent"
+                                title="Add budget line"
+                                ng-if="vm.canAddBudgetLine(pet)"
+                                ng-click="vm.openBudgetLine(pet)"
+                              >
+                                <i data-lucide="plus"></i></button
+                              ><button
                                 class="icon-btn"
                                 title="Delete PET"
                                 ng-if="vm.can('request')&&pet.status==='Pending Review'"
@@ -395,7 +402,6 @@
                             <div class="empty">
                               <i data-lucide="landmark"></i>
                               <strong>No budget lines yet for this PET.</strong>
-                              <button class="icon-btn accent" title="Add budget line" ng-click="vm.openBudgetLine(pet)"><i data-lucide="plus"></i></button>
                             </div>
                           </td>
                         </tr>
