@@ -193,12 +193,14 @@
                   </button>
                 </td>
                 <td>
-                  <b>{{vm.projectDisplayId(project)}}</b>
+                  <button class="text-link" title="View JIRA details" ng-click="vm.openJira(project)">
+                    {{vm.projectDisplayId(project)}}
+                  </button>
                 </td>
                 <td>
-                  <button class="text-link project-name" title="{{project.projectName}}" ng-click="vm.openJira(project)">
+                  <span class="project-name" title="{{project.projectName}}">
                     {{project.projectName}}
-                  </button>
+                  </span>
                 </td>
                 <td>{{project.projectType}}</td>
                 <td>{{project.accountableExecLead}}</td>
@@ -869,6 +871,26 @@
                 <div>
                   <small>Demand type</small
                   ><strong>{{vm.form.demandType||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>Demand Owner</small
+                  ><strong>{{vm.form.demandOwner||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>Department</small
+                  ><strong>{{vm.form.department||vm.form.demandDepartment||vm.form.projectDepartment||vm.form.projectDept||vm.form.requesterDept||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>Business Sponsor / Chief</small
+                  ><strong>{{vm.form.chiefNameMapping||vm.form.chiefMapping||vm.form.sponsor||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>Reporter</small
+                  ><strong>{{vm.form.reporter||'Not supplied'}}</strong>
+                </div>
+                <div>
+                  <small>IDH Portfolio</small
+                  ><strong>{{vm.form.idhPortfolioHead||'Not supplied'}}</strong>
                 </div>
               </div>
               <div class="narrative">
