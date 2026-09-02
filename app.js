@@ -435,48 +435,37 @@
             if (rows.length < 2) return;
             var headers = rows[0].map(function (h) { return (h || "").replace(/[^a-z0-9]/gi, "").toLowerCase(); });
             var col = function (name) { return headers.indexOf(name); };
-            var colAny = function (names) {
-              for (var index = 0; index < names.length; index++) {
-                var found = col(names[index]);
-                if (found >= 0) return found;
-              }
-              return -1;
-            };
             var sum = 0;
             var preview = [];
             for (var r = 1; r < rows.length; r++) {
               var row = rows[r];
               if (!row.some(function (c) { return c && c.trim(); })) continue;
-              var units = parseUploadNumber(row[colAny(["units", "unit"])], 1);
-              var unitPrice = parseUploadNumber(row[col("unitprice")], 0);
-              var foreign = parseUploadNumber(row[colAny(["fcyamount", "amtfcy", "amountfcy", "foreignamount"])], units * unitPrice);
-              var aed = parseUploadNumber(row[colAny(["aedamount", "amtlcy", "amountlcy", "lcyamount", "localamount"])], foreign);
-              var contingency = parseUploadNumber(row[colAny(["contingency", "contingencypercent", "cont", "contpercent"])], 0);
-              var finalAedIdx = colAny(["finalaed", "finalaedamount", "finalamountaed", "finalamtlcy", "finalamountlcy"]);
-              var finalAed = finalAedIdx >= 0 && row[finalAedIdx] ? parseUploadNumber(row[finalAedIdx], 0) : aed * (1 + contingency / 100);
+              var units = parseFloat(row[col("units")]) || 1;
+              var unitPrice = parseFloat(row[col("unitprice")]) || 0;
+              var foreign = parseFloat(row[col("fcyamount")]) || units * unitPrice;
+              var aed = parseFloat(row[col("aedamount")]) || foreign;
+              var contingency = parseFloat(row[col("contingency")]) || 0;
+              var finalAedIdx = col("finalaed");
+              var finalAed = finalAedIdx >= 0 && row[finalAedIdx] ? parseFloat(row[finalAedIdx]) : aed * (1 + contingency / 100);
               if (isNaN(finalAed)) finalAed = 0;
               sum += finalAed;
-              var petReference = row[col("petreference")];
-              var currency = row[colAny(["currency", "basecy", "basecurrency"])] || "AED";
               preview.push({
-                projectCode: row[colAny(["projectid", "projectcode", "jirakey"])] || vm.projectDisplayId(vm.selectedProject),
-                petReference: petReference,
-                currency: currency,
-                head: row[colAny(["head", "exphead", "expensehead"])],
+                head: row[col("head")],
                 topic: row[col("topic")],
                 vendor: row[col("vendor")],
                 costType: row[col("costtype")],
                 unitType: row[col("unittype")],
                 units: units,
                 unitPrice: unitPrice,
+                currency: row[col("currency")] || "AED",
                 foreignAmount: foreign,
                 aedAmount: aed,
                 contingencyPercent: contingency,
                 finalAed: finalAed,
                 glNumber: row[col("glnumber")],
               });
-              if (petReference && !vm.selectedPet && (!vm.form.code || /^PET-\d{4}-\d{4}$/.test(vm.form.code))) vm.form.code = petReference;
-              if (currency && (!vm.form.currency || vm.form.currency === "AED")) vm.form.currency = currency;
+              var refIdx = col("petreference");
+              if (!vm.form.code && refIdx >= 0 && row[refIdx]) vm.form.code = row[refIdx];
             }
             vm.uploadPreview = preview;
             vm.form.requestedAmount = Math.round(sum * 100) / 100;
@@ -485,10 +474,6 @@
         };
         reader.readAsText(file);
       };
-      function parseUploadNumber(value, fallback) {
-        var parsed = parseFloat(String(value || "").replace(/,/g, ""));
-        return isNaN(parsed) ? fallback : parsed;
-      }
       vm.recalculateUploadPreview = function () {
         var sum = 0;
         (vm.uploadPreview || []).forEach(function (row) {
@@ -684,6 +669,7 @@
         vm.projects.forEach(function (project) {
           if (typeof project.petsLoaded === "undefined") project.petsLoaded = angular.isArray(project.pets);
           project.pets = project.pets || [];
+          project.budgetLines = project.budgetLines || [];
           project.petCount = project.petsLoaded ? project.pets.length : Number(project.petCount) || 0;
           project.spendRequestCount = Number(project.spendRequestCount) || 0;
           project.budgetLineCount = Number(project.budgetLineCount) || 0;
@@ -692,25 +678,25 @@
           project.spendRequestCount = 0;
           project.budgetLineCount = 0;
           project.invoiceCount = 0;
+          project.budgetLines = [];
           project.pets.forEach(function (pet) {
             pet.spendItems = pet.spendItems || [];
             pet.budgetLines = pet.budgetLines || [];
             if (pet.spendItems.length) pet.requestedAmount = vm.petFinalAed(pet);
             project.spendRequestCount += pet.spendItems.length;
             project.budgetLineCount += pet.budgetLines.length;
-            pet.budgetLines.forEach(function (line) { line.invoices = line.invoices || []; project.invoiceCount += line.invoices.length; });
+            pet.budgetLines.forEach(function (line) { line.invoices = line.invoices || []; line.petCode = pet.code; project.budgetLines.push(line); project.invoiceCount += line.invoices.length; });
             if (vm.demo && project.budgetType === "CAPEX" && pet.status === "Approved") vm.budgetUsage.push({ budgetSource: project.budgetSource, projectName: project.projectName, petCode: pet.code, amount: pet.requestedAmount });
           });
         });
       }
+      vm.petForBudgetLine = function (project, line) {
+        return ((project && project.pets) || []).filter(function (pet) { return pet.petId === line.petId; })[0];
+      };
       vm.toggleProject = function (project) {
         if (project.expanded) { project.expanded = false; redraw(); return; }
         if (project.petsLoaded || vm.demo) { project.expanded = true; redraw(); return; }
         loadProjectPets(project, true);
-      };
-      vm.togglePet = function (pet) {
-        pet.expanded = !pet.expanded;
-        redraw();
       };
       vm.toggleBudgetLine = function (line) {
         line.expanded = !line.expanded;

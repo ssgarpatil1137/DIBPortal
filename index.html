@@ -385,146 +385,148 @@
                             </div>
                           </td>
                         </tr>
-                        <tr class="grandchild" ng-if="pet.budgetLines.length">
-                          <td colspan="8">
-                            <div class="budget-wrap">
-                              <table class="nested budget">
+                      </tbody>
+                    </table>
+                    <div class="child-title" ng-if="project.budgetLines.length">
+                      <div>
+                        <span class="level-label">BUDGET LINE REQUESTS</span
+                        ><strong>{{project.projectName}}</strong>
+                      </div>
+                    </div>
+                    <div class="budget-wrap" ng-if="project.budgetLines.length">
+                      <table class="nested budget">
+                        <thead>
+                          <tr>
+                            <th></th>
+                            <th>#</th>
+                            <th>Vendor</th>
+                            <th>Justification</th>
+                            <th>Cost</th>
+                            <th>CCY</th>
+                            <th>GL</th>
+                            <th>PET Ref</th>
+                            <th>CAM ID</th>
+                            <th>CAM Status</th>
+                            <th>LPO Request</th>
+                            <th>LPO Status</th>
+                            <th>Invoices</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody ng-repeat="line in project.budgetLines">
+                          <tr>
+                            <td>
+                              <button
+                                class="icon-btn disclosure"
+                                ng-class="{expanded:line.expanded}"
+                                title="View invoices"
+                                ng-click="vm.toggleBudgetLine(line)"
+                              >
+                                <i data-lucide="chevron-right"></i>
+                              </button>
+                            </td>
+                            <td>{{$index+1}}</td>
+                            <td>{{line.vendor}}</td>
+                            <td>{{line.justification}}</td>
+                            <td>{{vm.money(line.cost)}}</td>
+                            <td>{{line.currency}}</td>
+                            <td>{{line.glNumber}}</td>
+                            <td>{{line.petReference||line.petCode}}</td>
+                            <td>{{line.camId}}</td>
+                            <td>
+                              <span
+                                class="status"
+                                ng-class="vm.statusClass(line.camStatus)"
+                                >{{line.camStatus}}</span
+                              >
+                            </td>
+                            <td>{{line.lpoRequest}}</td>
+                            <td>{{line.lpoStatus}}</td>
+                            <td>{{line.invoices.length}}</td>
+                            <td>
+                              <div class="row-actions">
+                                <button
+                                  class="icon-btn"
+                                  ng-click="vm.openBudgetLine(vm.petForBudgetLine(project,line),line)"
+                                  title="Edit budget line"
+                                >
+                                  <i data-lucide="pencil"></i></button
+                                ><button
+                                  class="icon-btn"
+                                  ng-click="vm.openUpload('invoice',line)"
+                                  title="Upload invoices"
+                                >
+                                  <i data-lucide="upload"></i></button
+                                ><button
+                                  class="icon-btn accent"
+                                  ng-click="vm.openInvoice(line)"
+                                  title="Add invoice"
+                                >
+                                  <i data-lucide="receipt-text"></i>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          <tr ng-if="line.expanded" class="invoice-row">
+                            <td></td>
+                            <td colspan="13">
+                              <table class="nested invoices">
                                 <thead>
                                   <tr>
-                                    <th></th>
-                                    <th>#</th>
-                                    <th>Vendor</th>
+                                    <th>Row #</th>
+                                    <th>Vendor name</th>
                                     <th>Justification</th>
-                                    <th>Cost</th>
-                                    <th>CCY</th>
-                                    <th>GL</th>
-                                    <th>PET Ref</th>
-                                    <th>CAM ID</th>
-                                    <th>CAM Status</th>
-                                    <th>LPO Request</th>
-                                    <th>LPO Status</th>
-                                    <th>Invoices</th>
+                                    <th>GL number</th>
+                                    <th>Invoice ID</th>
+                                    <th>Invoice number</th>
+                                    <th>Invoice amount</th>
+                                    <th>Status</th>
+                                    <th>Payment date</th>
                                     <th>Action</th>
                                   </tr>
                                 </thead>
-                                <tbody ng-repeat="line in pet.budgetLines">
-                                  <tr>
-                                    <td>
-                                      <button
-                                        class="icon-btn disclosure"
-                                        ng-class="{expanded:line.expanded}"
-                                        title="View invoices"
-                                        ng-click="vm.toggleBudgetLine(line)"
-                                      >
-                                        <i data-lucide="chevron-right"></i>
-                                      </button>
-                                    </td>
+                                <caption><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="receipt-text"></i></button></caption>
+                                <tbody>
+                                  <tr
+                                    ng-repeat="invoice in line.invoices"
+                                  >
                                     <td>{{$index+1}}</td>
-                                    <td>{{line.vendor}}</td>
-                                    <td>{{line.justification}}</td>
-                                    <td>{{vm.money(line.cost)}}</td>
-                                    <td>{{line.currency}}</td>
-                                    <td>{{line.glNumber}}</td>
-                                    <td>{{line.petReference}}</td>
-                                    <td>{{line.camId}}</td>
+                                    <td>{{invoice.vendorName}}</td>
+                                    <td>{{invoice.justification}}</td>
+                                    <td>{{invoice.glNumber}}</td>
+                                    <td>INV-{{invoice.invoiceId}}</td>
+                                    <td>{{invoice.invoiceNumber}}</td>
+                                    <td>
+                                      {{vm.money(invoice.invoiceAmount)}}
+                                    </td>
                                     <td>
                                       <span
                                         class="status"
-                                        ng-class="vm.statusClass(line.camStatus)"
-                                        >{{line.camStatus}}</span
+                                        ng-class="vm.statusClass(invoice.invoiceStatus)"
+                                        >{{invoice.invoiceStatus}}</span
                                       >
                                     </td>
-                                    <td>{{line.lpoRequest}}</td>
-                                    <td>{{line.lpoStatus}}</td>
-                                    <td>{{line.invoices.length}}</td>
                                     <td>
-                                      <div class="row-actions">
-                                        <button
-                                          class="icon-btn"
-                                          ng-click="vm.openBudgetLine(pet,line)"
-                                          title="Edit budget line"
-                                        >
-                                          <i data-lucide="pencil"></i></button
-                                        ><button
-                                          class="icon-btn"
-                                          ng-click="vm.openUpload('invoice',line)"
-                                          title="Upload invoices"
-                                        >
-                                          <i data-lucide="upload"></i></button
-                                        ><button
-                                          class="icon-btn accent"
-                                          ng-click="vm.openInvoice(line)"
-                                          title="Add invoice"
-                                        >
-                                          <i data-lucide="receipt-text"></i>
-                                        </button>
-                                      </div>
+                                      {{invoice.paymentDate|date:'dd-MMM-yyyy'}}
+                                    </td>
+                                    <td>
+                                      <button
+                                        class="icon-btn"
+                                        title="Edit invoice"
+                                        ng-click="vm.openInvoice(line,invoice)"
+                                      >
+                                        <i data-lucide="pencil"></i>
+                                      </button>
                                     </td>
                                   </tr>
-                                  <tr ng-if="line.expanded" class="invoice-row">
-                                    <td></td>
-                                    <td colspan="13">
-                                      <table class="nested invoices">
-                                        <thead>
-                                          <tr>
-                                            <th>Row #</th>
-                                            <th>Vendor name</th>
-                                            <th>Justification</th>
-                                            <th>GL number</th>
-                                            <th>Invoice ID</th>
-                                            <th>Invoice number</th>
-                                            <th>Invoice amount</th>
-                                            <th>Status</th>
-                                            <th>Payment date</th>
-                                            <th>Action</th>
-                                          </tr>
-                                        </thead>
-                                        <caption><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="receipt-text"></i></button></caption>
-                                        <tbody>
-                                          <tr
-                                            ng-repeat="invoice in line.invoices"
-                                          >
-                                            <td>{{$index+1}}</td>
-                                            <td>{{invoice.vendorName}}</td>
-                                            <td>{{invoice.justification}}</td>
-                                            <td>{{invoice.glNumber}}</td>
-                                            <td>INV-{{invoice.invoiceId}}</td>
-                                            <td>{{invoice.invoiceNumber}}</td>
-                                            <td>
-                                              {{vm.money(invoice.invoiceAmount)}}
-                                            </td>
-                                            <td>
-                                              <span
-                                                class="status"
-                                                ng-class="vm.statusClass(invoice.invoiceStatus)"
-                                                >{{invoice.invoiceStatus}}</span
-                                              >
-                                            </td>
-                                            <td>
-                                              {{invoice.paymentDate|date:'dd-MMM-yyyy'}}
-                                            </td>
-                                            <td>
-                                              <button
-                                                class="icon-btn"
-                                                title="Edit invoice"
-                                                ng-click="vm.openInvoice(line,invoice)"
-                                              >
-                                                <i data-lucide="pencil"></i>
-                                              </button>
-                                            </td>
-                                          </tr>
-                                          <tr ng-if="!line.invoices.length"><td colspan="10"><div class="empty inline-empty"><i data-lucide="receipt-text"></i><strong>No invoices yet for this budget line.</strong><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="plus"></i></button></div></td></tr>
-                                        </tbody>
-                                      </table>
-                                    </td>
-                                  </tr>
+                                  <tr ng-if="!line.invoices.length"><td colspan="10"><div class="empty inline-empty"><i data-lucide="receipt-text"></i><strong>No invoices yet for this budget line.</strong><button class="icon-btn accent" title="Add invoice" ng-click="vm.openInvoice(line)"><i data-lucide="plus"></i></button></div></td></tr>
                                 </tbody>
                               </table>
-                            </div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </td>
               </tr>
