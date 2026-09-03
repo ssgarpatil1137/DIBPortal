@@ -120,7 +120,7 @@ namespace DFM.Web.Controllers
                 if (value.PetId.HasValue)
                 {
                     var existing = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND ProjectId=@ProjectId", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId)).FirstOrDefault();
-                    if (existing != null && Convert.ToString(existing["Status"]) == "Approved")
+                    if (existing != null && string.Equals(Convert.ToString(existing["Status"]).Trim(), "Approved", StringComparison.OrdinalIgnoreCase))
                     {
                         Db.Execute("UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId AND ProjectId=@ProjectId AND Status='Approved'", P("@VendorName", value.VendorName), P("@PetId", value.PetId), P("@ProjectId", value.ProjectId));
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
@@ -128,6 +128,22 @@ namespace DFM.Web.Controllers
                 }
                 if (value.RequestedAmount <= 0) return BadRequest("A positive PET amount is required.");
                 return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets/vendor-name")]
+        public IHttpActionResult SavePetVendorName(PetVendorRequest value)
+        {
+            if (value == null || !value.PetId.HasValue) return BadRequest("PET details are required.");
+            try
+            {
+                var existing = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND ProjectId=@ProjectId", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId)).FirstOrDefault();
+                if (existing == null) return BadRequest("PET request was not found.");
+                if (!string.Equals(Convert.ToString(existing["Status"]).Trim(), "Approved", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only approved PET requests allow vendor-name-only editing.");
+                Db.Execute("UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId AND ProjectId=@ProjectId AND Status='Approved'", P("@VendorName", value.VendorName), P("@PetId", value.PetId), P("@ProjectId", value.ProjectId));
+                return Ok(new { PetId = value.PetId, Status = "Approved" });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }

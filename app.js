@@ -420,6 +420,16 @@
       function sameName(a, b) {
         return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
       }
+      function sameStatus(a, b) {
+        return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+      }
+      function existingPetVendor(pet) {
+        if (!pet) return "";
+        if (pet.vendorName || pet.VendorName) return pet.vendorName || pet.VendorName;
+        if (pet.spendItems && pet.spendItems.length) return pet.spendItems[0].vendor || pet.spendItems[0].Vendor || "";
+        if (pet.budgetLines && pet.budgetLines.length) return pet.budgetLines[0].vendor || pet.budgetLines[0].Vendor || "";
+        return "";
+      }
       // Login is by email, but JIRA only records the reviewer/approver's display name against
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
       vm.isReviewerFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExecLead); };
@@ -778,15 +788,24 @@
             currency: "AED",
             requestedAmount: 0,
           });
+        if (pet) {
+          vm.form.petId = vm.form.petId || pet.petId || pet.PetId;
+          vm.form.projectId = vm.form.projectId || project.projectId;
+          vm.form.code = vm.form.code || pet.code || pet.Code;
+          vm.form.currency = vm.form.currency || pet.currency || pet.Currency || "AED";
+          vm.form.requestedAmount = Number(vm.form.requestedAmount || pet.requestedAmount || pet.RequestedAmount) || 0;
+          vm.form.status = vm.form.status || pet.status || pet.Status;
+          if (sameStatus(vm.form.status, "Approved")) vm.form.vendorName = existingPetVendor(pet);
+        }
         vm.modal = {
           type: "pet",
           kicker: "PET REQUEST",
-          title: pet ? "Edit " + pet.code : "Create PET for " + vm.projectDisplayId(project),
-          submit: pet && pet.status === "Approved" ? "Save vendor name" : pet ? "Save PET" : "Submit for review",
+          title: pet ? "Edit " + vm.form.code : "Create PET for " + vm.projectDisplayId(project),
+          submit: pet && sameStatus(vm.form.status, "Approved") ? "Save vendor name" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
       };
-      vm.petVendorOnly = function () { return vm.selectedPet && vm.selectedPet.status === "Approved"; };
+      vm.petVendorOnly = function () { return vm.selectedPet && sameStatus(vm.form && vm.form.status || vm.selectedPet.status, "Approved"); };
       vm.openSpend = function (pet) {
         vm.selectedPet = pet;
         vm.selectedProject = vm.projects.filter(function (project) { return project.pets.indexOf(pet) >= 0; })[0];
@@ -1027,7 +1046,7 @@
               projectId: vm.selectedProject.projectId,
               vendorName: vm.form.vendorName,
             };
-            $http.post("api/portfolio/pets", vendorPayload).then(function () {
+            $http.post("api/portfolio/pets/vendor-name", vendorPayload).then(function () {
               vm.selectedPet.vendorName = vm.form.vendorName;
               notice("PET vendor name updated");
               vm.close();
