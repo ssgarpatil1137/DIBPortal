@@ -958,6 +958,7 @@
                 >PET reference<select falcon-select2 data-placeholder="Select PET request"
                   ng-model="vm.form.petId"
                   ng-change="vm.onBudgetLinePetChange()"
+                  ng-disabled="vm.form.budgetLineId"
                   ng-options="pet.petId as pet.code for pet in vm.selectedProject.pets | filter:vm.canAddBudgetLine"
                   required
                 ></select></label

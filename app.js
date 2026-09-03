@@ -587,6 +587,52 @@
         if (!pet.spendItems || !pet.spendItems.length) return Number(pet.requestedAmount) || 0;
         return pet.spendItems.reduce(function (total, item) { return total + (Number(item.aedAmount) || 0) * (1 + (Number(item.contingencyPercent) || 0) / 100); }, 0);
       };
+      function petBudgetLineTotal(pet, excludeBudgetLineId) {
+        return ((pet && pet.budgetLines) || []).reduce(function (total, line) {
+          if (excludeBudgetLineId && String(line.budgetLineId) === String(excludeBudgetLineId)) return total;
+          return total + (Number(line.cost) || 0);
+        }, 0);
+      }
+      function spendItemFinalAed(item) {
+        var foreignAmount = Number(item.foreignAmount) || (Number(item.units) || 0) * (Number(item.unitPrice) || 0);
+        var aedAmount = Number(item.aedAmount) || foreignAmount;
+        return aedAmount * (1 + (Number(item.contingencyPercent) || 0) / 100);
+      }
+      function petFinalAedWithSpend(pet, item) {
+        var spendItemId = item && item.spendItemId;
+        var existing = ((pet && pet.spendItems) || []).reduce(function (total, current) {
+          if (spendItemId && String(current.spendItemId) === String(spendItemId)) return total;
+          return total + spendItemFinalAed(current);
+        }, 0);
+        return existing + spendItemFinalAed(item || {});
+      }
+      function projectBudgetAmount(project) {
+        return Number(project && project.budget) || Number(project && project.availableBudget) || 0;
+      }
+      function validatePetRequestAmount(project, pet, requestedAmount) {
+        requestedAmount = Number(requestedAmount) || 0;
+        var projectBudget = projectBudgetAmount(project);
+        if (projectBudget > 0 && requestedAmount > projectBudget) {
+          noticeError("PET Request amount exceeds the Project Budget. Project Budget: " + vm.money(projectBudget) + "; entered amount: " + vm.money(requestedAmount) + ".");
+          return false;
+        }
+        var budgetLineTotal = petBudgetLineTotal(pet);
+        if (pet && budgetLineTotal > requestedAmount) {
+          noticeError("PET Request amount is below the existing Budget Line total for this PET Reference. Existing Budget Lines total: " + vm.money(budgetLineTotal) + "; entered PET amount: " + vm.money(requestedAmount) + ".");
+          return false;
+        }
+        return true;
+      }
+      function validateBudgetLineAmount() {
+        var cost = Number(vm.form && vm.form.cost) || 0;
+        if (cost <= 0) { noticeError("A positive Budget Line amount is required."); return false; }
+        var available = (Number(vm.selectedPet && vm.selectedPet.requestedAmount) || 0) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
+        if (cost > available) {
+          noticeError("Budget Line amount exceeds the available balance for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available balance: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
+          return false;
+        }
+        return true;
+      }
       vm.updateView = function (keepPage) {
         var query = vm.search.toLowerCase();
         var currentEmail = (vm.session && vm.session.email || "").toLowerCase();
@@ -1099,6 +1145,7 @@
             if (!vm.uploadPreview.length) { noticeError("No PET rows were found in the uploaded CSV."); return; }
             vm.recalculateUploadPreview();
           }
+          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
           var petPayload = {
             petId: vm.form.petId || null,
             projectId: vm.selectedProject.projectId,
@@ -1129,6 +1176,7 @@
             vm.close();
             return;
           }
+          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
           if (vm.selectedPet) angular.extend(vm.selectedPet, vm.form);
           else {
             vm.form.petId = Date.now();
@@ -1146,6 +1194,9 @@
         }
         if (type === "spend" && !vm.demo) {
           var spendPayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
+          spendPayload.foreignAmount = Number(spendPayload.foreignAmount) || (Number(spendPayload.units) || 0) * (Number(spendPayload.unitPrice) || 0);
+          spendPayload.aedAmount = Number(spendPayload.aedAmount) || spendPayload.foreignAmount;
+          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, spendPayload))) return;
           var isNewSpend = !spendPayload.spendItemId;
           $http.post("api/portfolio/spend-items", spendPayload).then(function (response) {
             var saved = response.data || {};
@@ -1169,6 +1220,7 @@
           var oldSpend = vm.form.spendItemId && vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === vm.form.spendItemId; })[0];
           vm.form.foreignAmount = vm.form.units * vm.form.unitPrice;
           vm.form.aedAmount = vm.form.aedAmount || vm.form.foreignAmount;
+          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, vm.form))) return;
           if (oldSpend) angular.extend(oldSpend, vm.form);
           else { vm.form.spendItemId = Date.now(); vm.selectedPet.spendItems.push(vm.form); }
           vm.selectedPet.requestedAmount = vm.petFinalAed(vm.selectedPet);
@@ -1223,6 +1275,7 @@
         if (type === "budgetLine" && !vm.demo) {
           vm.onBudgetLinePetChange();
           if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
+          if (!validateBudgetLineAmount()) return;
           var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId, petReference: vm.form.petReference || vm.selectedPet.code });
           $http.post("api/portfolio/budget-lines", budgetLinePayload).then(function () {
             notice("Budget line saved");
@@ -1237,6 +1290,7 @@
         if (type === "budgetLine") {
           vm.onBudgetLinePetChange();
           if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
+          if (!validateBudgetLineAmount()) return;
           vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
           var old =
             vm.form.budgetLineId &&

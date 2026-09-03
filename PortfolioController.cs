@@ -130,7 +130,7 @@ namespace DFM.Web.Controllers
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
                 }
-                if (value.RequestedAmount <= 0) return BadRequest("A positive PET amount is required.");
+                AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
                 return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName)).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -143,8 +143,9 @@ namespace DFM.Web.Controllers
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
             var foreignAmount = value.ForeignAmount == 0 ? value.Units * value.UnitPrice : value.ForeignAmount;
             var aedAmount = value.AedAmount == 0 ? foreignAmount : value.AedAmount;
-            try { return Ok(Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault()); }
+            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault()); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
@@ -158,12 +159,18 @@ namespace DFM.Web.Controllers
         {
             try
             {
+                if (value == null) return BadRequest("Budget Line details are required.");
                 object lpoStatus = null;
                 if (value.BudgetLineId.HasValue)
                 {
-                    var existing = Db.Query("SELECT LpoStatus FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", value.BudgetLineId)).FirstOrDefault();
-                    if (existing != null) lpoStatus = existing["LpoStatus"];
+                    var existing = Db.Query("SELECT PetId,LpoStatus FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", value.BudgetLineId)).FirstOrDefault();
+                    if (existing != null)
+                    {
+                        value.PetId = Convert.ToInt32(existing["PetId"]);
+                        lpoStatus = existing["LpoStatus"];
+                    }
                 }
+                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
                 return Ok(Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }

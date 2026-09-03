@@ -27,17 +27,29 @@ namespace DFM.Web.Infrastructure
             for (var index = 1; index < rows.Count; index++)
             {
                 var row = rows[index]; if (Empty(row)) continue; var reference = Get(row, headers, "petreference"); int petId;
-                var units = DecimalAny(row, headers, 1, "units", "unit"); var unitPrice = Decimal(row, headers, "unitprice"); var foreign = DecimalAny(row, headers, units * unitPrice, "fcyamount", "amtfcy", "amountfcy", "foreignamount"); var aed = DecimalAny(row, headers, foreign, "aedamount", "amtlcy", "amountlcy", "lcyamount", "localamount"); var contingency = DecimalAny(row, headers, 0, "contingency", "contingencypercent", "cont", "contpercent");
+                var units = Decimal(row, headers, "units", 1); var unitPrice = Decimal(row, headers, "unitprice"); var foreign = Decimal(row, headers, "fcyamount", units * unitPrice); var aed = Decimal(row, headers, "aedamount", foreign); var contingency = Decimal(row, headers, "contingency");
+                var finalAmount = aed * (1 + contingency / 100);
+                var amountValidated = false;
                 if (string.IsNullOrWhiteSpace(reference)) throw new ArgumentException("PET reference is required for every PET import row.");
                 if (!pets.TryGetValue(reference, out petId))
                 {
                     var existing = Db.Query("SELECT PetId FROM dbo.PETRequests WHERE ProjectId=@project AND Code=@code AND Status IN ('Draft','Pending Review','Pending Approval')", P("@project", projectId), P("@code", reference));
-                    var result = existing.Count > 0
-                        ? Db.Query("EXEC dbo.sp_SavePet @pet,@project,@code,@amount,@currency,@user", P("@pet", existing[0]["PetId"]), P("@project", projectId), P("@code", reference), P("@amount", aed * (1 + contingency / 100)), P("@currency", GetAny(row, headers, "AED", "currency", "basecy", "basecurrency")), P("@user", user))
-                        : Db.Query("EXEC dbo.sp_SavePet NULL,@project,@code,@amount,@currency,@user", P("@project", projectId), P("@code", reference), P("@amount", aed * (1 + contingency / 100)), P("@currency", GetAny(row, headers, "AED", "currency", "basecy", "basecurrency")), P("@user", user));
-                    petId = Convert.ToInt32(result[0]["PetId"]); pets[reference] = petId;
+                    if (existing.Count > 0)
+                    {
+                        petId = Convert.ToInt32(existing[0]["PetId"]);
+                        AmountValidation.ValidateSpendItemAmount(petId, null, finalAmount);
+                    }
+                    else
+                    {
+                        AmountValidation.ValidatePetRequestAmount(projectId, null, finalAmount);
+                        var result = Db.Query("EXEC dbo.sp_SavePet NULL,@project,@code,@amount,@currency,@user", P("@project", projectId), P("@code", reference), P("@amount", finalAmount), P("@currency", Get(row, headers, "currency", "AED")), P("@user", user));
+                        petId = Convert.ToInt32(result[0]["PetId"]);
+                    }
+                    amountValidated = true;
+                    pets[reference] = petId;
                 }
-                Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", GetAny(row, headers, "", "head", "exphead", "expensehead")), P("@topic", Get(row, headers, "topic")), P("@vendor", Get(row, headers, "vendor")), P("@costType", Get(row, headers, "costtype")), P("@unitType", Get(row, headers, "unittype")), P("@units", units), P("@unitPrice", unitPrice), P("@currency", GetAny(row, headers, "AED", "currency", "basecy", "basecurrency")), P("@foreign", foreign), P("@aed", aed), P("@contingency", contingency), P("@gl", GetAny(row, headers, "", "glnumber", "gl", "glno"))); imported++;
+                if (!amountValidated) AmountValidation.ValidateSpendItemAmount(petId, null, finalAmount);
+                Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", Get(row, headers, "head")), P("@topic", Get(row, headers, "topic")), P("@vendor", Get(row, headers, "vendor")), P("@costType", Get(row, headers, "costtype")), P("@unitType", Get(row, headers, "unittype")), P("@units", units), P("@unitPrice", unitPrice), P("@currency", Get(row, headers, "currency", "AED")), P("@foreign", foreign), P("@aed", aed), P("@contingency", contingency), P("@gl", Get(row, headers, "glnumber"))); imported++;
             }
             return imported;
         }
@@ -48,7 +60,9 @@ namespace DFM.Web.Infrastructure
             for (var index = 1; index < rows.Count; index++)
             {
                 var row = rows[index]; if (Empty(row)) continue;
-                Db.Query("EXEC dbo.sp_SaveBudgetLine NULL,@pet,@vendor,@justification,@cost,@currency,@gl,@petRef,@camId,@camStatus,@camComments,@lpoRequest,@lpoStatus,@lpoComments,@user", P("@pet", petId), P("@vendor", Get(row, headers, "vendor")), P("@justification", Get(row, headers, "justification")), P("@cost", Decimal(row, headers, "cost")), P("@currency", Get(row, headers, "currency", "AED")), P("@gl", Get(row, headers, "gl")), P("@petRef", Get(row, headers, "petreference")), P("@camId", Get(row, headers, "camid")), P("@camStatus", Get(row, headers, "camstatus")), P("@camComments", Get(row, headers, "camcomments")), P("@lpoRequest", Get(row, headers, "lporequest")), P("@lpoStatus", Get(row, headers, "lpostatus")), P("@lpoComments", Get(row, headers, "lpocomments")), P("@user", user)); imported++;
+                var cost = Decimal(row, headers, "cost");
+                AmountValidation.ValidateBudgetLineAmount(petId, null, cost);
+                Db.Query("EXEC dbo.sp_SaveBudgetLine NULL,@pet,@vendor,@justification,@cost,@currency,@gl,@petRef,@camId,@camStatus,@camComments,@lpoRequest,@lpoStatus,@lpoComments,@user", P("@pet", petId), P("@vendor", Get(row, headers, "vendor")), P("@justification", Get(row, headers, "justification")), P("@cost", cost), P("@currency", Get(row, headers, "currency", "AED")), P("@gl", Get(row, headers, "gl")), P("@petRef", Get(row, headers, "petreference")), P("@camId", Get(row, headers, "camid")), P("@camStatus", Get(row, headers, "camstatus")), P("@camComments", Get(row, headers, "camcomments")), P("@lpoRequest", Get(row, headers, "lporequest")), P("@lpoStatus", Get(row, headers, "lpostatus")), P("@lpoComments", Get(row, headers, "lpocomments")), P("@user", user)); imported++;
             }
             return imported;
         }
@@ -80,9 +94,7 @@ namespace DFM.Web.Infrastructure
 
         private static string Normalize(string value) { return new string((value ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray()); }
         private static string Get(List<string> row, Dictionary<string, int> headers, string name, string fallback = "") { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]) ? row[index].Trim() : fallback; }
-        private static string GetAny(List<string> row, Dictionary<string, int> headers, string fallback, params string[] names) { foreach (var name in names) { var value = Get(row, headers, name); if (!string.IsNullOrWhiteSpace(value)) return value; } return fallback; }
         private static decimal Decimal(List<string> row, Dictionary<string, int> headers, string name, decimal fallback = 0) { decimal value; return decimal.TryParse(Get(row, headers, name).Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out value) ? value : fallback; }
-        private static decimal DecimalAny(List<string> row, Dictionary<string, int> headers, decimal fallback, params string[] names) { decimal value; foreach (var name in names) if (decimal.TryParse(Get(row, headers, name).Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out value)) return value; return fallback; }
         private static int Int(List<string> row, Dictionary<string, int> headers, string name, int fallback) { int value; return int.TryParse(Get(row, headers, name), out value) ? value : fallback; }
         private static bool Empty(List<string> row) { return row.All(string.IsNullOrWhiteSpace); }
         private static void Require(Dictionary<string, int> headers, params string[] names) { var missing = names.Where(name => !headers.ContainsKey(name)).ToArray(); if (missing.Length > 0) throw new ArgumentException("Missing CSV columns: " + string.Join(", ", missing)); }
