@@ -39,9 +39,7 @@
           <i data-lucide="{{tab.icon}}"></i>{{tab.label}}
         </button>
       </nav>
-                                ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Approved')"
         <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
-                                title="{{pet.status==='Approved'?'Edit PET vendor name':'Edit PET'}}"
       </div>
     </header>
 
@@ -336,8 +334,8 @@
                                 Approve</button
                               ><button
                                 class="icon-btn"
-                                title="Edit PET"
-                                ng-if="vm.can('request')&&pet.status==='Pending Review'"
+                                title="{{pet.status==='Approved'?'Edit PET vendor name':'Edit PET'}}"
+                                ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Approved')"
                                 ng-click="vm.openPet(project,pet)"
                               >
                                 <i data-lucide="pencil"></i></button
