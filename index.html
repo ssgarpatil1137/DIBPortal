@@ -151,7 +151,8 @@
               <option>Pending Review</option>
               <option>Pending Approval</option>
               <option>Approved</option>
-              <option>Rejected</option>
+                            <option>Rejected</option>
+                            <option>Sent Back</option>
             </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option></select>
           </div>
         </div>
@@ -335,8 +336,8 @@
                                 Approve</button
                               ><button
                                 class="icon-btn"
-                                title="{{pet.status==='Approved'?'Edit PET vendor name':'Edit PET'}}"
-                                ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Approved')"
+                                title="{{pet.status==='Approved'?'Edit PET vendor name':pet.status==='Sent Back'?'Amend and resubmit PET':'Edit PET'}}"
+                                ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back'||pet.status==='Approved')"
                                 ng-click="vm.openPet(project,pet)"
                               >
                                 <i data-lucide="pencil"></i></button
@@ -348,8 +349,8 @@
                                 <i data-lucide="history"></i></button
                               ><button
                                 class="icon-btn"
-                                title="{{pet.status==='Pending Review'?'Maintain PET line items':'View PET line items'}}"
-                                ng-if="pet.spendItems.length||(vm.can('request')&&pet.status==='Pending Review')"
+                                title="{{(pet.status==='Pending Review'||pet.status==='Sent Back')?'Maintain PET line items':'View PET line items'}}"
+                                ng-if="pet.spendItems.length||(vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back'))"
                                 ng-click="vm.openSpend(pet)"
                               >
                                 <i data-lucide="list-plus"></i></button
@@ -848,6 +849,13 @@
                     ng-disabled="vm.petVendorOnly()"
                   required
               /></label>
+              <label class="full" ng-if="vm.form.status==='Sent Back'"
+                >Requester comments / amendment notes<textarea
+                  ng-model="vm.form.comments"
+                  rows="4"
+                  required
+                ></textarea></label
+              >
               <div class="balance full">
                 <span>Available after approval</span
                 ><strong
@@ -899,54 +907,43 @@
                 <div><small>Approver</small><strong>{{vm.form.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
                 <div><small>Current CapEx</small><strong>{{vm.selectedProject.budgetSource}}</strong></div>
               </div>
-              <label class="full" ng-if="vm.modal.stage==='approve'&&vm.form.approve"
+              <label class="full"
+                >Decision<select ng-model="vm.form.decision" required>
+                  <option value="Approve">Approve</option>
+                  <option value="SendBack">Send Back to Requester</option>
+                  <option value="RejectCancel">Reject/Cancel</option>
+                </select></label
+              >
+              <label class="full" ng-if="vm.modal.stage==='approve'&&vm.form.decision==='Approve'"
                 >CapEx source<select falcon-select2 data-placeholder="Search CapEx source"
                   ng-model="vm.form.budgetSourceId"
                   ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:'CAPEX'}"
                   required
                 ></select
               ></label>
-              <div class="full budget-split" ng-if="vm.modal.stage==='approve'&&vm.form.approve&&vm.selectedBudgetSource()">
+              <div class="full budget-split" ng-if="vm.modal.stage==='approve'&&vm.form.decision==='Approve'&&vm.selectedBudgetSource()">
                 <table class="nested">
                   <thead>
-                    <tr><th>CapEx</th><th>Budget</th><th>Utilization</th><th>Locked</th><th>Budget after locked</th><th>Claim</th><th>Net balance</th><th>Available</th></tr>
+                    <tr><th>CapEx</th><th>CapEx Budget</th><th>Locked/Logged Amount</th><th>Utilized Amount</th><th>Available Balance</th></tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td>{{vm.selectedBudgetSource().externalId}}</td>
                       <td>{{vm.money(vm.selectedBudgetSource().budget)}}</td>
-                      <td>{{vm.money(vm.selectedBudgetSource().utilization)}}</td>
                       <td>{{vm.money(vm.selectedBudgetSource().lockedAmount)}}</td>
-                      <td>{{vm.money(vm.selectedBudgetSource().budgetAfterLocked)}}</td>
-                      <td>{{vm.money(vm.selectedBudgetSource().claimAmount)}}</td>
-                      <td>{{vm.money(vm.selectedBudgetSource().netBalance)}}</td>
+                      <td>{{vm.money(vm.selectedBudgetSource().utilization)}}</td>
                       <td>{{vm.money(vm.selectedBudgetSource().availableBudget)}}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
               <label
-                >Decision comments<textarea
+                >Comments / reason<textarea
                   ng-model="vm.form.comments"
                   rows="5"
-                  required
+                  ng-required="vm.form.decision==='SendBack'||vm.form.decision==='RejectCancel'"
                 ></textarea>
               </label>
-              <div class="decision-choice">
-                <label
-                  ><input
-                    type="radio"
-                    ng-model="vm.form.approve"
-                    ng-value="true"
-                  />Approve and forward</label
-                ><label
-                  ><input
-                    type="radio"
-                    ng-model="vm.form.approve"
-                    ng-value="false"
-                  />Reject request</label
-                >
-              </div>
             </div>
             <div ng-if="vm.modal.type==='budgetLine'" class="form-grid">
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">

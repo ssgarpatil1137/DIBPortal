@@ -569,7 +569,7 @@
         if (/approved|paid|settled|issued|active|live/.test(text))
           return "approved";
         if (/reject|blocked/.test(text)) return "rejected";
-        if (/pending|outstanding|received|review|approval/.test(text))
+        if (/pending|outstanding|received|review|approval|sent back/.test(text))
           return "pending";
         return "neutral";
       };
@@ -578,6 +578,7 @@
         return null;
       };
       vm.canAddBudgetLine = function (pet) { return pet && ["Pending Review", "Pending Approval", "Approved"].indexOf(pet.status) >= 0; };
+      vm.canMaintainPet = function (pet) { return pet && (pet.status === "Pending Review" || pet.status === "Sent Back"); };
       vm.petForNewBudgetLine = function (project) {
         var pets = project && project.pets || [];
         for (var index = 0; index < pets.length; index++) if (vm.canAddBudgetLine(pets[index])) return pets[index];
@@ -855,13 +856,14 @@
           vm.form.currency = vm.form.currency || pet.currency || pet.Currency || "AED";
           vm.form.requestedAmount = Number(vm.form.requestedAmount || pet.requestedAmount || pet.RequestedAmount) || 0;
           vm.form.status = vm.form.status || pet.status || pet.Status;
+          if (vm.form.status === "Sent Back") vm.form.comments = "";
           if (sameStatus(vm.form.status, "Approved")) vm.form.vendorName = existingPetVendor(pet);
         }
         vm.modal = {
           type: "pet",
           kicker: "PET REQUEST",
           title: pet ? "Edit " + vm.form.code : "Create PET for " + vm.projectDisplayId(project),
-          submit: pet && sameStatus(vm.form.status, "Approved") ? "Save vendor name" : pet ? "Save PET" : "Submit for review",
+          submit: pet && sameStatus(vm.form.status, "Approved") ? "Save vendor name" : pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
       };
@@ -870,7 +872,7 @@
         vm.selectedPet = pet;
         vm.selectedProject = vm.projects.filter(function (project) { return project.pets.indexOf(pet) >= 0; })[0];
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
-        vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
+        vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
         vm.spendFormVisible = false;
         vm.form = { petId: pet.petId, units: 1, currency: "AED", contingencyPercent: 0 };
         vm.modal = { type: "spend", kicker: "PET COST DETAIL", title: "PET line items · " + pet.code, submit: "Save PET line item" };
@@ -891,7 +893,8 @@
           return p.pets.indexOf(pet) >= 0;
         })[0];
         vm.form = angular.copy(pet);
-        vm.form.approve = true;
+        vm.form.decision = "Approve";
+        vm.form.comments = "";
         vm.form.budgetSourceId = vm.selectedProject && vm.selectedProject.budgetSourceId;
         vm.modal = {
           type: "decision",
@@ -1145,6 +1148,7 @@
             if (!vm.uploadPreview.length) { noticeError("No PET rows were found in the uploaded CSV."); return; }
             vm.recalculateUploadPreview();
           }
+          if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
           var petPayload = {
             petId: vm.form.petId || null,
@@ -1153,11 +1157,12 @@
             requestedAmount: vm.form.requestedAmount,
             currency: vm.form.currency,
             vendorName: vm.form.vendorName,
+            comments: vm.form.comments,
           };
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
             savePreviewItems(savedPetId).then(function () {
-              notice(petPayload.petId ? "PET updated" : "PET submitted for review");
+              notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
               vm.close();
               refreshProjectPets(petPayload.projectId, true);
               loadDashboard();
@@ -1176,7 +1181,9 @@
             vm.close();
             return;
           }
+          if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
+          var wasSentBack = vm.selectedPet && vm.selectedPet.status === "Sent Back";
           if (vm.selectedPet) angular.extend(vm.selectedPet, vm.form);
           else {
             vm.form.petId = Date.now();
@@ -1187,10 +1194,11 @@
             vm.selectedProject.pets.push(vm.form);
             vm.metrics.petsOnTrack++;
           }
-          vm.selectedProject.status = vm.selectedProject.skipReview ? "Pending Approval" : "Pending Review";
+          if (wasSentBack) vm.selectedPet.status = "Pending Approval";
+          vm.selectedProject.status = wasSentBack ? "Pending Approval" : vm.selectedProject.skipReview ? "Pending Approval" : "Pending Review";
           prepareProjects();
           vm.updateView();
-          notice(vm.selectedPet ? "PET updated" : vm.selectedProject.skipReview ? "PET sent directly to the Accountable Executive" : "PET submitted to the Accountable Executive Lead");
+          notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.selectedProject.skipReview ? "PET sent directly to the Accountable Executive" : "PET submitted to the Accountable Executive Lead");
         }
         if (type === "spend" && !vm.demo) {
           var spendPayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
@@ -1230,8 +1238,11 @@
         }
         if (type === "decision" && !vm.demo) {
           var decisionRoute = vm.modal.stage === "review" ? "review" : "approve";
-          var decisionPayload = { comments: vm.form.comments, approve: !!vm.form.approve };
-          if (vm.modal.stage === "approve" && vm.form.approve) decisionPayload.budgetSourceId = vm.form.budgetSourceId;
+          if (!vm.form.decision) { noticeError("Select a decision before recording this request."); return; }
+          if ((vm.form.decision === "SendBack" || vm.form.decision === "RejectCancel") && !String(vm.form.comments || "").trim()) { noticeError("Comments / reason is required for this decision."); return; }
+          if (vm.modal.stage === "approve" && vm.form.decision === "Approve" && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
+          var decisionPayload = { comments: vm.form.comments, decision: vm.form.decision, approve: vm.form.decision === "Approve" };
+          if (vm.modal.stage === "approve" && vm.form.decision === "Approve") decisionPayload.budgetSourceId = vm.form.budgetSourceId;
           $http.post("api/portfolio/pets/" + vm.form.petId + "/" + decisionRoute, decisionPayload).then(function () {
             notice("Decision recorded");
             vm.close();
@@ -1243,14 +1254,13 @@
           return;
         }
         if (type === "decision") {
+          if (!vm.form.decision) { noticeError("Select a decision before recording this request."); return; }
+          if ((vm.form.decision === "SendBack" || vm.form.decision === "RejectCancel") && !String(vm.form.comments || "").trim()) { noticeError("Comments / reason is required for this decision."); return; }
+          if (vm.modal.stage === "approve" && vm.form.decision === "Approve" && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
           var target = vm.selectedProject.pets.filter(function (p) {
             return p.petId === vm.form.petId;
           })[0];
-          target.status = vm.form.approve
-            ? vm.modal.stage === "review"
-              ? "Pending Approval"
-              : "Approved"
-            : "Rejected";
+          target.status = vm.form.decision === "SendBack" ? "Sent Back" : vm.form.decision === "RejectCancel" ? "Rejected" : vm.modal.stage === "review" ? "Pending Approval" : "Approved";
           vm.selectedProject.status = target.status;
           if (target.status === "Approved") {
             if (vm.form.budgetSourceId) {

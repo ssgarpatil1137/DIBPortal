@@ -131,7 +131,12 @@ namespace DFM.Web.Controllers
                     }
                 }
                 AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
-                return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName)).FirstOrDefault());
+                if (value.PetId.HasValue)
+                {
+                    var sentBack = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Sent Back'", P("@PetId", value.PetId)).FirstOrDefault();
+                    if (sentBack != null && string.IsNullOrWhiteSpace(value.Comments)) return BadRequest("Requester comments / amendment notes are required before resubmitting.");
+                }
+                return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments)).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -149,10 +154,10 @@ namespace DFM.Web.Controllers
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User", P("@PetId", petId), P("@Stage", "Review"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, false); if (validation != null) return BadRequest(validation); try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", "Review"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
-        public IHttpActionResult Approve(int petId, DecisionRequest value) { try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId", P("@PetId", petId), P("@Stage", "Approval"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", "Approval"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
         public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)
@@ -217,5 +222,17 @@ namespace DFM.Web.Controllers
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
+
+        private static string ValidateDecision(DecisionRequest value, bool finalApproval)
+        {
+            if (value == null) return "Decision details are required.";
+            var decision = string.IsNullOrWhiteSpace(value.Decision) ? (value.Approve ? "Approve" : "RejectCancel") : value.Decision;
+            if (!new[] { "Approve", "SendBack", "RejectCancel" }.Contains(decision, StringComparer.OrdinalIgnoreCase)) return "Select a valid decision.";
+            if ((decision.Equals("SendBack", StringComparison.OrdinalIgnoreCase) || decision.Equals("RejectCancel", StringComparison.OrdinalIgnoreCase)) && string.IsNullOrWhiteSpace(value.Comments)) return "Comments / reason is required for this decision.";
+            if (finalApproval && decision.Equals("Approve", StringComparison.OrdinalIgnoreCase) && !value.BudgetSourceId.HasValue) return "Select a CapEx source before approval.";
+            value.Decision = decision;
+            value.Approve = decision.Equals("Approve", StringComparison.OrdinalIgnoreCase);
+            return null;
+        }
     }
 }
