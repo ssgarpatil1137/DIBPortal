@@ -165,6 +165,11 @@ namespace DFM.Web.Controllers
             try
             {
                 if (value == null) return BadRequest("Budget Line details are required.");
+                if (!value.BudgetLineId.HasValue)
+                {
+                    var approvedPet = Db.Query("SELECT PetId FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Approved'", P("@PetId", value.PetId)).FirstOrDefault();
+                    if (approvedPet == null) return BadRequest("Budget Lines can be added only after the selected PET is approved.");
+                }
                 object lpoStatus = null;
                 if (value.BudgetLineId.HasValue)
                 {

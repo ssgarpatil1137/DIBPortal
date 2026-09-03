@@ -577,7 +577,7 @@
         for (var index = 0; index < project.pets.length; index++) if (project.pets[index].status === status) return project.pets[index];
         return null;
       };
-      vm.canAddBudgetLine = function (pet) { return pet && ["Pending Review", "Pending Approval", "Approved"].indexOf(pet.status) >= 0; };
+      vm.canAddBudgetLine = function (pet) { return pet && pet.status === "Approved"; };
       vm.canMaintainPet = function (pet) { return pet && (pet.status === "Pending Review" || pet.status === "Sent Back"); };
       vm.petForNewBudgetLine = function (project) {
         var pets = project && project.pets || [];
@@ -738,6 +738,7 @@
           project.pets = project.pets || [];
           project.budgetLines = project.budgetLines || [];
           project.petCount = project.petsLoaded ? project.pets.length : Number(project.petCount) || 0;
+          project.approvedPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Approved"; }).length : Number(project.approvedPetCount) || 0;
           project.spendRequestCount = Number(project.spendRequestCount) || 0;
           project.budgetLineCount = Number(project.budgetLineCount) || 0;
           project.invoiceCount = Number(project.invoiceCount) || 0;
@@ -950,7 +951,7 @@
       };
       vm.openProjectBudgetLine = function (project) {
         var pet = vm.petForNewBudgetLine(project);
-        if (!pet && project && !project.petsLoaded && Number(project.petCount) > 0) {
+        if (!pet && project && !project.petsLoaded && Number(project.approvedPetCount) > 0) {
           loadProjectPets(project, true).then(function () {
             var loadedPet = vm.petForNewBudgetLine(project);
             if (loadedPet) vm.openBudgetLine(loadedPet);

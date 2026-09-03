@@ -244,7 +244,7 @@
                       class="icon-btn accent"
                       title="Add budget line"
                       ng-if="vm.can('request')&&project.requiresPet!==false"
-                      ng-disabled="!vm.petForNewBudgetLine(project)&&!(project.petCount>0&&!project.petsLoaded)"
+                      ng-disabled="!vm.petForNewBudgetLine(project)&&!(project.approvedPetCount>0&&!project.petsLoaded)"
                       ng-click="vm.openProjectBudgetLine(project)"
                     >
                       <i data-lucide="plus"></i></button
