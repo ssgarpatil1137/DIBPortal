@@ -978,7 +978,7 @@
       }
       function responseMessage(response, fallback) {
         if (!response || response.data == null) return fallback;
-        if (typeof response.data === "string") return response.data;
+        if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
         return response.data.message || response.data.Message || fallback;
       }
       vm.saveModal = function () {
@@ -1043,10 +1043,14 @@
           if (vm.petVendorOnly()) {
             var vendorPayload = {
               petId: vm.form.petId,
-              projectId: vm.selectedProject.projectId,
+              projectId: vm.form.projectId || vm.selectedProject.projectId,
+              code: vm.form.code,
+              requestedAmount: Number(vm.form.requestedAmount) || 0,
+              currency: vm.form.currency || "AED",
               vendorName: vm.form.vendorName,
+              vendorNameOnly: true,
             };
-            $http.post("api/portfolio/pets/vendor-name", vendorPayload).then(function () {
+            $http.post("api/portfolio/pets", vendorPayload).then(function () {
               vm.selectedPet.vendorName = vm.form.vendorName;
               notice("PET vendor name updated");
               vm.close();
