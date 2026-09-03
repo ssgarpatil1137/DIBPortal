@@ -478,12 +478,12 @@
         </div>
         <div class="table-scroll">
           <table class="data-table approvals-table">
-            <thead><tr><th>Project ID</th><th>Project name</th><th>PET reference</th><th>Status</th><th>Amount</th><th>Budget source</th><th>Requestor</th><th>Action</th></tr></thead>
+            <thead><tr><th>Project ID</th><th>Project name</th><th>Project type</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>CapEx source</th><th>Available CapEx</th><th>Requestor</th><th>Reviewer</th><th>Approver</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="item in vm.visibleApprovalItems track by item.pet.petId">
-                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.pet.code}}</td><td><span class="status pending">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td>{{item.project.budgetSource}}</td><td>{{item.project.requestorEmail}}</td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.action}}</button></td>
+                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.project.projectType||'Not supplied'}}</td><td>{{item.pet.code}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td title="{{item.project.budgetSource}}"><span class="truncate-cell">{{item.project.budgetType==='CAPEX' ? item.project.budgetSource : 'Not CapEx'}}</span></td><td>{{item.project.budgetType==='CAPEX' ? vm.money(item.project.availableBudget) : '—'}}</td><td title="{{item.project.requestorEmail}}"><span class="truncate-cell">{{item.project.requestorName||item.project.requestorEmail}}</span></td><td title="{{item.pet.reviewerEmail}}"><span class="truncate-cell">{{item.pet.reviewerEmail||item.project.accountableExecLead}}</span></td><td title="{{item.pet.approverEmail}}"><span class="truncate-cell">{{item.pet.approverEmail||item.project.accountableExec}}</span></td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.stage==='approve'?'Approve / Change CapEx':item.action}}</button></td>
               </tr>
-              <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="8"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
+              <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="12"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
             </tbody>
           </table>
         </div>

@@ -641,7 +641,7 @@
       vm.updateApprovalView = function (keepPage) {
         var query = (vm.approvalSearch || "").toLowerCase();
         var filtered = (vm.approvalItems || []).filter(function (item) {
-          return !query || [item.project.projectCode, item.project.projectName, item.pet.code, item.pet.status, item.project.requestorEmail].join(" ").toLowerCase().indexOf(query) >= 0;
+          return !query || [item.project.projectCode, item.project.jiraKey, item.project.projectName, item.project.projectType, item.pet.code, item.pet.status, item.project.budgetSource, item.project.requestorEmail, item.project.requestorName, item.pet.reviewerEmail, item.pet.approverEmail].join(" ").toLowerCase().indexOf(query) >= 0;
         });
         vm.approvalFilteredCount = filtered.length;
         vm.approvalPageCount = Math.max(1, Math.ceil(filtered.length / vm.approvalPageSize));
