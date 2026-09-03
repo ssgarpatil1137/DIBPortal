@@ -832,8 +832,12 @@
         redraw();
       };
       vm.openDecision = function (pet, stage) {
+        vm.selectedProject = vm.projects.filter(function (p) {
+          return p.pets.indexOf(pet) >= 0;
+        })[0];
         vm.form = angular.copy(pet);
         vm.form.approve = true;
+        vm.form.budgetSourceId = vm.selectedProject && vm.selectedProject.budgetSourceId;
         vm.modal = {
           type: "decision",
           stage: stage,
@@ -842,9 +846,6 @@
           title: stage === "review" ? "Review PET" : "Approve PET",
           submit: "Record decision",
         };
-        vm.selectedProject = vm.projects.filter(function (p) {
-          return p.pets.indexOf(pet) >= 0;
-        })[0];
         redraw();
       };
       vm.openHistory = function (project, pet) {
@@ -1148,6 +1149,7 @@
         if (type === "decision" && !vm.demo) {
           var decisionRoute = vm.modal.stage === "review" ? "review" : "approve";
           var decisionPayload = { comments: vm.form.comments, approve: !!vm.form.approve };
+          if (vm.modal.stage === "approve" && vm.form.approve) decisionPayload.budgetSourceId = vm.form.budgetSourceId;
           $http.post("api/portfolio/pets/" + vm.form.petId + "/" + decisionRoute, decisionPayload).then(function () {
             notice("Decision recorded");
             vm.close();
@@ -1169,6 +1171,12 @@
             : "Rejected";
           vm.selectedProject.status = target.status;
           if (target.status === "Approved") {
+            if (vm.form.budgetSourceId) {
+              var selectedBudget = vm.selectedBudgetSource();
+              vm.selectedProject.budgetSourceId = vm.form.budgetSourceId;
+              vm.selectedProject.budgetType = "CAPEX";
+              if (selectedBudget) vm.selectedProject.budgetSource = selectedBudget.externalId;
+            }
             vm.metrics.petsApproved++;
             vm.metrics.petsOnTrack--;
             vm.selectedProject.availableBudget -= target.requestedAmount;

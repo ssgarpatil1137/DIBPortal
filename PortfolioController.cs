@@ -148,10 +148,10 @@ namespace DFM.Web.Controllers
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User", P("@PetId", petId), P("@Stage", "Review"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name)); return Ok(); }
+        public IHttpActionResult Review(int petId, DecisionRequest value) { try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User", P("@PetId", petId), P("@Stage", "Review"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
-        public IHttpActionResult Approve(int petId, DecisionRequest value) { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User", P("@PetId", petId), P("@Stage", "Approval"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name)); return Ok(); }
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId", P("@PetId", petId), P("@Stage", "Approval"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
         public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)
