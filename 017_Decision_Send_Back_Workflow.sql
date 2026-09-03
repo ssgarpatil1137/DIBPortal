@@ -38,7 +38,7 @@ BEGIN
    IF @Status='Approved' UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId;
   END
  END
- UPDATE dbo.Projects SET Status=CASE WHEN ISNULL(@ResubmitStatus,@InitialStatus)='Pending Approval' THEN 'PET Approval' ELSE 'PET Review' END,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId AND ISNULL(@Status,'')<>'Approved';
+ UPDATE dbo.Projects SET Status=CASE WHEN ISNULL(@ResubmitStatus,ISNULL(@Status,@InitialStatus))='Pending Approval' THEN 'PET Approval' WHEN ISNULL(@ResubmitStatus,ISNULL(@Status,@InitialStatus))='Sent Back' THEN 'PET Sent Back' ELSE 'PET Review' END,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId AND ISNULL(@Status,'')<>'Approved';
  SELECT PetId,Status FROM dbo.PETRequests WHERE PetId=@PetId;
 END;
 GO

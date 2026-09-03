@@ -86,13 +86,23 @@ namespace DFM.Web.Controllers
             {
                 var requiresPet = true;
                 var skipReview = false;
-                if (value.ProjectId.HasValue)
+                var workflowFlags = Db.Query("SELECT CASE WHEN COL_LENGTH('dbo.Projects','RequiresPet') IS NOT NULL AND COL_LENGTH('dbo.Projects','SkipReview') IS NOT NULL THEN 1 ELSE 0 END HasWorkflowFlags").FirstOrDefault();
+                if (value.ProjectId.HasValue && workflowFlags != null && Convert.ToInt32(workflowFlags["HasWorkflowFlags"]) == 1)
                 {
                     var existing = Db.Query("SELECT RequiresPet,SkipReview FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
                     if (existing != null && existing["RequiresPet"] != null) requiresPet = Convert.ToBoolean(existing["RequiresPet"]);
                     if (existing != null && existing["SkipReview"] != null) skipReview = Convert.ToBoolean(existing["SkipReview"]);
                 }
-                var rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
+                List<Dictionary<string, object>> rows;
+                try
+                {
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
+                }
+                catch (SqlException ex)
+                {
+                    if (!ProcedureParameterError(ex)) throw;
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@User", User.Identity.Name));
+                }
                 return Ok(rows.FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -131,12 +141,18 @@ namespace DFM.Web.Controllers
                     }
                 }
                 AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
+                var isSentBack = false;
                 if (value.PetId.HasValue)
                 {
                     var sentBack = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Sent Back'", P("@PetId", value.PetId)).FirstOrDefault();
-                    if (sentBack != null && string.IsNullOrWhiteSpace(value.Comments)) return BadRequest("Requester comments / amendment notes are required before resubmitting.");
+                    isSentBack = sentBack != null;
+                    if (isSentBack && string.IsNullOrWhiteSpace(value.Comments)) return BadRequest("Requester comments / amendment notes are required before resubmitting.");
                 }
-                return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments)).FirstOrDefault());
+                var sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName";
+                var parameters = isSentBack
+                    ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments) }
+                    : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName) };
+                return Ok(Db.Query(sql, parameters).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -154,10 +170,10 @@ namespace DFM.Web.Controllers
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, false); if (validation != null) return BadRequest(validation); try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", "Review"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, false); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
-        public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", "Approval"), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", User.Identity.Name), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision)); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Approval", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
         public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)
@@ -227,6 +243,24 @@ namespace DFM.Web.Controllers
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
+
+        private static void ExecutePetDecision(int petId, string stage, DecisionRequest value, string user)
+        {
+            try
+            {
+                Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", stage), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", user), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision));
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex) || value.Decision.Equals("SendBack", StringComparison.OrdinalIgnoreCase)) throw;
+                Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId", P("@PetId", petId), P("@Stage", stage), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", user), P("@BudgetSourceId", value.BudgetSourceId));
+            }
+        }
+
+        private static bool ProcedureParameterError(SqlException ex)
+        {
+            return ex.Errors.Cast<SqlError>().Any(error => error.Number == 8144 || error.Number == 201);
+        }
 
         private static string ValidateDecision(DecisionRequest value, bool finalApproval)
         {

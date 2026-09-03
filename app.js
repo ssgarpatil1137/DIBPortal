@@ -360,7 +360,7 @@
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); prepareProjects(); vm.updateView(); redraw(); };
-      vm.signOut = function () { vm.session = null; vm.auth = { mode: "login" }; sessionStorage.removeItem("dfmToken"); };
+      vm.signOut = function () { vm.session = null; vm.auth = { mode: "login" }; sessionStorage.removeItem("dfmToken"); delete $http.defaults.headers.common.Authorization; };
       vm.authenticate = function () {
         vm.auth.error = "";
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
@@ -379,9 +379,10 @@
       };
       vm.hasRole = function (role) {
         var roles = vm.session && vm.session.roles || [];
-        if (role === "Requestor") return !!vm.session;
         return roles.some(function (item) {
           return String(item).toLowerCase() === role.toLowerCase() ||
+            (role === "Requestor" && String(item).toLowerCase() === "master") ||
+            (role === "Requestor" && String(item).toLowerCase() === "admin") ||
             (role === "Admin" && String(item).toLowerCase() === "master") ||
             (role === "Master" && String(item).toLowerCase() === "admin");
         });
@@ -1064,6 +1065,8 @@
       }
       function responseMessage(response, fallback) {
         if (!response || response.data == null) return fallback;
+        if (response.status === 401) { vm.signOut(); return "Your session has expired or is not authenticated. Please sign in again before saving."; }
+        if (response.status === 403) return "Your account does not have permission to save this item. Ask an admin to assign the required role.";
         if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
         return response.data.message || response.data.Message || fallback;
       }
@@ -1091,7 +1094,7 @@
             vm.close();
             loadDashboard();
           }, function (response) {
-            noticeError((response.data && response.data.message) || "Unable to save the project.");
+            noticeError(responseMessage(response, "Unable to save the project."));
           });
           return;
         }
@@ -1221,7 +1224,7 @@
             vm.updateView(true);
             redraw();
           }, function (response) {
-            noticeError((response.data && response.data.message) || "Unable to save the PET line item.");
+            noticeError(responseMessage(response, "Unable to save the PET line item."));
           });
           return;
         }
@@ -1250,7 +1253,7 @@
             refreshProjectPets(vm.selectedProject.projectId, true);
             loadDashboard();
           }, function (response) {
-            noticeError((response.data && response.data.message) || "Unable to record this decision.");
+            noticeError(responseMessage(response, "Unable to record this decision."));
           });
           return;
         }
@@ -1469,7 +1472,7 @@
           user.roleList = selected.length ? "Requestor, " + selected.join(", ") : "Requestor";
           vm.updateRoleView(true);
           notice("Roles updated");
-        }, function (response) { noticeError((response.data && response.data.message) || "Unable to update roles."); });
+        }, function (response) { noticeError(responseMessage(response, "Unable to update roles.")); });
       };
       prepareProjects();
       vm.updateView();
