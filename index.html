@@ -14,6 +14,7 @@
         <p class="eyebrow">SECURE ACCESS</p><h2>{{vm.authTitle()}}</h2><p class="auth-help">{{vm.authHelp()}}</p>
         <label>Email ID<input type="email" ng-model="vm.auth.email" autocomplete="username" required /></label>
         <label ng-if="vm.auth.mode==='login'">Password<input type="password" ng-model="vm.auth.password" autocomplete="current-password" required /></label>
+        <label class="option-check" ng-if="vm.auth.mode==='login'"><input type="checkbox" ng-model="vm.auth.rememberMe" />Remember me</label>
         <label ng-if="vm.auth.mode!=='login'">Security question<select ng-model="vm.auth.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" required></select></label>
         <label ng-if="vm.auth.mode!=='login'">Security answer<input ng-model="vm.auth.securityAnswer" required /></label>
         <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>

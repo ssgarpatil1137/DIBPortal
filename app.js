@@ -32,7 +32,8 @@
     .controller("PortfolioController", function ($http, $timeout, $q) {
       var vm = this;
       vm.session = null;
-      vm.auth = { mode: "login" };
+      var rememberedEmail = rememberedLoginEmail();
+      vm.auth = { mode: "login", email: rememberedEmail, rememberMe: !!rememberedEmail };
       vm.questions = [
         { securityQuestionId: 1, question: "What was the name of your first school?" },
         { securityQuestionId: 2, question: "In which city were you born?" },
@@ -360,23 +361,38 @@
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); prepareProjects(); vm.updateView(); redraw(); };
-      vm.signOut = function () { vm.session = null; vm.auth = { mode: "login" }; sessionStorage.removeItem("dfmToken"); delete $http.defaults.headers.common.Authorization; };
+      vm.signOut = function () { vm.session = null; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); delete $http.defaults.headers.common.Authorization; };
       vm.authenticate = function () {
         vm.auth.error = "";
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
         $http.post("api/auth/" + route, vm.auth).then(function (response) {
           if (vm.auth.mode === "login") {
             if (response.data.requiresPasswordSetup) { vm.auth.mode = "setup"; return; }
+            saveRememberedLogin();
             sessionStorage.setItem("dfmToken", response.data.token); vm.session = response.data; vm.session.initials = (vm.session.displayName || vm.session.email).split(/\s+/).slice(0,2).map(function (part) { return part.charAt(0); }).join("").toUpperCase();
             $http.defaults.headers.common.Authorization = "Bearer " + response.data.token;
             updateNavigation();
             loadDashboard();
             loadRoles();
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
-          else { vm.auth = { mode: "login", email: vm.auth.email }; notice("Password saved. Sign in to continue."); }
+          else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
           redraw();
         }, function (response) { vm.auth.error = response.data && response.data.message ? response.data.message : "Unable to complete this request."; });
       };
+      function rememberedLoginEmail() {
+        try { return localStorage.getItem("dfmRememberedEmail") || ""; }
+        catch (ignore) { return ""; }
+      }
+      function saveRememberedLogin() {
+        try {
+          if (vm.auth.rememberMe && vm.auth.email) localStorage.setItem("dfmRememberedEmail", vm.auth.email);
+          else localStorage.removeItem("dfmRememberedEmail");
+        } catch (ignore) { }
+      }
+      function resetLoginAuth() {
+        var email = rememberedLoginEmail();
+        vm.auth = { mode: "login", email: email, rememberMe: !!email };
+      }
       vm.hasRole = function (role) {
         var roles = vm.session && vm.session.roles || [];
         return roles.some(function (item) {
