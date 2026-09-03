@@ -611,6 +611,9 @@
           return total + (Number(line.cost) || 0);
         }, 0);
       }
+      vm.petBudgetLineAvailable = function (pet, excludeBudgetLineId) {
+        return Math.max((Number(pet && pet.requestedAmount) || 0) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
+      };
       function spendItemFinalAed(item) {
         var foreignAmount = Number(item.foreignAmount) || (Number(item.units) || 0) * (Number(item.unitPrice) || 0);
         var aedAmount = Number(item.aedAmount) || foreignAmount;

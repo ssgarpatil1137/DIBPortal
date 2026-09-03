@@ -960,6 +960,14 @@
                   ng-options="pet.petId as pet.code for pet in vm.selectedProject.pets | filter:vm.canAddBudgetLine"
                   required
                 ></select></label
+              ><div class="full detail-grid" ng-if="vm.selectedPet" style="grid-template-columns:repeat(3,1fr)">
+                <div><small>Selected PET</small><strong>{{vm.selectedPet.code}}</strong></div>
+                <div><small>Status</small><strong>{{vm.selectedPet.status}}</strong></div>
+                <div><small>PET amount</small><strong>{{vm.money(vm.selectedPet.requestedAmount)}}</strong></div>
+                <div><small>Available balance</small><strong>{{vm.money(vm.petBudgetLineAvailable(vm.selectedPet,vm.form.budgetLineId))}}</strong></div>
+                <div><small>Reviewer</small><strong>{{vm.selectedPet.reviewerEmail||vm.selectedProject.accountableExecLead}}</strong></div>
+                <div><small>Approver</small><strong>{{vm.selectedPet.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
+              </div
               ><label
                 >Cost<input
                   type="number"
