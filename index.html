@@ -955,6 +955,13 @@
               </div>
               <label>Vendor<input ng-model="vm.form.vendor" required /></label
               ><label
+                >PET reference<select falcon-select2 data-placeholder="Select PET request"
+                  ng-model="vm.form.petId"
+                  ng-change="vm.onBudgetLinePetChange()"
+                  ng-options="pet.petId as pet.code for pet in vm.selectedProject.pets | filter:vm.canAddBudgetLine"
+                  required
+                ></select></label
+              ><label
                 >Cost<input
                   type="number"
                   step="0.01"
@@ -972,8 +979,6 @@
                   <option>EUR</option>
                 </select></label
               ><label>GL number<input ng-model="vm.form.glNumber" /></label
-              ><label
-                >PET reference<input ng-model="vm.form.petReference" /></label
               ><label>CAM ID<input ng-model="vm.form.camId" /></label
               ><label
                 >Status<select ng-model="vm.form.camStatus">

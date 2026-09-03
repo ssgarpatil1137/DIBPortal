@@ -713,6 +713,10 @@
       vm.petForBudgetLine = function (project, line) {
         return ((project && project.pets) || []).filter(function (pet) { return pet.petId === line.petId; })[0];
       };
+      function projectPetById(project, petId) {
+        var id = Number(petId);
+        return ((project && project.pets) || []).filter(function (pet) { return Number(pet.petId) === id; })[0];
+      }
       vm.toggleProject = function (project) {
         if (project.expanded) { project.expanded = false; redraw(); return; }
         if (project.petsLoaded || vm.demo) { project.expanded = true; redraw(); return; }
@@ -875,6 +879,9 @@
             camStatus: "Raised to Vendor",
           },
         );
+        vm.form.petId = vm.form.petId || pet.petId;
+        vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
+        vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
         if (vm.form.lpoIssueDate) vm.form.lpoIssueDate = new Date(vm.form.lpoIssueDate);
@@ -885,6 +892,12 @@
           submit: "Save budget line",
         };
         redraw();
+      };
+      vm.onBudgetLinePetChange = function () {
+        var pet = projectPetById(vm.selectedProject, vm.form && vm.form.petId);
+        if (!pet) { vm.selectedPet = null; if (vm.form) vm.form.petReference = null; return; }
+        vm.selectedPet = pet;
+        vm.form.petReference = pet.code;
       };
       vm.openProjectBudgetLine = function (project) {
         var pet = vm.petForNewBudgetLine(project);
@@ -1208,7 +1221,9 @@
           notice("Decision recorded");
         }
         if (type === "budgetLine" && !vm.demo) {
-          var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
+          vm.onBudgetLinePetChange();
+          if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
+          var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId, petReference: vm.form.petReference || vm.selectedPet.code });
           $http.post("api/portfolio/budget-lines", budgetLinePayload).then(function () {
             notice("Budget line saved");
             vm.close();
@@ -1220,6 +1235,9 @@
           return;
         }
         if (type === "budgetLine") {
+          vm.onBudgetLinePetChange();
+          if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
+          vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
           var old =
             vm.form.budgetLineId &&
             vm.selectedPet.budgetLines.filter(function (x) {
