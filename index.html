@@ -908,6 +908,20 @@
                 <div><small>Approver</small><strong>{{vm.form.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
                 <div><small>Current CapEx</small><strong>{{vm.selectedProject.budgetSource}}</strong></div>
               </div>
+              <div class="detail-grid">
+                <div><small>PET reference</small><strong>{{vm.form.code}}</strong></div>
+                <div><small>PET status</small><strong>{{vm.form.status}}</strong></div>
+                <div><small>Currency</small><strong>{{vm.form.currency}}</strong></div>
+                <div><small>Requested amount</small><strong>{{vm.money(vm.form.requestedAmount)}}</strong></div>
+                <div><small>Vendor</small><strong>{{vm.form.vendorName||vm.petVendor(vm.selectedPet)||'Not supplied'}}</strong></div>
+                <div><small>Submitted</small><strong>{{vm.form.createdUtc|date:'dd-MMM-yyyy'}}</strong></div>
+              </div>
+              <div class="table-scroll spend-preview" ng-if="vm.selectedPet.spendItems.length">
+                <table class="nested">
+                  <thead><tr><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Units</th><th>Unit price</th><th>AED amount</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
+                  <tbody><tr ng-repeat="item in vm.selectedPet.spendItems"><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.costType}}</td><td>{{item.units}}</td><td>{{vm.money(item.unitPrice)}}</td><td>{{vm.money(item.aedAmount)}}</td><td>{{item.contingencyPercent}}</td><td>{{vm.money(item.finalAedAmount||item.finalAed||vm.spendFinalAed(item))}}</td><td>{{item.glNumber}}</td></tr></tbody>
+                </table>
+              </div>
               <label class="full"
                 >Decision<select ng-model="vm.form.decision" required>
                   <option value="Approve">Approve</option>

@@ -450,6 +450,7 @@
         if (pet.budgetLines && pet.budgetLines.length) return pet.budgetLines[0].vendor || pet.budgetLines[0].Vendor || "";
         return "";
       }
+      vm.petVendor = existingPetVendor;
       // Login is by email, but JIRA only records the reviewer/approver's display name against
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
       vm.isReviewerFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExecLead); };
@@ -619,6 +620,7 @@
         var aedAmount = Number(item.aedAmount) || foreignAmount;
         return aedAmount * (1 + (Number(item.contingencyPercent) || 0) / 100);
       }
+      vm.spendFinalAed = spendItemFinalAed;
       function petFinalAedWithSpend(pet, item) {
         var spendItemId = item && item.spendItemId;
         var existing = ((pet && pet.spendItems) || []).reduce(function (total, current) {
@@ -790,7 +792,7 @@
         if (project.petsLoaded || vm.demo) { project.expanded = true; redraw(); return; }
         loadProjectPets(project, true);
       };
-      function loadProjectPets(project, expandRegardless) {
+      function loadProjectPets(project, expandRegardless, keepExpandedState) {
         project.loading = true;
         return $http.get("api/portfolio/projects/" + project.projectId).then(function (response) {
           var data = response.data;
@@ -802,7 +804,7 @@
           });
           project.petsLoaded = true;
           project.loading = false;
-          project.expanded = expandRegardless || project.pets.length > 0;
+          project.expanded = keepExpandedState ? !!project.expanded : expandRegardless || project.pets.length > 0;
           prepareProjects();
           vm.updateView(true);
           redraw();
@@ -910,9 +912,21 @@
         redraw();
       };
       vm.openDecision = function (pet, stage) {
-        vm.selectedProject = vm.projects.filter(function (p) {
+        var project = vm.projects.filter(function (p) {
           return p.pets.indexOf(pet) >= 0;
         })[0];
+        if (project && !project.petsLoaded && !vm.demo) {
+          loadProjectPets(project, false, true).then(function () {
+            openDecisionModal(projectPetById(project, pet.petId) || pet, stage, project);
+          });
+          return;
+        }
+        openDecisionModal(pet, stage, project);
+      };
+      function openDecisionModal(pet, stage, project) {
+        vm.selectedProject = project;
+        vm.selectedPet = pet;
+        vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
         vm.form = angular.copy(pet);
         vm.form.decision = "Approve";
         vm.form.comments = "";
@@ -926,7 +940,7 @@
           submit: "Record decision",
         };
         redraw();
-      };
+      }
       vm.openHistory = function (project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
