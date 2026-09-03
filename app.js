@@ -1021,6 +1021,21 @@
           notice("Project saved");
         }
         if (type === "pet" && !vm.demo) {
+          if (vm.petVendorOnly()) {
+            var vendorPayload = {
+              petId: vm.form.petId,
+              projectId: vm.selectedProject.projectId,
+              vendorName: vm.form.vendorName,
+            };
+            $http.post("api/portfolio/pets", vendorPayload).then(function () {
+              vm.selectedPet.vendorName = vm.form.vendorName;
+              notice("PET vendor name updated");
+              vm.close();
+            }, function (response) {
+              noticeError(responseMessage(response, "Unable to update the PET vendor name."));
+            });
+            return;
+          }
           if (vm.uploadFile) {
             if (!vm.uploadPreview.length) { noticeError("No PET rows were found in the uploaded CSV."); return; }
             vm.recalculateUploadPreview();
@@ -1049,6 +1064,12 @@
           return;
         }
         if (type === "pet") {
+          if (vm.petVendorOnly()) {
+            vm.selectedPet.vendorName = vm.form.vendorName;
+            notice("PET vendor name updated");
+            vm.close();
+            return;
+          }
           if (vm.selectedPet) angular.extend(vm.selectedPet, vm.form);
           else {
             vm.form.petId = Date.now();

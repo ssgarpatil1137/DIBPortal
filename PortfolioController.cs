@@ -114,8 +114,21 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets")]
         public IHttpActionResult SavePet(PetRequest value)
         {
-            if (value == null || value.RequestedAmount <= 0) return BadRequest("A positive PET amount is required.");
-            try { return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName)).FirstOrDefault()); }
+            if (value == null) return BadRequest("PET details are required.");
+            try
+            {
+                if (value.PetId.HasValue)
+                {
+                    var existing = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND ProjectId=@ProjectId", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId)).FirstOrDefault();
+                    if (existing != null && Convert.ToString(existing["Status"]) == "Approved")
+                    {
+                        Db.Execute("UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId AND ProjectId=@ProjectId AND Status='Approved'", P("@VendorName", value.VendorName), P("@PetId", value.PetId), P("@ProjectId", value.ProjectId));
+                        return Ok(new { PetId = value.PetId, Status = "Approved" });
+                    }
+                }
+                if (value.RequestedAmount <= 0) return BadRequest("A positive PET amount is required.");
+                return Ok(Db.Query("EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName", P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName)).FirstOrDefault());
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
