@@ -578,6 +578,11 @@
         return null;
       };
       vm.canAddBudgetLine = function (pet) { return pet && ["Pending Review", "Pending Approval", "Approved"].indexOf(pet.status) >= 0; };
+      vm.petForNewBudgetLine = function (project) {
+        var pets = project && project.pets || [];
+        for (var index = 0; index < pets.length; index++) if (vm.canAddBudgetLine(pets[index])) return pets[index];
+        return null;
+      };
       vm.petFinalAed = function (pet) {
         if (!pet.spendItems || !pet.spendItems.length) return Number(pet.requestedAmount) || 0;
         return pet.spendItems.reduce(function (total, item) { return total + (Number(item.aedAmount) || 0) * (1 + (Number(item.contingencyPercent) || 0) / 100); }, 0);
@@ -880,6 +885,18 @@
           submit: "Save budget line",
         };
         redraw();
+      };
+      vm.openProjectBudgetLine = function (project) {
+        var pet = vm.petForNewBudgetLine(project);
+        if (!pet && project && !project.petsLoaded && Number(project.petCount) > 0) {
+          loadProjectPets(project, true).then(function () {
+            var loadedPet = vm.petForNewBudgetLine(project);
+            if (loadedPet) vm.openBudgetLine(loadedPet);
+          });
+          return;
+        }
+        if (!pet) return;
+        vm.openBudgetLine(pet);
       };
       vm.openInvoice = function (line, invoice) {
         vm.selectedLine = line;

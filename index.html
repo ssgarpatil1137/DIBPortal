@@ -240,6 +240,14 @@
                     >
                       <i data-lucide="file-plus-2"></i></button
                     ><button
+                      class="icon-btn accent"
+                      title="Add budget line"
+                      ng-if="vm.can('request')&&project.requiresPet!==false"
+                      ng-disabled="!vm.petForNewBudgetLine(project)&&!(project.petCount>0&&!project.petsLoaded)"
+                      ng-click="vm.openProjectBudgetLine(project)"
+                    >
+                      <i data-lucide="plus"></i></button
+                    ><button
                       class="icon-btn"
                       title="Upload PET template"
                       ng-if="vm.can('request')&&project.requiresPet!==false"
@@ -272,13 +280,6 @@
                         <span class="level-label">PET REQUESTS</span
                         ><strong>{{project.projectName}}</strong>
                       </div>
-                      <button
-                        class="btn compact"
-                        ng-if="vm.can('request')&&project.requiresPet!==false"
-                        ng-click="vm.openPet(project)"
-                      >
-                        <i data-lucide="plus"></i>Add PET
-                      </button>
                     </div>
                     <div class="empty" ng-if="!project.pets.length">
                       <i data-lucide="file-plus-2"></i>
@@ -365,13 +366,6 @@
                                 ng-click="vm.openUpload('budget',pet)"
                               >
                                 <i data-lucide="upload"></i></button
-                              ><button
-                                class="icon-btn accent"
-                                title="Add budget line"
-                                ng-if="vm.canAddBudgetLine(pet)"
-                                ng-click="vm.openBudgetLine(pet)"
-                              >
-                                <i data-lucide="plus"></i></button
                               ><button
                                 class="icon-btn"
                                 title="Delete PET"
