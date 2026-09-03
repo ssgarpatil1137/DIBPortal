@@ -1293,6 +1293,7 @@
           vm.demo = false;
           vm.metrics = (data.metrics && data.metrics[0]) || vm.metrics;
           mergeProjects(data.projects || []);
+          mergeApprovalPets(data.approvalPets || []);
           vm.budgets = data.budgets || [];
           vm.jira = data.jira || [];
           vm.budgetUsage = data.budgetUsage || [];
@@ -1311,6 +1312,19 @@
           var existing = existingById[fresh.projectId];
           if (existing) { angular.extend(existing, fresh); return existing; }
           return fresh;
+        });
+      }
+      function mergeApprovalPets(pets) {
+        var projectsById = {};
+        vm.projects.forEach(function (project) { projectsById[project.projectId] = project; });
+        (pets || []).forEach(function (pet) {
+          var project = projectsById[pet.projectId];
+          if (!project) return;
+          if (typeof project.petsLoaded === "undefined") project.petsLoaded = false;
+          project.pets = project.pets || [];
+          var existing = project.pets.filter(function (item) { return item.petId === pet.petId; })[0];
+          if (existing) angular.extend(existing, pet);
+          else project.pets.push(pet);
         });
       }
       function loadRoles() {

@@ -22,6 +22,7 @@ namespace DFM.Web.Controllers
             return Ok(new {
                 metrics = Db.Query("SELECT * FROM vw_ManagementDashboard"),
                 projects = Db.Query("SELECT * FROM vw_ProjectPortfolio ORDER BY CreatedUtc DESC"),
+                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
                 budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC")
