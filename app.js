@@ -420,6 +420,9 @@
       function sameName(a, b) {
         return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
       }
+      function sameEmail(a, b) {
+        return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
+      }
       function sameStatus(a, b) {
         return !!a && !!b && String(a).trim().toLowerCase() === String(b).trim().toLowerCase();
       }
@@ -434,6 +437,8 @@
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
       vm.isReviewerFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExecLead); };
       vm.isApproverFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExec); };
+      vm.isReviewerForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.reviewerEmail) || vm.isReviewerFor(project); };
+      vm.isApproverForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.approverEmail) || vm.isApproverFor(project); };
       vm.setUploadFile = function (file) {
         vm.uploadFile = file;
         vm.uploadPreview = [];
@@ -591,7 +596,7 @@
             (vm.viewFilter === "pendingReview" && pets.some(function (pet) { return pet.status === "Pending Review"; })) ||
             (vm.viewFilter === "pendingApproval" && pets.some(function (pet) { return pet.status === "Pending Approval"; })) ||
             (vm.viewFilter === "approved" && pets.some(function (pet) { return pet.status === "Approved" && (isMine || (pet.approverEmail || "").toLowerCase() === currentEmail); })) ||
-            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc || !!pet.reviewerEmail; }));
+            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; }));
           return (
             viewMatch &&
             (!vm.statusFilter || p.status === vm.statusFilter) &&
@@ -627,8 +632,8 @@
         var canApprove = vm.hasRole("Approver");
         vm.projects.forEach(function (p) {
           p.pets.forEach(function (pet) {
-            if (pet.status === "Pending Review" && canReview && vm.isReviewerFor(p)) result.push({ project: p, pet: pet, stage: "review", action: "Review" });
-            if (pet.status === "Pending Approval" && canApprove && vm.isApproverFor(p)) result.push({ project: p, pet: pet, stage: "approve", action: "Approve" });
+            if (pet.status === "Pending Review" && canReview && vm.isReviewerForPet(p, pet)) result.push({ project: p, pet: pet, stage: "review", action: "Review" });
+            if (pet.status === "Pending Approval" && canApprove && vm.isApproverForPet(p, pet)) result.push({ project: p, pet: pet, stage: "approve", action: "Approve" });
           });
         });
         return result;

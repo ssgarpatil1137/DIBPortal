@@ -217,8 +217,8 @@
                 <td>{{project.createdUtc | date:'dd-MMM-yyyy'}}</td>
                 <td>
                   <div class="row-actions">
-                    <button class="btn compact review" ng-if="vm.hasRole('Reviewer')&&vm.isReviewerFor(project)&&vm.pendingPet(project,'Pending Review')" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Review'),'review')">Review</button>
-                    <button class="btn compact" ng-if="vm.hasRole('Approver')&&vm.isApproverFor(project)&&vm.pendingPet(project,'Pending Approval')" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Approval'),'approve')">Approve</button>
+                    <button class="btn compact review" ng-if="vm.hasRole('Reviewer')&&vm.pendingPet(project,'Pending Review')&&vm.isReviewerForPet(project,vm.pendingPet(project,'Pending Review'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Review'),'review')">Review</button>
+                    <button class="btn compact" ng-if="vm.hasRole('Approver')&&vm.pendingPet(project,'Pending Approval')&&vm.isApproverForPet(project,vm.pendingPet(project,'Pending Approval'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Approval'),'approve')">Approve</button>
                     <button
                       class="icon-btn"
                       title="View JIRA details"
@@ -322,13 +322,13 @@
                             <div class="row-actions">
                               <button
                                 class="btn compact review"
-                                ng-if="vm.hasRole('Reviewer')&&vm.isReviewerFor(project)&&pet.status==='Pending Review'"
+                                ng-if="vm.hasRole('Reviewer')&&vm.isReviewerForPet(project,pet)&&pet.status==='Pending Review'"
                                 ng-click="vm.openDecision(pet,'review')"
                               >
                                 Review</button
                               ><button
                                 class="btn compact"
-                                ng-if="vm.hasRole('Approver')&&vm.isApproverFor(project)&&pet.status==='Pending Approval'"
+                                ng-if="vm.hasRole('Approver')&&vm.isApproverForPet(project,pet)&&pet.status==='Pending Approval'"
                                 ng-click="vm.openDecision(pet,'approve')"
                               >
                                 Approve</button
