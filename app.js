@@ -952,6 +952,7 @@
         vm.form.petId = vm.form.petId || pet.petId;
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
+        vm.form.vendor = existingPetVendor(vm.selectedPet);
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
         if (vm.form.lpoIssueDate) vm.form.lpoIssueDate = new Date(vm.form.lpoIssueDate);
@@ -968,6 +969,7 @@
         if (!pet) { vm.selectedPet = null; if (vm.form) vm.form.petReference = null; return; }
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
+        vm.form.vendor = existingPetVendor(pet);
       };
       vm.openProjectBudgetLine = function (project) {
         var pet = vm.petForNewBudgetLine(project);
