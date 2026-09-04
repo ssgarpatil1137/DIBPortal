@@ -457,11 +457,11 @@
         redraw();
       };
       vm.money = function (value) {
-        return new Intl.NumberFormat("en-AE", {
-          style: "currency",
-          currency: "AED",
+        var amount = Number(value) || 0;
+        var formatted = new Intl.NumberFormat("en-AE", {
           maximumFractionDigits: 0,
-        }).format(Number(value) || 0);
+        }).format(Math.abs(amount));
+        return "AED " + (amount < 0 ? "-" : "") + formatted;
       };
       vm.amount = function (value) {
         return new Intl.NumberFormat("en-AE", {
