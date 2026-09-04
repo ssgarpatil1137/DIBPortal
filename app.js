@@ -498,7 +498,7 @@
       vm.setUploadFile = function (file) {
         vm.uploadFile = file;
         vm.uploadPreview = [];
-        if (!file || vm.modal.type !== "pet") return;
+        if (!file || !vm.modal || vm.modal.type !== "petTemplate") { redraw(); return; }
         var reader = new FileReader();
         reader.onload = function (event) {
           $timeout(function () {
@@ -654,11 +654,30 @@
         return Math.max((Number(pet && pet.requestedAmount) || 0) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
       };
       function spendItemFinalAed(item) {
-        var foreignAmount = Number(item.foreignAmount) || (Number(item.units) || 0) * (Number(item.unitPrice) || 0);
-        var aedAmount = Number(item.aedAmount) || foreignAmount;
+        var foreignAmount = spendForeignAmount(item);
+        var aedAmount = spendAedAmount(item);
         return aedAmount * (1 + (Number(item.contingencyPercent) || 0) / 100);
       }
       vm.spendFinalAed = spendItemFinalAed;
+      function spendForeignAmount(item) {
+        return Number(item && item.foreignAmount) || (Number(item && item.units) || 0) * (Number(item && item.unitPrice) || 0);
+      }
+      function spendAedAmount(item) {
+        var foreignAmount = spendForeignAmount(item);
+        var explicitAed = Number(item && item.aedAmount) || 0;
+        if (explicitAed) return explicitAed;
+        var currency = String(item && item.currency || "AED").toUpperCase();
+        var rate = currency === "AED" ? 1 : Number(item && item.exchangeRate) || 1;
+        return foreignAmount * rate;
+      }
+      vm.recalculateSpendForm = function () {
+        if (!vm.form) return;
+        vm.form.foreignAmount = spendForeignAmount(vm.form);
+        var currency = String(vm.form.currency || "AED").toUpperCase();
+        if (currency === "AED") vm.form.exchangeRate = 1;
+        var rate = currency === "AED" ? 1 : Number(vm.form.exchangeRate) || 1;
+        vm.form.aedAmount = Math.round(vm.form.foreignAmount * rate * 100) / 100;
+      };
       function petFinalAedWithSpend(pet, item) {
         var spendItemId = item && item.spendItemId;
         var existing = ((pet && pet.spendItems) || []).reduce(function (total, current) {
@@ -935,17 +954,18 @@
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
         vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
         vm.spendFormVisible = false;
-        vm.form = { petId: pet.petId, units: 1, currency: "AED", contingencyPercent: 0 };
+        vm.form = { petId: pet.petId, units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.modal = { type: "spend", kicker: "PET COST DETAIL", title: "PET line items · " + pet.code, submit: "Save PET line item" };
         redraw();
       };
       vm.addSpend = function () {
-        vm.form = { petId: vm.selectedPet.petId, units: 1, currency: "AED", contingencyPercent: 0 };
+        vm.form = { petId: vm.selectedPet.petId, units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.spendFormVisible = true;
         redraw();
       };
       vm.editSpend = function (item) {
         vm.form = angular.copy(item);
+        vm.form.exchangeRate = Number(vm.form.exchangeRate) || (Number(vm.form.foreignAmount) ? Number(vm.form.aedAmount) / Number(vm.form.foreignAmount) : 1);
         vm.spendFormVisible = true;
         redraw();
       };
@@ -1088,7 +1108,7 @@
           help:
             kind === "attachment"
               ? "PDF, spreadsheet and image files up to 50 MB."
-              : "Use the supplied CSV columns. Invalid rows are rejected with a row-level reason.",
+              : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
         };
         vm.uploadFile = null;
         vm.uploadPreview = [];
@@ -1106,22 +1126,24 @@
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
-        if (!vm.uploadFile) { noticeError("Choose a CSV file first."); return; }
-        var reader = new FileReader();
-        reader.onload = function (event) {
-          $timeout(function () {
-            $http.post("api/portfolio/bulk/" + kind + "/" + parentId, event.target.result, { headers: { "Content-Type": "text/plain" } }).then(function (response) {
-              notice((response.data.imported || 0) + " row(s) imported.");
-              vm.uploadFile = null;
-              vm.close();
-              onDone();
-              loadDashboard();
-            }, function (response) {
-              noticeError(responseMessage(response, "Import failed."));
-            });
-          });
-        };
-        reader.readAsText(vm.uploadFile);
+        if (!vm.uploadFile) { noticeError("Choose a CSV or Excel file first."); return; }
+        var formData = new FormData();
+        formData.append("file", vm.uploadFile);
+        $http.post("api/portfolio/bulk/" + kind + "/" + parentId, formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
+          notice((response.data.imported || 0) + " row(s) imported.");
+          vm.uploadFile = null;
+          vm.close();
+          onDone();
+          loadDashboard();
+        }, function (response) {
+          noticeError(responseMessage(response, "Import failed."));
+        });
+      }
+      function uploadAttachment(entityType, entityId, file) {
+        if (!file || !entityId || vm.demo) return $q.when();
+        var formData = new FormData();
+        formData.append("file", file);
+        return $http.post("api/portfolio/attachments/" + entityType + "/" + entityId, formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } });
       }
       function savePreviewItems(petId) {
         if ((vm.uploadPreview || []).length && !petId) return $q.reject({ data: { message: "PET was saved, but the PET id was not returned." } });
@@ -1221,12 +1243,9 @@
             });
             return;
           }
-          if (vm.uploadFile) {
-            if (!vm.uploadPreview.length) { noticeError("No PET rows were found in the uploaded CSV."); return; }
-            vm.recalculateUploadPreview();
-          }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
+          var supportingDocument = vm.uploadFile;
           var petPayload = {
             petId: vm.form.petId || null,
             projectId: vm.selectedProject.projectId,
@@ -1238,13 +1257,13 @@
           };
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
-            savePreviewItems(savedPetId).then(function () {
+            uploadAttachment("pet", savedPetId, supportingDocument).then(function () {
               notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
               vm.close();
               refreshProjectPets(petPayload.projectId, true);
               loadDashboard();
-            }, function (itemResponse) {
-              noticeError(responseMessage(itemResponse, "Unable to save the PET line items."));
+            }, function (attachmentResponse) {
+              noticeError(responseMessage(attachmentResponse, "PET was saved, but the supporting document upload failed."));
             });
           }, function (response) {
             noticeError(responseMessage(response, "Unable to save the PET."));
@@ -1278,9 +1297,8 @@
           notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.selectedProject.skipReview ? "PET sent directly to the Accountable Executive" : "PET submitted to the Accountable Executive Lead");
         }
         if (type === "spend" && !vm.demo) {
+          vm.recalculateSpendForm();
           var spendPayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
-          spendPayload.foreignAmount = Number(spendPayload.foreignAmount) || (Number(spendPayload.units) || 0) * (Number(spendPayload.unitPrice) || 0);
-          spendPayload.aedAmount = Number(spendPayload.aedAmount) || spendPayload.foreignAmount;
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, spendPayload))) return;
           var isNewSpend = !spendPayload.spendItemId;
           $http.post("api/portfolio/spend-items", spendPayload).then(function (response) {
@@ -1302,9 +1320,8 @@
           return;
         }
         if (type === "spend") {
+          vm.recalculateSpendForm();
           var oldSpend = vm.form.spendItemId && vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === vm.form.spendItemId; })[0];
-          vm.form.foreignAmount = vm.form.units * vm.form.unitPrice;
-          vm.form.aedAmount = vm.form.aedAmount || vm.form.foreignAmount;
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, vm.form))) return;
           if (oldSpend) angular.extend(oldSpend, vm.form);
           else { vm.form.spendItemId = Date.now(); vm.selectedPet.spendItems.push(vm.form); }

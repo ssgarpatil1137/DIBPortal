@@ -163,7 +163,9 @@ namespace DFM.Web.Controllers
         {
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
             var foreignAmount = value.ForeignAmount == 0 ? value.Units * value.UnitPrice : value.ForeignAmount;
-            var aedAmount = value.AedAmount == 0 ? foreignAmount : value.AedAmount;
+            if (!string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) && value.AedAmount == 0 && value.ExchangeRate == 0) return BadRequest("Exchange Rate or AED Amount is required for non-AED PET line items.");
+            var rate = value.ExchangeRate == 0 ? 1 : value.ExchangeRate;
+            var aedAmount = value.AedAmount == 0 ? (string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? foreignAmount : foreignAmount * rate) : value.AedAmount;
             try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault()); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -234,8 +236,29 @@ namespace DFM.Web.Controllers
             if (!new[] { "pet", "budget", "invoice" }.Contains(kind, StringComparer.OrdinalIgnoreCase)) return BadRequest("Unknown template type.");
             try
             {
-                var csv = await Request.Content.ReadAsStringAsync();
-                var imported = CsvBulkImporter.Import(kind, parentId, csv, User.Identity.Name);
+                int imported;
+                if (Request.Content.IsMimeMultipartContent())
+                {
+                    var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                    var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+                    if (file == null) return BadRequest("Choose a file to import.");
+                    var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+                    var extension = Path.GetExtension(fileName).ToLowerInvariant();
+                    if (extension == ".xlsx" || extension == ".xlsm")
+                    {
+                        var rows = SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+                        imported = CsvBulkImporter.ImportRows(kind, parentId, rows, User.Identity.Name, "Excel workbook");
+                    }
+                    else
+                    {
+                        imported = CsvBulkImporter.Import(kind, parentId, await file.ReadAsStringAsync(), User.Identity.Name);
+                    }
+                }
+                else
+                {
+                    var csv = await Request.Content.ReadAsStringAsync();
+                    imported = CsvBulkImporter.Import(kind, parentId, csv, User.Identity.Name);
+                }
                 return Ok(new { imported = imported });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }

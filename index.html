@@ -823,17 +823,7 @@
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
               </div>
-              <label class="full file-field"
-                >Upload PET template (optional)<input type="file" accept=".csv" ng-disabled="vm.petVendorOnly()" file-change="vm.setUploadFile($file)" /><span
-                  ><i data-lucide="upload"></i>{{vm.uploadFile ? vm.uploadFile.name : 'Choose the PET CSV template'}}</span
-                ></label
-              ><div class="full table-scroll spend-preview" ng-if="vm.uploadPreview.length">
-                <table class="nested">
-                  <thead><tr><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Unit type</th><th>Units</th><th>Unit price</th><th>FCY amount</th><th>AED amount</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
-                  <tbody><tr ng-repeat="row in vm.uploadPreview"><td><input ng-model="row.head" ng-disabled="vm.petVendorOnly()" /></td><td><input ng-model="row.topic" ng-disabled="vm.petVendorOnly()" /></td><td><input ng-model="row.vendor" ng-disabled="vm.petVendorOnly()" required /></td><td><input ng-model="row.costType" ng-disabled="vm.petVendorOnly()" /></td><td><input ng-model="row.unitType" ng-disabled="vm.petVendorOnly()" /></td><td><input type="number" step="0.01" ng-model="row.units" ng-change="vm.recalculateUploadPreview()" ng-disabled="vm.petVendorOnly()" /></td><td><input type="number" step="0.01" ng-model="row.unitPrice" ng-change="vm.recalculateUploadPreview()" ng-disabled="vm.petVendorOnly()" /></td><td><input type="number" step="0.01" ng-model="row.foreignAmount" ng-change="vm.recalculateUploadPreview()" ng-disabled="vm.petVendorOnly()" /></td><td><input type="number" step="0.01" ng-model="row.aedAmount" ng-change="vm.recalculateUploadPreview()" ng-disabled="vm.petVendorOnly()" /></td><td><input type="number" step="0.01" ng-model="row.contingencyPercent" ng-change="vm.recalculateUploadPreview()" ng-disabled="vm.petVendorOnly()" /></td><td>{{vm.money(row.finalAed)}}</td><td><input ng-model="row.glNumber" ng-disabled="vm.petVendorOnly()" /></td></tr></tbody>
-                </table>
-              </div
-              ><label class="full" ng-if="vm.petVendorOnly()"
+              <label class="full" ng-if="vm.petVendorOnly()"
                 >Vendor Name<input ng-model="vm.form.vendorName" /></label
               ><label
                 >PET reference<input ng-model="vm.form.code" ng-disabled="vm.petVendorOnly()" required /></label
@@ -867,9 +857,8 @@
                 >
               </div>
               <label class="full file-field"
-                >Attachment<input type="file" /><span
-                  ><i data-lucide="paperclip"></i>Select supporting
-                  document</span
+                >Supporting document<input type="file" file-change="vm.setUploadFile($file)" /><span
+                  ><i data-lucide="paperclip"></i>{{vm.uploadFile ? vm.uploadFile.name : 'Select supporting document'}}</span
                 ></label
               >
             </div>
@@ -888,7 +877,7 @@
                 <i data-lucide="plus"></i>Add PET line item
               </button>
               <div class="form-grid spend-form" ng-if="vm.spendEditable&&vm.spendFormVisible">
-                <label>Head<input ng-model="vm.form.head" required /></label><label>Topic<input ng-model="vm.form.topic" /></label><label>Vendor<input ng-model="vm.form.vendor" required /></label><label>Cost type<input ng-model="vm.form.costType" /></label><label>Units<input type="number" step="0.01" ng-model="vm.form.units" required /></label><label>Unit price<input type="number" step="0.01" ng-model="vm.form.unitPrice" required /></label><label>Currency<select ng-model="vm.form.currency"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></label><label>AED amount<input type="number" step="0.01" ng-model="vm.form.aedAmount" /></label><label>Contingency %<input type="number" step="0.01" ng-model="vm.form.contingencyPercent" /></label><label>GL number<input ng-model="vm.form.glNumber" /></label>
+                <label>Head<input ng-model="vm.form.head" required /></label><label>Topic<input ng-model="vm.form.topic" /></label><label>Vendor<input ng-model="vm.form.vendor" required /></label><label>Cost type<input ng-model="vm.form.costType" /></label><label>Unit type<input ng-model="vm.form.unitType" /></label><label>Units<input type="number" step="0.01" ng-model="vm.form.units" ng-change="vm.recalculateSpendForm()" required /></label><label>Unit price<input type="number" step="0.01" ng-model="vm.form.unitPrice" ng-change="vm.recalculateSpendForm()" required /></label><label>Currency<select ng-model="vm.form.currency" ng-change="vm.recalculateSpendForm()"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></label><label>FCY amount<input type="number" step="0.01" ng-model="vm.form.foreignAmount" ng-change="vm.recalculateSpendForm()" /></label><label>Exchange rate<input type="number" step="0.0001" ng-model="vm.form.exchangeRate" ng-change="vm.recalculateSpendForm()" ng-required="vm.form.currency!=='AED'" /></label><label>AED amount<input type="number" step="0.01" ng-model="vm.form.aedAmount" readonly /></label><label>Contingency %<input type="number" step="0.01" ng-model="vm.form.contingencyPercent" ng-change="vm.recalculateSpendForm()" /></label><label>Final AED<input type="text" value="{{vm.money(vm.spendFinalAed(vm.form))}}" readonly /></label><label>GL number<input ng-model="vm.form.glNumber" /></label>
                 <div class="full head-actions" style="justify-content:flex-start">
                   <button type="button" class="btn secondary" ng-click="vm.spendFormVisible=false">Cancel</button
                   ><button type="button" class="btn primary" ng-click="vm.saveModal()"><i data-lucide="check"></i>Save PET line item</button>
@@ -1088,9 +1077,9 @@
             </div>
             <div ng-if="vm.modal.type==='upload'" class="upload-zone">
               <i data-lucide="cloud-upload"></i>
-              <h3>Drop CSV or attachments here</h3>
+              <h3>Drop CSV, Excel, or attachments here</h3>
               <p>{{vm.modal.help}}</p>
-              <input type="file" ng-if="vm.modal.kind!=='attachment'&&vm.modal.kind!=='sources'" accept=".csv" file-change="vm.setUploadFile($file)" />
+              <input type="file" ng-if="vm.modal.kind!=='attachment'&&vm.modal.kind!=='sources'" accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFile($file)" />
               <input type="file" ng-if="vm.modal.kind==='attachment'||vm.modal.kind==='sources'" multiple />
               <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}</p>
               <a
