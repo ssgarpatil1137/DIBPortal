@@ -135,6 +135,10 @@ svg {
   align-items: center;
   gap: 13px;
 }
+.topbar-btn {
+  padding: 7px 10px;
+  white-space: nowrap;
+}
 .role-badge {
   display: flex;
   max-width: 260px;

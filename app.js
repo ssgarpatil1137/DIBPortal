@@ -361,7 +361,7 @@
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); prepareProjects(); vm.updateView(); redraw(); };
-      vm.signOut = function () { vm.session = null; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); delete $http.defaults.headers.common.Authorization; };
+      vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       vm.authenticate = function () {
         vm.auth.error = "";
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
@@ -369,8 +369,8 @@
           if (vm.auth.mode === "login") {
             if (response.data.requiresPasswordSetup) { vm.auth.mode = "setup"; return; }
             saveRememberedLogin();
-            sessionStorage.setItem("dfmToken", response.data.token); vm.session = response.data; vm.session.initials = (vm.session.displayName || vm.session.email).split(/\s+/).slice(0,2).map(function (part) { return part.charAt(0); }).join("").toUpperCase();
-            $http.defaults.headers.common.Authorization = "Bearer " + response.data.token;
+            applySession(response.data, response.data.token);
+            rememberSession(response.data);
             updateNavigation();
             loadDashboard();
             loadRoles();
@@ -392,6 +392,41 @@
       function resetLoginAuth() {
         var email = rememberedLoginEmail();
         vm.auth = { mode: "login", email: email, rememberMe: !!email };
+      }
+      function applySession(session, token) {
+        vm.session = session || {};
+        vm.demo = false;
+        vm.session.roles = vm.session.roles || [];
+        vm.session.initials = (vm.session.displayName || vm.session.email || "U").split(/\s+/).slice(0,2).map(function (part) { return part.charAt(0); }).join("").toUpperCase();
+        if (token) {
+          sessionStorage.setItem("dfmToken", token);
+          $http.defaults.headers.common.Authorization = "Bearer " + token;
+        }
+      }
+      function rememberSession(session) {
+        try {
+          var copy = angular.copy(session || {});
+          delete copy.token;
+          sessionStorage.setItem("dfmSession", angular.toJson(copy));
+        } catch (ignore) { }
+      }
+      function restoreSession() {
+        var token = sessionStorage.getItem("dfmToken");
+        if (!token) return false;
+        $http.defaults.headers.common.Authorization = "Bearer " + token;
+        var loadedFromCache = false;
+        try {
+          var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadRoles(); }
+        } catch (ignore) { }
+        $http.get("api/auth/session").then(function (response) {
+          applySession(response.data, token);
+          rememberSession(response.data);
+          updateNavigation();
+          if (!loadedFromCache) { loadDashboard(); loadRoles(); }
+          redraw();
+        }, function () { vm.signOut(); });
+        return true;
       }
       vm.hasRole = function (role) {
         var roles = vm.session && vm.session.roles || [];
@@ -1443,7 +1478,7 @@
         }, 0, false);
       }
       function loadDashboard() {
-        $http.get("api/portfolio/dashboard").then(function (response) {
+        return $http.get("api/portfolio/dashboard").then(function (response) {
           var data = response.data || {};
           vm.demo = false;
           vm.metrics = (data.metrics && data.metrics[0]) || vm.metrics;
@@ -1455,7 +1490,12 @@
           prepareProjects();
           vm.updateView(true);
           redraw();
-        }, redraw);
+        }, function (response) {
+          if (response && response.status === 401) vm.signOut();
+          else noticeError("Unable to refresh transactions.");
+          redraw();
+          return $q.reject(response);
+        });
       }
       // Preserves existing project objects (and their expanded/pets/petsLoaded state) instead of
       // replacing the whole array, so re-loading the dashboard after a save doesn't collapse rows
@@ -1483,8 +1523,8 @@
         });
       }
       function loadRoles() {
-        if (!vm.hasRole("Admin") || vm.demo) return;
-        $http.get("api/portfolio/roles").then(function (response) {
+        if (!vm.hasRole("Admin") || vm.demo) return $q.when();
+        return $http.get("api/portfolio/roles").then(function (response) {
           var data = response.data || {};
           vm.availableManagedRoles = data.roles || vm.availableManagedRoles;
           vm.roleUsers = normalizeRoleUsers(data.users || []);
@@ -1518,8 +1558,32 @@
           notice("Roles updated");
         }, function (response) { noticeError(responseMessage(response, "Unable to update roles.")); });
       };
-      prepareProjects();
-      vm.updateView();
-      redraw();
+      vm.refreshTransactions = function () {
+        if (vm.refreshing) return;
+        vm.refreshing = true;
+        if (vm.demo) {
+          prepareProjects();
+          vm.updateView(true);
+          vm.refreshing = false;
+          notice("Transactions refreshed");
+          redraw();
+          return;
+        }
+        loadDashboard().then(function () {
+          return loadRoles();
+        }).then(function () {
+          notice("Transactions refreshed");
+          vm.refreshing = false;
+          redraw();
+        }, function () {
+          vm.refreshing = false;
+          redraw();
+        });
+      };
+      if (!restoreSession()) {
+        prepareProjects();
+        vm.updateView();
+        redraw();
+      }
     });
 })();
