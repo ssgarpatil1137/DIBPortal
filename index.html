@@ -823,17 +823,27 @@
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
               </div>
+              <div class="full pet-upload-workspace" ng-if="!vm.petVendorOnly()">
+                <div class="head-actions" style="justify-content:space-between">
+                  <label class="file-field pet-excel-field"
+                    >Upload Excel<input type="file" accept=".csv,.xlsx,.xlsm" file-change="vm.importPetLines($file)" /><span
+                      ><i data-lucide="sheet"></i>{{vm.petLineUploadFile ? vm.petLineUploadFile.name : 'Upload Excel template'}}</span
+                    ></label
+                  ><button type="button" class="btn secondary" ng-click="vm.addPetUploadRow()"><i data-lucide="plus"></i>Create PET / Add PET</button>
+                </div>
+                <div class="table-scroll" ng-if="vm.uploadPreview.length">
+                  <table class="nested pet-upload-grid pet-request-grid">
+                    <thead><tr><th>Department</th><th>ID</th><th>Exp. Head</th><th>Topic</th><th>Vendor</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>Base CY</th><th>Amt. FCY</th><th>Amt. LCY</th><th>Cont. %</th><th>Final Amt LCY</th><th>Yearly Recurrence</th><th></th></tr></thead>
+                    <tbody><tr ng-repeat="row in vm.uploadPreview track by $index"><td><input ng-model="row.department" /></td><td><input ng-model="row.petReference" /></td><td><input ng-model="row.head" /></td><td><input ng-model="row.topic" /></td><td><input ng-model="row.vendor" required /></td><td><input ng-model="row.description" /></td><td><input ng-model="row.costType" /></td><td><input ng-model="row.unitType" /></td><td><input type="number" step="0.01" ng-model="row.units" ng-change="vm.recalculatePetUploadRow(row,false)" required /></td><td><input type="number" step="0.01" ng-model="row.unitPrice" ng-change="vm.recalculatePetUploadRow(row,true)" required /></td><td><select ng-model="row.currency" ng-change="vm.recalculatePetUploadRow(row,true)"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></td><td><input type="number" step="0.01" ng-model="row.foreignAmount" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td><input type="number" step="0.01" ng-model="row.aedAmount" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td><input type="number" step="0.01" ng-model="row.contingencyPercent" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td>{{vm.money(row.finalAed)}}</td><td><input type="number" step="1" ng-model="row.yearlyRecurrence" /></td><td><button type="button" class="icon-btn" ng-click="vm.removePetUploadRow(row)" title="Delete line"><i data-lucide="trash-2"></i></button></td></tr></tbody>
+                  </table>
+                </div>
+                <div class="detail-grid" ng-if="vm.uploadPreview.length" style="grid-template-columns:1fr 1fr">
+                  <div><small>PET lines</small><strong>{{vm.uploadPreview.length}}</strong></div>
+                  <div><small>Final Request AED Amount</small><strong>{{vm.money(vm.petUploadTotal)}}</strong></div>
+                </div>
+              </div>
               <label class="full" ng-if="vm.petVendorOnly()"
                 >Vendor Name<input ng-model="vm.form.vendorName" /></label
-              ><label
-                >PET reference<input ng-model="vm.form.code" ng-disabled="vm.petVendorOnly()" required /></label
-              ><label
-                >Currency<select ng-model="vm.form.currency" ng-disabled="vm.petVendorOnly()">
-                  <option>AED</option>
-                  <option>USD</option>
-                  <option>EUR</option>
-                  <option>GBP</option>
-                </select></label
               ><label class="full"
                 >Final Request AED Amount<input
                   type="number"
@@ -861,25 +871,6 @@
                   ><i data-lucide="paperclip"></i>{{vm.uploadFile ? vm.uploadFile.name : 'Select supporting document'}}</span
                 ></label
               >
-              <div class="full pet-upload-workspace" ng-if="!vm.petVendorOnly()">
-                <div class="head-actions" style="justify-content:space-between">
-                  <label class="file-field pet-excel-field"
-                    >Upload Excel<input type="file" accept=".csv,.xlsx,.xlsm" file-change="vm.importPetLines($file)" /><span
-                      ><i data-lucide="sheet"></i>{{vm.petLineUploadFile ? vm.petLineUploadFile.name : 'Upload Excel template'}}</span
-                    ></label
-                  ><button type="button" class="btn secondary" ng-click="vm.addPetUploadRow()"><i data-lucide="plus"></i>Create PET / Add PET</button>
-                </div>
-                <div class="table-scroll" ng-if="vm.uploadPreview.length">
-                  <table class="nested pet-upload-grid pet-request-grid">
-                    <thead><tr><th>Department</th><th>ID</th><th>Exp. Head</th><th>Topic</th><th>Vendor</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>Base CY</th><th>Amt. FCY</th><th>Amt. LCY</th><th>Cont. %</th><th>Final Amt LCY</th><th>Yearly Recurrence</th><th></th></tr></thead>
-                    <tbody><tr ng-repeat="row in vm.uploadPreview track by $index"><td><input ng-model="row.department" /></td><td><input ng-model="row.petReference" required /></td><td><input ng-model="row.head" /></td><td><input ng-model="row.topic" /></td><td><input ng-model="row.vendor" required /></td><td><input ng-model="row.description" /></td><td><input ng-model="row.costType" /></td><td><input ng-model="row.unitType" /></td><td><input type="number" step="0.01" ng-model="row.units" ng-change="vm.recalculatePetUploadRow(row,false)" required /></td><td><input type="number" step="0.01" ng-model="row.unitPrice" ng-change="vm.recalculatePetUploadRow(row,true)" required /></td><td><select ng-model="row.currency" ng-change="vm.recalculatePetUploadRow(row,true)"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></td><td><input type="number" step="0.01" ng-model="row.foreignAmount" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td><input type="number" step="0.01" ng-model="row.aedAmount" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td><input type="number" step="0.01" ng-model="row.contingencyPercent" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td>{{vm.money(row.finalAed)}}</td><td><input type="number" step="1" ng-model="row.yearlyRecurrence" /></td><td><button type="button" class="icon-btn" ng-click="vm.removePetUploadRow(row)" title="Delete line"><i data-lucide="trash-2"></i></button></td></tr></tbody>
-                  </table>
-                </div>
-                <div class="detail-grid" ng-if="vm.uploadPreview.length" style="grid-template-columns:1fr 1fr">
-                  <div><small>PET lines</small><strong>{{vm.uploadPreview.length}}</strong></div>
-                  <div><small>Final Request AED Amount</small><strong>{{vm.money(vm.petUploadTotal)}}</strong></div>
-                </div>
-              </div>
             </div>
             <div ng-if="vm.modal.type==='spend'">
               <div class="table-scroll spend-preview" ng-if="vm.selectedPet.spendItems.length">

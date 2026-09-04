@@ -595,7 +595,6 @@
         for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
           var row = vm.uploadPreview[rowIndex];
           calculatePetUploadRow(row, false);
-          if (!String(row.petReference || "").trim()) { noticeError("PET Reference is required on row " + (rowIndex + 1) + "."); return false; }
           if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on row " + (rowIndex + 1) + "."); return false; }
           if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on row " + (rowIndex + 1) + "."); return false; }
         }

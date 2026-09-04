@@ -274,8 +274,7 @@ namespace DFM.Web.Controllers
         {
             try
             {
-                var rows = await ReadImportRows();
-                return Ok(new { rows = CsvBulkImporter.PreviewPetRows(rows, "uploaded file") });
+                return Ok(new { rows = await ReadPetPreviewRows() });
             }
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
@@ -337,6 +336,24 @@ namespace DFM.Web.Controllers
             var extension = Path.GetExtension(fileName).ToLowerInvariant();
             if (extension == ".xlsx" || extension == ".xlsm") return SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
             return CsvBulkImporter.Parse(await file.ReadAsStringAsync());
+        }
+
+        private async Task<List<PetUploadRowRequest>> ReadPetPreviewRows()
+        {
+            if (!Request.Content.IsMimeMultipartContent()) return CsvBulkImporter.PreviewPetRows(CsvBulkImporter.Parse(await Request.Content.ReadAsStringAsync()), "uploaded file");
+            var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+            var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+            if (file == null) throw new ArgumentException("Choose a file to import.");
+            var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (extension != ".xlsx" && extension != ".xlsm") return CsvBulkImporter.PreviewPetRows(CsvBulkImporter.Parse(await file.ReadAsStringAsync()), fileName);
+            Exception lastError = null;
+            foreach (var worksheetRows in SpreadsheetTableReader.ReadWorksheets(await file.ReadAsStreamAsync()))
+            {
+                try { return CsvBulkImporter.PreviewPetRows(worksheetRows, fileName); }
+                catch (Exception ex) { lastError = ex; }
+            }
+            throw lastError ?? new ArgumentException("The Excel workbook does not contain PET template rows.");
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }

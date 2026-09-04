@@ -13,23 +13,26 @@ namespace DFM.Web.Infrastructure
 
         public static List<List<string>> Read(Stream stream)
         {
+            return ReadWorksheets(stream).FirstOrDefault(rows => rows.Any(row => row.Any(cell => !string.IsNullOrWhiteSpace(cell)))) ?? new List<List<string>>();
+        }
+
+        public static List<List<List<string>>> ReadWorksheets(Stream stream)
+        {
             using (var package = Package.Open(stream, FileMode.Open, FileAccess.Read))
             {
                 var sharedStrings = ReadSharedStrings(package);
-                var sheetPart = FirstWorksheet(package);
-                return ReadWorksheet(sheetPart, sharedStrings);
+                return Worksheets(package).Select(sheetPart => ReadWorksheet(sheetPart, sharedStrings)).ToList();
             }
         }
 
-        private static PackagePart FirstWorksheet(Package package)
+        private static IEnumerable<PackagePart> Worksheets(Package package)
         {
             var workbookUri = new Uri("/xl/workbook.xml", UriKind.Relative);
             if (!package.PartExists(workbookUri)) throw new ArgumentException("The Excel workbook does not contain xl/workbook.xml.");
             var workbook = package.GetPart(workbookUri);
-            var relationship = workbook.GetRelationshipsByType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet").FirstOrDefault();
-            if (relationship == null) throw new ArgumentException("The Excel workbook does not contain a worksheet.");
-            var sheetUri = PackUriHelper.ResolvePartUri(workbook.Uri, relationship.TargetUri);
-            return package.GetPart(sheetUri);
+            var relationships = workbook.GetRelationshipsByType("http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet").ToList();
+            if (relationships.Count == 0) throw new ArgumentException("The Excel workbook does not contain a worksheet.");
+            return relationships.Select(relationship => package.GetPart(PackUriHelper.ResolvePartUri(workbook.Uri, relationship.TargetUri)));
         }
 
         private static List<string> ReadSharedStrings(Package package)
