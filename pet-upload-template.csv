@@ -1,2 +1,2 @@
-Project ID,PET Reference,Currency,Head,Topic,Vendor,Cost Type,Unit Type,Units,Unit Price,FCY Amount,Exchange Rate,AED Amount,Contingency %,Final AED,GL Number
-PRJ-000001,PET-2026-001,USD,Software,Core platform,Vendor LLC,CAPEX,License,10,15000,150000,3.6725,550875,5,578418.75,55001
+Department,ID,Exp. Head,Topic,Vendor,Description,Cost Type,Unit Type,Unit(s),Unit Price,Base CY,Amt. FCY,Amt. LCY,Cont. %,Final Amt LCY,Yearly Recurrence
+Core,COR - 1,Capex,Project Genesis,Wipro,Design & ReEngineering,UAT Functional Testing,Man Days,8,19500,AED,19500,19500,0,156000,1

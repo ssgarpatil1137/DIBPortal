@@ -140,6 +140,7 @@ namespace DFM.Web.Controllers
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
                 }
+                if (value.SpendItems != null && value.SpendItems.Count > 0) value.RequestedAmount = value.SpendItems.Sum(item => item.FinalAed > 0 ? item.FinalAed : item.AedAmount * (1 + item.ContingencyPercent / 100));
                 AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
                 var isSentBack = false;
                 if (value.PetId.HasValue)
@@ -152,7 +153,10 @@ namespace DFM.Web.Controllers
                 var parameters = isSentBack
                     ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments) }
                     : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName) };
-                return Ok(Db.Query(sql, parameters).FirstOrDefault());
+                var saved = Db.Query(sql, parameters).FirstOrDefault();
+                var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
+                if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems);
+                return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -166,9 +170,44 @@ namespace DFM.Web.Controllers
             if (!string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) && value.AedAmount == 0 && value.ExchangeRate == 0) return BadRequest("Exchange Rate or AED Amount is required for non-AED PET line items.");
             var rate = value.ExchangeRate == 0 ? 1 : value.ExchangeRate;
             var aedAmount = value.AedAmount == 0 ? (string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? foreignAmount : foreignAmount * rate) : value.AedAmount;
-            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault()); }
+            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount)); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static void SyncPetSpendItems(int petId, List<SpendItemRequest> items)
+        {
+            var ids = items.Where(item => item.SpendItemId.HasValue).Select(item => item.SpendItemId.Value).Distinct().ToList();
+            var parameters = new List<SqlParameter> { P("@PetId", petId) };
+            var keepClause = "";
+            if (ids.Count > 0)
+            {
+                var names = ids.Select((id, index) => "@Existing" + index).ToArray();
+                for (var index = 0; index < ids.Count; index++) parameters.Add(P(names[index], ids[index]));
+                keepClause = " AND s.SpendItemId NOT IN (" + string.Join(",", names) + ")";
+            }
+            Db.Execute("DELETE s FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE s.PetId=@PetId" + keepClause + " AND (pet.Status IN('Draft','Pending Review','Sent Back') OR (pet.Status='Pending Approval' AND p.SkipReview=1))", parameters.ToArray());
+            foreach (var item in items)
+            {
+                item.PetId = petId;
+                var amount = item.FinalAed > 0 ? item.FinalAed : item.AedAmount;
+                var divisor = 1 + (item.ContingencyPercent / 100);
+                var persistedAmount = divisor == 0 ? amount : amount / divisor;
+                SaveSpendItemRow(item, persistedAmount, persistedAmount);
+            }
+        }
+
+        private static Dictionary<string, object> SaveSpendItemRow(SpendItemRequest value, decimal foreignAmount, decimal aedAmount)
+        {
+            try
+            {
+                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence)).FirstOrDefault();
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault();
+            }
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]

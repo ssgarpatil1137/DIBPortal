@@ -57,7 +57,17 @@ namespace DFM.Web.Infrastructure
                 if (petId == 0) petId = Convert.ToInt32(result[0]["PetId"]);
                 foreach (var item in group)
                 {
-                    Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", item.ForeignAmount), P("@aed", item.AedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber)); imported++;
+                    var divisor = 1 + (item.ContingencyPercent / 100);
+                    var persistedAmount = divisor == 0 ? item.FinalAed : item.FinalAed / divisor;
+                    try
+                    {
+                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl,@department,@description,@yearlyRecurrence", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber), P("@department", item.Department), P("@description", item.Description), P("@yearlyRecurrence", item.YearlyRecurrence)); imported++;
+                    }
+                    catch (SqlException ex)
+                    {
+                        if (!ProcedureParameterError(ex)) throw;
+                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber)); imported++;
+                    }
                 }
             }
             return imported;
@@ -65,8 +75,8 @@ namespace DFM.Web.Infrastructure
 
         private static List<PetUploadRowRequest> PetRows(IEnumerable<List<string>> rows, Dictionary<string, int> headers, bool strict)
         {
-            Require(headers, "petreference", "vendor", "unitprice");
-            return rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = Get(row, headers, "projectid"), PetReference = Get(row, headers, "petreference"), Currency = Get(row, headers, "currency", "AED"), Head = Get(row, headers, "head"), Topic = Get(row, headers, "topic"), Vendor = Get(row, headers, "vendor"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = Decimal(row, headers, "unitprice"), ForeignAmount = Decimal(row, headers, "fcyamount"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = Decimal(row, headers, "aedamount"), ContingencyPercent = Decimal(row, headers, "contingency"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
+            Require(headers, "vendor", "unitprice");
+            return rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "id"), Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = Get(row, headers, "vendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = Decimal(row, headers, "unitprice"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
         }
 
         private static PetUploadRowRequest CalculatePetRow(PetUploadRowRequest row, bool strict)
@@ -76,12 +86,18 @@ namespace DFM.Web.Infrastructure
             if (strict && row.UnitPrice <= 0) throw new ArgumentException("Unit Price is required for every PET row.");
             row.Currency = string.IsNullOrWhiteSpace(row.Currency) ? "AED" : row.Currency.Trim().ToUpperInvariant();
             row.Units = row.Units == 0 ? 1 : row.Units;
-            row.ForeignAmount = row.ForeignAmount == 0 ? row.Units * row.UnitPrice : row.ForeignAmount;
-            if (strict && !string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase) && row.AedAmount == 0 && row.ExchangeRate == 0) throw new ArgumentException("Exchange Rate or AED Amount is required for non-AED PET rows.");
-            if (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase)) row.ExchangeRate = 1;
-            var rate = row.ExchangeRate == 0 ? 1 : row.ExchangeRate;
-            row.AedAmount = row.AedAmount == 0 ? row.ForeignAmount * rate : row.AedAmount;
-            row.FinalAed = row.AedAmount * (1 + row.ContingencyPercent / 100);
+            if (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase))
+            {
+                row.ExchangeRate = 1;
+                row.AedAmount = row.UnitPrice;
+                row.ForeignAmount = row.UnitPrice;
+            }
+            else
+            {
+                row.ForeignAmount = row.UnitPrice;
+                if (row.AedAmount == 0) row.AedAmount = row.ForeignAmount;
+            }
+            row.FinalAed = row.Units * (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? row.AedAmount : row.ForeignAmount);
             return row;
         }
 
@@ -124,7 +140,7 @@ namespace DFM.Web.Infrastructure
         }
 
         private static string Normalize(string value) { return new string((value ?? "").Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray()); }
-        private static string[] RequiredColumns(string kind) { return kind.Equals("pet", StringComparison.OrdinalIgnoreCase) ? new[] { "petreference", "vendor", "unitprice" } : kind.Equals("budget", StringComparison.OrdinalIgnoreCase) ? new[] { "vendor", "cost", "currency" } : kind.Equals("invoice", StringComparison.OrdinalIgnoreCase) ? new[] { "vendorname", "invoicenumber", "invoiceamount" } : new string[0]; }
+        private static string[] RequiredColumns(string kind) { return kind.Equals("pet", StringComparison.OrdinalIgnoreCase) ? new[] { "vendor", "unitprice" } : kind.Equals("budget", StringComparison.OrdinalIgnoreCase) ? new[] { "vendor", "cost", "currency" } : kind.Equals("invoice", StringComparison.OrdinalIgnoreCase) ? new[] { "vendorname", "invoicenumber", "invoiceamount" } : new string[0]; }
         private static List<List<string>> TableFromHeader(List<List<string>> rows, string[] required, string sourceName)
         {
             for (var index = 0; index < rows.Count; index++)
@@ -136,13 +152,16 @@ namespace DFM.Web.Infrastructure
         }
         private static Dictionary<string, int> HeaderMap(List<string> row) { var headers = new Dictionary<string, int>(); row.Select((name, index) => new { name = Normalize(name), index }).Where(item => !string.IsNullOrWhiteSpace(item.name)).ToList().ForEach(item => { if (!headers.ContainsKey(item.name)) headers.Add(item.name, item.index); }); return headers; }
         private static string Get(List<string> row, Dictionary<string, int> headers, string name, string fallback = "") { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]) ? row[index].Trim() : fallback; }
+        private static string GetAny(List<string> row, Dictionary<string, int> headers, string fallback, params string[] names) { foreach (var name in names) { var value = Get(row, headers, name); if (!string.IsNullOrWhiteSpace(value)) return value; } return fallback; }
         private static decimal Decimal(List<string> row, Dictionary<string, int> headers, string name, decimal fallback = 0) { decimal value; return decimal.TryParse(Get(row, headers, name).Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out value) ? value : fallback; }
         private static decimal DecimalAny(List<string> row, Dictionary<string, int> headers, decimal fallback, params string[] names) { foreach (var name in names) { var value = Decimal(row, headers, name, decimal.MinValue); if (value != decimal.MinValue) return value; } return fallback; }
         private static bool Has(List<string> row, Dictionary<string, int> headers, string name) { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]); }
         private static bool HasAny(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name)); }
         private static int Int(List<string> row, Dictionary<string, int> headers, string name, int fallback) { int value; return int.TryParse(Get(row, headers, name), out value) ? value : fallback; }
+        private static int? IntNullable(List<string> row, Dictionary<string, int> headers, string name) { int value; return int.TryParse(Get(row, headers, name), out value) ? (int?)value : null; }
         private static bool Empty(List<string> row) { return row.All(string.IsNullOrWhiteSpace); }
         private static void Require(Dictionary<string, int> headers, params string[] names) { var missing = names.Where(name => !headers.ContainsKey(name)).ToArray(); if (missing.Length > 0) throw new ArgumentException("Missing upload columns: " + string.Join(", ", missing)); }
+        private static bool ProcedureParameterError(SqlException ex) { return ex.Errors.Cast<SqlError>().Any(error => error.Number == 8144 || error.Number == 201 || error.Number == 207); }
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
 
     }
