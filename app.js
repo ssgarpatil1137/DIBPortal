@@ -458,6 +458,11 @@
           maximumFractionDigits: 0,
         }).format(Number(value) || 0);
       };
+      vm.amount = function (value) {
+        return new Intl.NumberFormat("en-AE", {
+          maximumFractionDigits: 2,
+        }).format(Number(value) || 0);
+      };
       vm.projectDisplayId = function (project) { return project && project.jiraKey ? project.jiraKey : project.projectCode; };
       vm.selectedBudgetSource = function () {
         return (vm.budgets || []).filter(function (b) {
@@ -590,11 +595,12 @@
         (vm.uploadPreview || []).forEach(function (row) { total += Number(row.finalAed) || 0; });
         vm.petUploadTotal = Math.round(total * 100) / 100;
       }
-      function validatePetUploadRows() {
+      function validatePetUploadRows(requirePetReference) {
         if (!(vm.uploadPreview || []).length) { noticeError("Upload Excel/CSV rows or add a PET row before saving."); return false; }
         for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
           var row = vm.uploadPreview[rowIndex];
           calculatePetUploadRow(row, false);
+          if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on row " + (rowIndex + 1) + "."); return false; }
           if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on row " + (rowIndex + 1) + "."); return false; }
           if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on row " + (rowIndex + 1) + "."); return false; }
         }
@@ -630,7 +636,7 @@
         });
       }
       function savePetUploadRows(projectId, onDone) {
-        if (!validatePetUploadRows()) return;
+        if (!validatePetUploadRows(true)) return;
         $http.post("api/portfolio/bulk/pet/" + projectId + "/rows", vm.uploadPreview).then(function (response) {
           notice((response.data.imported || 0) + " PET row(s) saved.");
           vm.uploadFile = null;
@@ -1319,6 +1325,10 @@
             return;
           }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
+          if (!vm.selectedPet && (vm.uploadPreview || []).length) {
+            savePetUploadRows(vm.selectedProject.projectId, function () { refreshProjectPets(vm.selectedProject.projectId, true); });
+            return;
+          }
           if ((vm.uploadPreview || []).length && !validatePetUploadRows()) return;
           if ((vm.uploadPreview || []).length) vm.form.requestedAmount = vm.petUploadTotal;
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
