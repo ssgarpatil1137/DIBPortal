@@ -929,14 +929,14 @@
                   <option value="RejectCancel">Reject/Cancel</option>
                 </select></label
               >
-              <label class="full" ng-if="vm.modal.stage==='approve'&&vm.form.decision==='Approve'"
+              <label class="full" ng-if="vm.decisionCapexEditable()"
                 >CapEx source<select falcon-select2 data-placeholder="Search CapEx source"
                   ng-model="vm.form.budgetSourceId"
                   ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:'CAPEX'}"
                   required
                 ></select
               ></label>
-              <div class="full budget-split" ng-if="vm.modal.stage==='approve'&&vm.form.decision==='Approve'&&vm.selectedBudgetSource()">
+              <div class="full budget-split" ng-if="vm.decisionCapexEditable()&&vm.selectedBudgetSource()">
                 <table class="nested">
                   <thead>
                     <tr><th>CapEx</th><th>CapEx Budget</th><th>Locked/Logged Amount</th><th>Utilized Amount</th><th>Available Balance</th></tr>

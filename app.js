@@ -429,6 +429,9 @@
           return b.budgetSourceId === vm.form.budgetSourceId;
         })[0];
       };
+      vm.decisionCapexEditable = function () {
+        return vm.form && vm.form.decision === "Approve" && vm.modal && (vm.modal.stage === "review" || vm.modal.stage === "approve");
+      };
       vm.pendingWithName = function (project) {
         if (project.status === "Pending Review") return project.accountableExecLead;
         if (project.status === "Pending Approval") return project.accountableExec;
@@ -1279,9 +1282,9 @@
           var decisionRoute = vm.modal.stage === "review" ? "review" : "approve";
           if (!vm.form.decision) { noticeError("Select a decision before recording this request."); return; }
           if ((vm.form.decision === "SendBack" || vm.form.decision === "RejectCancel") && !String(vm.form.comments || "").trim()) { noticeError("Comments / reason is required for this decision."); return; }
-          if (vm.modal.stage === "approve" && vm.form.decision === "Approve" && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
+          if (vm.decisionCapexEditable() && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
           var decisionPayload = { comments: vm.form.comments, decision: vm.form.decision, approve: vm.form.decision === "Approve" };
-          if (vm.modal.stage === "approve" && vm.form.decision === "Approve") decisionPayload.budgetSourceId = vm.form.budgetSourceId;
+          if (vm.decisionCapexEditable()) decisionPayload.budgetSourceId = vm.form.budgetSourceId;
           $http.post("api/portfolio/pets/" + vm.form.petId + "/" + decisionRoute, decisionPayload).then(function () {
             notice("Decision recorded");
             vm.close();
@@ -1295,12 +1298,18 @@
         if (type === "decision") {
           if (!vm.form.decision) { noticeError("Select a decision before recording this request."); return; }
           if ((vm.form.decision === "SendBack" || vm.form.decision === "RejectCancel") && !String(vm.form.comments || "").trim()) { noticeError("Comments / reason is required for this decision."); return; }
-          if (vm.modal.stage === "approve" && vm.form.decision === "Approve" && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
+          if (vm.decisionCapexEditable() && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
           var target = vm.selectedProject.pets.filter(function (p) {
             return p.petId === vm.form.petId;
           })[0];
           target.status = vm.form.decision === "SendBack" ? "Sent Back" : vm.form.decision === "RejectCancel" ? "Rejected" : vm.modal.stage === "review" ? "Pending Approval" : "Approved";
           vm.selectedProject.status = target.status;
+          if (target.status === "Pending Approval" && vm.form.budgetSourceId) {
+            var reviewBudget = vm.selectedBudgetSource();
+            vm.selectedProject.budgetSourceId = vm.form.budgetSourceId;
+            vm.selectedProject.budgetType = "CAPEX";
+            if (reviewBudget) vm.selectedProject.budgetSource = reviewBudget.externalId;
+          }
           if (target.status === "Approved") {
             if (vm.form.budgetSourceId) {
               var selectedBudget = vm.selectedBudgetSource();

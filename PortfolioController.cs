@@ -170,7 +170,7 @@ namespace DFM.Web.Controllers
         }
 
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, false); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
         public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Approval", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
