@@ -14,8 +14,9 @@ namespace DFM.Web.Controllers
         [AllowAnonymous, HttpPost, Route("login")]
         public IHttpActionResult Login(LoginRequest request)
         {
-            if (request == null || string.IsNullOrWhiteSpace(request.Email)) return BadRequest("Email is required.");
-            var users = Db.Query("SELECT UserId,Email,DisplayName,PasswordSalt,PasswordHash,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", request.Email.Trim()));
+            var email = NormalizeEmail(request == null ? null : request.Email);
+            if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+            var users = Db.Query("SELECT UserId,Email,DisplayName,PasswordSalt,PasswordHash,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", email));
             if (users.Count == 0) return Unauthorized();
             var user = users[0];
             if (Convert.ToBoolean(user["RequiresPasswordSetup"])) return Ok(new AuthResult { Email = Convert.ToString(user["Email"]), DisplayName = Convert.ToString(user["DisplayName"]), RequiresPasswordSetup = true });
@@ -40,8 +41,11 @@ namespace DFM.Web.Controllers
         public IHttpActionResult FirstTimeSetup(PasswordSetupRequest request)
         {
             if (!ValidPassword(request == null ? null : request.Password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
-            var users = Db.Query("SELECT UserId,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", request.Email));
+            var email = NormalizeEmail(request == null ? null : request.Email);
+            if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+            var users = Db.Query("SELECT UserId,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", email));
             if (users.Count == 0 || !Convert.ToBoolean(users[0]["RequiresPasswordSetup"])) return Content(HttpStatusCode.Conflict, "First-time setup is unavailable.");
+            request.Email = email;
             SavePassword(Convert.ToInt32(users[0]["UserId"]), request);
             return Ok();
         }
@@ -49,7 +53,9 @@ namespace DFM.Web.Controllers
         [AllowAnonymous, HttpPost, Route("reset/challenge")]
         public IHttpActionResult ResetChallenge(ResetChallengeRequest request)
         {
-            var rows = Db.Query("SELECT u.UserId,u.SecurityAnswerSalt,u.SecurityAnswerHash FROM Users u WHERE u.Email=@email AND u.SecurityQuestionId=@question AND u.IsActive=1", new SqlParameter("@email", request.Email), new SqlParameter("@question", request.SecurityQuestionId));
+            var email = NormalizeEmail(request == null ? null : request.Email);
+            if (request == null || string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+            var rows = Db.Query("SELECT u.UserId,u.SecurityAnswerSalt,u.SecurityAnswerHash FROM Users u WHERE u.Email=@email AND u.SecurityQuestionId=@question AND u.IsActive=1", new SqlParameter("@email", email), new SqlParameter("@question", request.SecurityQuestionId));
             if (rows.Count == 0 || rows[0]["SecurityAnswerHash"] == null || !PasswordSecurity.Verify((request.SecurityAnswer ?? "").Trim().ToUpperInvariant(), (byte[])rows[0]["SecurityAnswerSalt"], (byte[])rows[0]["SecurityAnswerHash"])) return Unauthorized();
             var token = PasswordSecurity.Token();
             Db.Execute("INSERT PasswordResetTokens(UserId,TokenHash,ExpiresUtc) VALUES(@user,HASHBYTES('SHA2_256',@token),DATEADD(MINUTE,15,GETUTCDATE()))", new SqlParameter("@user", rows[0]["UserId"]), new SqlParameter("@token", token));
@@ -60,7 +66,9 @@ namespace DFM.Web.Controllers
         public IHttpActionResult ResetComplete(PasswordSetupRequest request)
         {
             if (!ValidPassword(request == null ? null : request.Password)) return BadRequest("Password does not meet policy.");
-            var rows = Db.Query("SELECT TOP 1 t.ResetTokenId,t.UserId FROM PasswordResetTokens t JOIN Users u ON u.UserId=t.UserId WHERE u.Email=@email AND t.TokenHash=HASHBYTES('SHA2_256',@token) AND t.UsedUtc IS NULL AND t.ExpiresUtc>GETUTCDATE()", new SqlParameter("@email", request.Email), new SqlParameter("@token", request.ResetToken));
+            var email = NormalizeEmail(request == null ? null : request.Email);
+            if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+            var rows = Db.Query("SELECT TOP 1 t.ResetTokenId,t.UserId FROM PasswordResetTokens t JOIN Users u ON u.UserId=t.UserId WHERE u.Email=@email AND t.TokenHash=HASHBYTES('SHA2_256',@token) AND t.UsedUtc IS NULL AND t.ExpiresUtc>GETUTCDATE()", new SqlParameter("@email", email), new SqlParameter("@token", request.ResetToken));
             if (rows.Count == 0) return Unauthorized();
             SavePassword(Convert.ToInt32(rows[0]["UserId"]), request);
             Db.Execute("UPDATE PasswordResetTokens SET UsedUtc=GETUTCDATE() WHERE ResetTokenId=@id", new SqlParameter("@id", rows[0]["ResetTokenId"]));
@@ -73,6 +81,11 @@ namespace DFM.Web.Controllers
             Db.Execute("DELETE UserSessions WHERE UserId=@user; INSERT UserSessions(UserId,TokenHash,ExpiresUtc) VALUES(@user,HASHBYTES('SHA2_256',@token),DATEADD(HOUR,8,GETUTCDATE()))", new SqlParameter("@user", userId), new SqlParameter("@token", token));
             var roles = Db.Query("SELECT r.Name FROM UserRoles ur JOIN Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@user", new SqlParameter("@user", userId)).Select(row => Convert.ToString(row["Name"])).ToArray();
             return new AuthResult { Token = token, Email = email, DisplayName = displayName, Roles = roles };
+        }
+
+        private static string NormalizeEmail(string email)
+        {
+            return (email ?? "").Trim().TrimEnd(';', ',').Trim().ToLowerInvariant();
         }
 
         private static void SavePassword(int userId, PasswordSetupRequest request)

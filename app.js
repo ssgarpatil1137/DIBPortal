@@ -362,8 +362,13 @@
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
+      function normalizeAuthEmail(value) {
+        return String(value || "").trim().replace(/[;,]+$/g, "").trim().toLowerCase();
+      }
       vm.authenticate = function () {
         vm.auth.error = "";
+        vm.auth.email = normalizeAuthEmail(vm.auth.email);
+        if (!vm.auth.email || vm.auth.email.indexOf("@") < 1 || vm.auth.email.indexOf("@") === vm.auth.email.length - 1) { vm.auth.error = "Enter a valid email ID."; return; }
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
         $http.post("api/auth/" + route, vm.auth).then(function (response) {
           if (vm.auth.mode === "login") {
@@ -385,7 +390,7 @@
       }
       function saveRememberedLogin() {
         try {
-          if (vm.auth.rememberMe && vm.auth.email) localStorage.setItem("dfmRememberedEmail", vm.auth.email);
+          if (vm.auth.rememberMe && vm.auth.email) localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
           else localStorage.removeItem("dfmRememberedEmail");
         } catch (ignore) { }
       }

@@ -12,7 +12,7 @@
       <div class="auth-brand"><img class="falcon-logo hero-logo" src="assets/falcon-logo.svg" alt="Falcon" /><p class="eyebrow">FALCON FINANCE PORTFOLIO</p><h1>Control PET from demand to settlement.</h1><p>Register projects, route PET approvals, and keep CAPEX, OPEX, commitments, and invoices in one governed workspace.</p></div>
       <form class="auth-panel" ng-submit="vm.authenticate()">
         <p class="eyebrow">SECURE ACCESS</p><h2>{{vm.authTitle()}}</h2><p class="auth-help">{{vm.authHelp()}}</p>
-        <label>Email ID<input type="email" ng-model="vm.auth.email" autocomplete="username" required /></label>
+        <label>Email ID<input type="text" inputmode="email" ng-model="vm.auth.email" autocomplete="username" required /></label>
         <label ng-if="vm.auth.mode==='login'">Password<input type="password" ng-model="vm.auth.password" autocomplete="current-password" required /></label>
         <label class="option-check" ng-if="vm.auth.mode==='login'"><input type="checkbox" ng-model="vm.auth.rememberMe" />Remember me</label>
         <label ng-if="vm.auth.mode!=='login'">Security question<select ng-model="vm.auth.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" required></select></label>
