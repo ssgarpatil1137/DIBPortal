@@ -230,6 +230,29 @@ namespace DFM.Web.Controllers
             return Ok();
         }
 
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/preview")]
+        public async Task<IHttpActionResult> PreviewPetBulk(int projectId)
+        {
+            try
+            {
+                var rows = await ReadImportRows();
+                return Ok(new { rows = CsvBulkImporter.PreviewPetRows(rows, "uploaded file") });
+            }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/rows")]
+        public IHttpActionResult BulkPetRows(int projectId, List<PetUploadRowRequest> rows)
+        {
+            try
+            {
+                var imported = CsvBulkImporter.ImportPetRows(projectId, rows, User.Identity.Name);
+                return Ok(new { imported = imported });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/{kind}/{parentId:int}")]
         public async Task<IHttpActionResult> Bulk(string kind, int parentId)
         {
@@ -263,6 +286,18 @@ namespace DFM.Web.Controllers
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private async Task<List<List<string>>> ReadImportRows()
+        {
+            if (!Request.Content.IsMimeMultipartContent()) return CsvBulkImporter.Parse(await Request.Content.ReadAsStringAsync());
+            var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+            var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+            if (file == null) throw new ArgumentException("Choose a file to import.");
+            var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (extension == ".xlsx" || extension == ".xlsm") return SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+            return CsvBulkImporter.Parse(await file.ReadAsStringAsync());
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }

@@ -1043,6 +1043,16 @@ textarea {
   border-radius: 6px;
   padding: 48px;
   text-align: center;
+.pet-upload-workspace {
+  margin-top: 20px;
+  text-align: left;
+}
+.pet-upload-grid {
+  min-width: 1780px;
+}
+.pet-upload-grid input,
+.pet-upload-grid select {
+  min-width: 96px;
   background: #f7faf8;
 }
 .upload-zone > svg {

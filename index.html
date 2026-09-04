@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=8" />
+    <link rel="stylesheet" href="app/styles.css?v=9" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -1088,6 +1088,22 @@
                 download
                 ><i data-lucide="download"></i>Download CSV template</a
               >
+              <div class="pet-upload-workspace" ng-if="vm.modal.kind==='pet'">
+                <div class="head-actions" style="justify-content:space-between">
+                  <strong>{{vm.uploadPreview.length}} PET row(s)</strong>
+                  <button type="button" class="btn secondary" ng-click="vm.addPetUploadRow()"><i data-lucide="plus"></i>Add PET row</button>
+                </div>
+                <div class="table-scroll" ng-if="vm.uploadPreview.length">
+                  <table class="nested pet-upload-grid">
+                    <thead><tr><th>Project ID</th><th>PET Reference</th><th>Currency</th><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Unit type</th><th>Units</th><th>Unit price</th><th>FCY Amount</th><th>Exchange Rate</th><th>AED Amount</th><th>Cont.%</th><th>Final AED</th><th>GL Number</th><th></th></tr></thead>
+                    <tbody><tr ng-repeat="row in vm.uploadPreview track by $index"><td><input ng-model="row.projectId" readonly /></td><td><input ng-model="row.petReference" required /></td><td><select ng-model="row.currency" ng-change="vm.recalculatePetUploadRow(row,false)"><option>AED</option><option>USD</option><option>EUR</option><option>GBP</option></select></td><td><input ng-model="row.head" /></td><td><input ng-model="row.topic" /></td><td><input ng-model="row.vendor" required /></td><td><input ng-model="row.costType" /></td><td><input ng-model="row.unitType" /></td><td><input type="number" step="0.01" ng-model="row.units" ng-change="vm.recalculatePetUploadRow(row,true)" required /></td><td><input type="number" step="0.01" ng-model="row.unitPrice" ng-change="vm.recalculatePetUploadRow(row,true)" required /></td><td><input type="number" step="0.01" ng-model="row.foreignAmount" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td><input type="number" step="0.0001" ng-model="row.exchangeRate" ng-change="vm.recalculatePetUploadRow(row,false)" ng-required="row.currency!=='AED'" /></td><td><input type="number" step="0.01" ng-model="row.aedAmount" readonly /></td><td><input type="number" step="0.01" ng-model="row.contingencyPercent" ng-change="vm.recalculatePetUploadRow(row,false)" /></td><td>{{vm.money(row.finalAed)}}</td><td><input ng-model="row.glNumber" /></td><td><button type="button" class="icon-btn" ng-click="vm.removePetUploadRow(row)" title="Remove row"><i data-lucide="x"></i></button></td></tr></tbody>
+                  </table>
+                </div>
+                <div class="detail-grid" ng-if="vm.uploadPreview.length" style="grid-template-columns:1fr 1fr">
+                  <div><small>Total rows</small><strong>{{vm.uploadPreview.length}}</strong></div>
+                  <div><small>Total Final AED</small><strong>{{vm.money(vm.petUploadTotal)}}</strong></div>
+                </div>
+              </div>
             </div>
             <div ng-if="vm.modal.type==='history'">
               <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1124,6 +1140,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=8"></script>
+    <script src="app/app.js?v=9"></script>
   </body>
 </html>

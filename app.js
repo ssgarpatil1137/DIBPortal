@@ -498,78 +498,88 @@
       vm.setUploadFile = function (file) {
         vm.uploadFile = file;
         vm.uploadPreview = [];
-        if (!file || !vm.modal || vm.modal.type !== "petTemplate") { redraw(); return; }
-        var reader = new FileReader();
-        reader.onload = function (event) {
-          $timeout(function () {
-            var rows = parseCsv(event.target.result);
-            if (rows.length < 2) return;
-            var headers = rows[0].map(function (h) { return (h || "").replace(/[^a-z0-9]/gi, "").toLowerCase(); });
-            var col = function (name) { return headers.indexOf(name); };
-            var sum = 0;
-            var preview = [];
-            for (var r = 1; r < rows.length; r++) {
-              var row = rows[r];
-              if (!row.some(function (c) { return c && c.trim(); })) continue;
-              var units = parseFloat(row[col("units")]) || 1;
-              var unitPrice = parseFloat(row[col("unitprice")]) || 0;
-              var foreign = parseFloat(row[col("fcyamount")]) || units * unitPrice;
-              var aed = parseFloat(row[col("aedamount")]) || foreign;
-              var contingency = parseFloat(row[col("contingency")]) || 0;
-              var finalAedIdx = col("finalaed");
-              var finalAed = finalAedIdx >= 0 && row[finalAedIdx] ? parseFloat(row[finalAedIdx]) : aed * (1 + contingency / 100);
-              if (isNaN(finalAed)) finalAed = 0;
-              sum += finalAed;
-              preview.push({
-                head: row[col("head")],
-                topic: row[col("topic")],
-                vendor: row[col("vendor")],
-                costType: row[col("costtype")],
-                unitType: row[col("unittype")],
-                units: units,
-                unitPrice: unitPrice,
-                currency: row[col("currency")] || "AED",
-                foreignAmount: foreign,
-                aedAmount: aed,
-                contingencyPercent: contingency,
-                finalAed: finalAed,
-                glNumber: row[col("glnumber")],
-              });
-              var refIdx = col("petreference");
-              if (!vm.form.code && refIdx >= 0 && row[refIdx]) vm.form.code = row[refIdx];
-            }
-            vm.uploadPreview = preview;
-            vm.form.requestedAmount = Math.round(sum * 100) / 100;
-            redraw();
-          });
-        };
-        reader.readAsText(file);
+        vm.petUploadTotal = 0;
+        if (!file || !vm.modal || vm.modal.type !== "upload" || vm.modal.kind !== "pet") { redraw(); return; }
+        var projectId = vm.form.item && vm.form.item.projectId;
+        if (!projectId) { noticeError("Unable to determine which project should receive these PET rows."); return; }
+        var formData = new FormData();
+        formData.append("file", file);
+        $http.post("api/portfolio/bulk/pet/" + projectId + "/preview", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
+          vm.uploadPreview = (response.data.rows || []).map(function (row) { return preparePetUploadRow(row); });
+          recalculatePetUploadTotal();
+          redraw();
+        }, function (response) {
+          noticeError(responseMessage(response, "Unable to read PET upload file."));
+          redraw();
+        });
+      };
+      vm.addPetUploadRow = function () {
+        vm.uploadPreview = vm.uploadPreview || [];
+        vm.uploadPreview.push(preparePetUploadRow({}));
+        redraw();
+      };
+      vm.removePetUploadRow = function (row) {
+        vm.uploadPreview = (vm.uploadPreview || []).filter(function (item) { return item !== row; });
+        recalculatePetUploadTotal();
+        redraw();
+      };
+      vm.recalculatePetUploadRow = function (row, deriveForeignAmount) {
+        calculatePetUploadRow(row, deriveForeignAmount);
+        recalculatePetUploadTotal();
       };
       vm.recalculateUploadPreview = function () {
         var sum = 0;
-        (vm.uploadPreview || []).forEach(function (row) {
-          row.units = Number(row.units) || 0;
-          row.unitPrice = Number(row.unitPrice) || 0;
-          row.foreignAmount = Number(row.foreignAmount) || row.units * row.unitPrice;
-          row.aedAmount = Number(row.aedAmount) || row.foreignAmount;
-          row.contingencyPercent = Number(row.contingencyPercent) || 0;
-          row.finalAed = row.aedAmount * (1 + row.contingencyPercent / 100);
-          sum += row.finalAed;
-        });
+        (vm.uploadPreview || []).forEach(function (row) { calculatePetUploadRow(row, false); sum += Number(row.finalAed) || 0; });
+        vm.petUploadTotal = Math.round(sum * 100) / 100;
         vm.form.requestedAmount = Math.round(sum * 100) / 100;
       };
-      function parseCsv(text) {
-        var result = [], row = [], field = "", quoted = false;
-        text = text || "";
-        for (var i = 0; i < text.length; i++) {
-          var ch = text[i];
-          if (ch === '"') { if (quoted && text[i + 1] === '"') { field += '"'; i++; } else quoted = !quoted; }
-          else if (ch === "," && !quoted) { row.push(field); field = ""; }
-          else if ((ch === "\r" || ch === "\n") && !quoted) { if (ch === "\r" && text[i + 1] === "\n") i++; row.push(field); field = ""; result.push(row); row = []; }
-          else field += ch;
+      function preparePetUploadRow(row) {
+        var project = vm.form.item || vm.selectedProject || {};
+        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: "", currency: "AED", head: "", topic: "", vendor: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, glNumber: "" }, row || {});
+        if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
+        calculatePetUploadRow(prepared, !prepared.foreignAmount);
+        return prepared;
+      }
+      function calculatePetUploadRow(row, deriveForeignAmount) {
+        row.currency = (row.currency || "AED").toUpperCase();
+        row.units = Number(row.units) || 0;
+        row.unitPrice = Number(row.unitPrice) || 0;
+        if (deriveForeignAmount || !(Number(row.foreignAmount) > 0)) row.foreignAmount = row.units * row.unitPrice;
+        else row.foreignAmount = Number(row.foreignAmount) || 0;
+        row.exchangeRate = row.currency === "AED" ? 1 : Number(row.exchangeRate) || 0;
+        row.aedAmount = row.currency === "AED" ? row.foreignAmount : row.foreignAmount * row.exchangeRate;
+        row.contingencyPercent = Number(row.contingencyPercent) || 0;
+        row.finalAed = Math.round(row.aedAmount * (1 + row.contingencyPercent / 100) * 100) / 100;
+      }
+      function recalculatePetUploadTotal() {
+        var total = 0;
+        (vm.uploadPreview || []).forEach(function (row) { total += Number(row.finalAed) || 0; });
+        vm.petUploadTotal = Math.round(total * 100) / 100;
+      }
+      function validatePetUploadRows() {
+        if (!(vm.uploadPreview || []).length) { noticeError("Upload Excel/CSV rows or add a PET row before saving."); return false; }
+        for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
+          var row = vm.uploadPreview[rowIndex];
+          calculatePetUploadRow(row, false);
+          if (!String(row.petReference || "").trim()) { noticeError("PET Reference is required on row " + (rowIndex + 1) + "."); return false; }
+          if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on row " + (rowIndex + 1) + "."); return false; }
+          if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on row " + (rowIndex + 1) + "."); return false; }
+          if (row.currency !== "AED" && !(Number(row.exchangeRate) > 0)) { noticeError("Exchange Rate is required on row " + (rowIndex + 1) + " for non-AED currency."); return false; }
         }
-        if (field.length || row.length) { row.push(field); result.push(row); }
-        return result;
+        recalculatePetUploadTotal();
+        return true;
+      }
+      function savePetUploadRows(projectId, onDone) {
+        if (!validatePetUploadRows()) return;
+        $http.post("api/portfolio/bulk/pet/" + projectId + "/rows", vm.uploadPreview).then(function (response) {
+          notice((response.data.imported || 0) + " PET row(s) saved.");
+          vm.uploadFile = null;
+          vm.close();
+          onDone();
+          loadDashboard();
+        }, function (response) {
+          noticeError(responseMessage(response, "Unable to save PET rows."));
+        });
       }
       vm.deleteProject = function (project) {
         if (!window.confirm("Delete project " + project.projectCode + "? This cannot be undone.")) return;
@@ -1103,12 +1113,14 @@
             kind === "attachment"
               ? "Attach supporting files"
               : "Upload " + kind + " records",
-          submit: "Upload files",
+          submit: kind === "pet" ? "Save PET rows" : "Upload files",
           template: templates[kind],
           help:
             kind === "attachment"
               ? "PDF, spreadsheet and image files up to 50 MB."
-              : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
+              : kind === "pet"
+                ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
+                : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
         };
         vm.uploadFile = null;
         vm.uploadPreview = [];
@@ -1455,9 +1467,12 @@
           var kind = vm.modal.kind;
           var parentId = kind === "pet" ? item.projectId : kind === "budget" ? item.petId : kind === "invoice" ? item.budgetLineId : null;
           if (!parentId) { noticeError("Unable to determine where to import these rows."); return; }
+          if (kind === "pet") {
+            savePetUploadRows(parentId, function () { refreshProjectPets(parentId, true); });
+            return;
+          }
           runBulkImport(kind, parentId, function () {
-            if (kind === "pet") refreshProjectPets(parentId, true);
-            else if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
+            if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
           });
           return;
         }
