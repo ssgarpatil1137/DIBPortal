@@ -852,7 +852,7 @@ dd {
   color: #53645c;
   text-transform: uppercase;
 }
-.form-grid label.full {
+.form-grid > .full {
   grid-column: 1/-1;
 }
 input,
@@ -1222,7 +1222,7 @@ textarea {
   .detail-grid {
     grid-template-columns: 1fr;
   }
-  .form-grid label.full {
+  .form-grid > .full {
     grid-column: auto;
   }
   .modal-backdrop {
