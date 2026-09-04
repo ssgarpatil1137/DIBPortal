@@ -53,7 +53,16 @@ namespace DFM.Web.Infrastructure
                     uploadedTotal += existingSpend == null ? 0 : Convert.ToDecimal(existingSpend["Amount"], CultureInfo.InvariantCulture);
                 }
                 AmountValidation.ValidatePetRequestAmount(projectId, petId == 0 ? (int?)null : petId, uploadedTotal);
-                var result = Db.Query("EXEC dbo.sp_SavePet @PetId,@project,@code,@amount,@currency,@user", P("@PetId", petId == 0 ? (object)null : petId), P("@project", projectId), P("@code", group.Key), P("@amount", uploadedTotal), P("@currency", firstRow.Currency), P("@user", user));
+                List<Dictionary<string, object>> result;
+                try
+                {
+                    result = Db.Query("EXEC dbo.sp_SavePet @PetId,@project,@code,@amount,@currency,@user,NULL,NULL,@reviewRequired", P("@PetId", petId == 0 ? (object)null : petId), P("@project", projectId), P("@code", group.Key), P("@amount", uploadedTotal), P("@currency", firstRow.Currency), P("@user", user), P("@reviewRequired", firstRow.ReviewRequired));
+                }
+                catch (SqlException ex)
+                {
+                    if (!ProcedureParameterError(ex)) throw;
+                    result = Db.Query("EXEC dbo.sp_SavePet @PetId,@project,@code,@amount,@currency,@user", P("@PetId", petId == 0 ? (object)null : petId), P("@project", projectId), P("@code", group.Key), P("@amount", uploadedTotal), P("@currency", firstRow.Currency), P("@user", user));
+                }
                 if (petId == 0) petId = Convert.ToInt32(result[0]["PetId"]);
                 foreach (var item in group)
                 {

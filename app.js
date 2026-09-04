@@ -640,9 +640,14 @@
           };
         });
       }
-      function savePetUploadRows(projectId, onDone) {
+      function savePetUploadRows(projectId, onDone, reviewRequired) {
         if (!validatePetUploadRows(true)) return;
-        $http.post("api/portfolio/bulk/pet/" + projectId + "/rows", vm.uploadPreview).then(function (response) {
+        var rows = (vm.uploadPreview || []).map(function (row) {
+          var payload = angular.copy(row);
+          if (angular.isDefined(reviewRequired)) payload.reviewRequired = !!reviewRequired;
+          return payload;
+        });
+        $http.post("api/portfolio/bulk/pet/" + projectId + "/rows", rows).then(function (response) {
           notice((response.data.imported || 0) + " PET row(s) saved.");
           vm.uploadFile = null;
           vm.close();
@@ -1010,6 +1015,7 @@
             code: "PET-2026-" + String(Date.now()).slice(-4),
             currency: "AED",
             requestedAmount: 0,
+            reviewRequired: !project.skipReview,
           });
         if (pet) {
           vm.form.petId = vm.form.petId || pet.petId || pet.PetId;
@@ -1331,9 +1337,10 @@
           }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!vm.selectedPet && (vm.uploadPreview || []).length) {
-            savePetUploadRows(vm.selectedProject.projectId, function () { refreshProjectPets(vm.selectedProject.projectId, true); });
+            savePetUploadRows(vm.selectedProject.projectId, function () { refreshProjectPets(vm.selectedProject.projectId, true); }, vm.form.reviewRequired);
             return;
           }
+          if (!vm.selectedPet && !(vm.uploadPreview || []).length) { noticeError("Upload Excel rows or add a PET row before saving."); return; }
           if ((vm.uploadPreview || []).length && !validatePetUploadRows()) return;
           if ((vm.uploadPreview || []).length) vm.form.requestedAmount = vm.petUploadTotal;
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
@@ -1346,6 +1353,7 @@
             currency: vm.form.currency,
             vendorName: vm.form.vendorName,
             comments: vm.form.comments,
+            reviewRequired: vm.form.reviewRequired,
           };
           if ((vm.uploadPreview || []).length) petPayload.spendItems = petLinePayloads(vm.form.petId || 0);
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
@@ -1380,7 +1388,7 @@
           if (vm.selectedPet) angular.extend(vm.selectedPet, vm.form);
           else {
             vm.form.petId = demoPetId;
-            vm.form.status = vm.selectedProject.skipReview ? "Pending Approval" : "Pending Review";
+            vm.form.status = vm.form.reviewRequired ? "Pending Review" : "Pending Approval";
             vm.form.createdUtc = new Date();
             vm.form.spendItems = vm.form.spendItems || [];
             vm.form.budgetLines = [];
@@ -1388,10 +1396,10 @@
             vm.metrics.petsOnTrack++;
           }
           if (wasSentBack) vm.selectedPet.status = "Pending Approval";
-          vm.selectedProject.status = wasSentBack ? "Pending Approval" : vm.selectedProject.skipReview ? "Pending Approval" : "Pending Review";
+          vm.selectedProject.status = wasSentBack ? "Pending Approval" : vm.form.reviewRequired ? "Pending Review" : "Pending Approval";
           prepareProjects();
           vm.updateView();
-          notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.selectedProject.skipReview ? "PET sent directly to the Accountable Executive" : "PET submitted to the Accountable Executive Lead");
+          notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.form.reviewRequired ? "PET submitted to the Accountable Executive Lead" : "PET sent directly to the Accountable Executive");
         }
         if (type === "spend" && !vm.demo) {
           vm.recalculateSpendForm();

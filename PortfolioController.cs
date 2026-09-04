@@ -149,17 +149,31 @@ namespace DFM.Web.Controllers
                     isSentBack = sentBack != null;
                     if (isSentBack && string.IsNullOrWhiteSpace(value.Comments)) return BadRequest("Requester comments / amendment notes are required before resubmitting.");
                 }
-                var sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName";
-                var parameters = isSentBack
-                    ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments) }
-                    : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName) };
-                var saved = Db.Query(sql, parameters).FirstOrDefault();
+                var saved = SavePetRow(value, isSentBack).FirstOrDefault();
                 var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
                 if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems);
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private List<Dictionary<string, object>> SavePetRow(PetRequest value, bool isSentBack)
+        {
+            var sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments,@ReviewRequired" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,NULL,@ReviewRequired";
+            var parameters = isSentBack
+                ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments), P("@ReviewRequired", value.ReviewRequired) }
+                : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@ReviewRequired", value.ReviewRequired) };
+            try { return Db.Query(sql, parameters); }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName";
+                parameters = isSentBack
+                    ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments) }
+                    : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName) };
+                return Db.Query(sql, parameters);
+            }
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("spend-items")]
