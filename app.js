@@ -866,6 +866,7 @@
       function projectBudgetAmount(project) {
         return Number(project && project.budget) || Number(project && project.availableBudget) || 0;
       }
+      vm.projectBudgetAmount = projectBudgetAmount;
       function validatePetRequestAmount(project, pet, requestedAmount) {
         requestedAmount = Number(requestedAmount) || 0;
         var projectBudget = projectBudgetAmount(project);

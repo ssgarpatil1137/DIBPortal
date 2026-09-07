@@ -176,7 +176,7 @@
                 <th>PET items</th>
                 <th>Budget lines</th>
                 <th>Invoices</th>
-                <th>Status</th>
+                <th>Total budget</th>
                 <th>Created</th>
                 <th class="actions">Action</th>
               </tr>
@@ -214,11 +214,7 @@
                 <td><span class="count-chip">{{project.spendRequestCount}}</span></td>
                 <td><span class="count-chip">{{project.budgetLineCount}}</span></td>
                 <td><span class="count-chip">{{project.invoiceCount}}</span></td>
-                <td>
-                  <span class="status" ng-class="vm.statusClass(project.status)"
-                    >{{project.status}}</span
-                  ><small class="jira-key" ng-if="vm.pendingWithName(project)">Pending with {{vm.pendingWithName(project)}}</small>
-                </td>
+                <td>{{vm.money(vm.projectBudgetAmount(project))}}</td>
                 <td>{{project.createdUtc | date:'dd-MMM-yyyy'}}</td>
                 <td>
                   <div class="row-actions">
