@@ -59,6 +59,8 @@
       vm.visibleApprovalItems = [];
       vm.approvalSelection = {};
       vm.bulkDecisionItems = [];
+      vm.decisionPetRows = [];
+      vm.decisionSelection = {};
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -929,17 +931,21 @@
         var canReview = vm.hasRole("Reviewer");
         var canApprove = vm.hasRole("Approver");
         vm.projects.forEach(function (p) {
+          var reviewPets = [];
+          var approvePets = [];
           p.pets.forEach(function (pet) {
-            if (pet.status === "Pending Review" && canReview && vm.isReviewerForPet(p, pet)) result.push({ project: p, pet: pet, stage: "review", action: "Review" });
-            if (pet.status === "Pending Approval" && canApprove && vm.isApproverForPet(p, pet)) result.push({ project: p, pet: pet, stage: "approve", action: "Approve" });
+            if (pet.status === "Pending Review" && canReview && vm.isReviewerForPet(p, pet)) reviewPets.push(pet);
+            if (pet.status === "Pending Approval" && canApprove && vm.isApproverForPet(p, pet)) approvePets.push(pet);
           });
+          if (reviewPets.length) result.push({ project: p, pet: reviewPets[0], pets: reviewPets, petCount: reviewPets.length, requestedAmount: reviewPets.reduce(function (total, pet) { return total + (Number(pet.requestedAmount) || 0); }, 0), stage: "review", action: "Review" });
+          if (approvePets.length) result.push({ project: p, pet: approvePets[0], pets: approvePets, petCount: approvePets.length, requestedAmount: approvePets.reduce(function (total, pet) { return total + (Number(pet.requestedAmount) || 0); }, 0), stage: "approve", action: "Approve" });
         });
         return result;
       }
       vm.updateApprovalView = function (keepPage) {
         var query = (vm.approvalSearch || "").toLowerCase();
         var filtered = (vm.approvalItems || []).filter(function (item) {
-          return !query || [item.project.projectCode, item.project.jiraKey, item.project.projectName, item.project.projectType, item.pet.code, item.pet.status, item.project.budgetSource, item.project.requestorEmail, item.project.requestorName, item.pet.reviewerEmail, item.pet.approverEmail].join(" ").toLowerCase().indexOf(query) >= 0;
+          return !query || [item.project.projectCode, item.project.jiraKey, item.project.projectName, item.project.projectType, (item.pets || []).map(function (pet) { return pet.code; }).join(" "), item.pet.status, item.project.budgetSource, item.project.requestorEmail, item.project.requestorName, item.pet.reviewerEmail, item.pet.approverEmail].join(" ").toLowerCase().indexOf(query) >= 0;
         });
         vm.approvalFilteredCount = filtered.length;
         vm.approvalPageCount = Math.max(1, Math.ceil(filtered.length / vm.approvalPageSize));
@@ -962,6 +968,40 @@
       };
       vm.selectedApprovalCount = function (stage) { return vm.selectedApprovalItems(stage).length; };
       vm.clearApprovalSelection = function () { vm.approvalSelection = {}; };
+      function canSelectDecisionPet(project, pet, stage) {
+        if (!project || !pet) return false;
+        if (stage === "review") return pet.status === "Pending Review" && vm.isReviewerForPet(project, pet);
+        return pet.status === "Pending Approval" && vm.isApproverForPet(project, pet);
+      }
+      function decisionSelectionKey(pet) { return pet ? String(pet.petId) : ""; }
+      function rebuildBulkDecisionItems(stage) {
+        var decisionStage = stage || (vm.modal && vm.modal.stage);
+        vm.bulkDecisionItems = (vm.decisionPetRows || []).filter(function (item) {
+          return vm.decisionSelection[decisionSelectionKey(item.pet)] && canSelectDecisionPet(item.project, item.pet, decisionStage);
+        });
+        if (vm.form) {
+          vm.form.requestedAmount = vm.bulkDecisionItems.reduce(function (total, item) { return total + (Number(item.pet.requestedAmount) || 0); }, 0);
+          vm.form.code = vm.bulkDecisionItems.length + " PET" + (vm.bulkDecisionItems.length === 1 ? "" : "s") + " selected";
+        }
+      }
+      function buildDecisionPetRows(project, selectedPet, stage) {
+        vm.decisionSelection = {};
+        vm.decisionPetRows = ((project && project.pets) || []).map(function (pet) {
+          if (selectedPet && pet.petId === selectedPet.petId && canSelectDecisionPet(project, pet, stage)) vm.decisionSelection[decisionSelectionKey(pet)] = true;
+          return { project: project, pet: pet };
+        });
+        rebuildBulkDecisionItems(stage);
+      }
+      vm.canSelectDecisionPet = function (item) { return item && canSelectDecisionPet(item.project, item.pet, vm.modal && vm.modal.stage); };
+      vm.isDecisionPetSelected = function (item) { return !!vm.decisionSelection[decisionSelectionKey(item && item.pet)]; };
+      vm.toggleDecisionPet = function (item) {
+        if (!vm.canSelectDecisionPet(item)) return;
+        var key = decisionSelectionKey(item.pet);
+        if (vm.decisionSelection[key]) delete vm.decisionSelection[key];
+        else vm.decisionSelection[key] = true;
+        rebuildBulkDecisionItems();
+      };
+      vm.selectedDecisionCount = function () { return vm.bulkDecisionItems.length; };
       vm.updateBudgetView = function (keepPage) {
         var query = (vm.budgetSearch || "").toLowerCase();
         var filtered = (vm.budgets || []).filter(function (budget) {
@@ -1157,10 +1197,13 @@
       };
       vm.openDecision = function (pet, stage) {
         vm.bulkDecisionItems = [];
+        vm.decisionPetRows = [];
+        vm.decisionSelection = {};
         var project = vm.projects.filter(function (p) {
           return p.pets.indexOf(pet) >= 0;
         })[0];
-        if (project && !project.petsLoaded && !vm.demo) {
+        if (project && !vm.demo) {
+          project.petsLoaded = false;
           loadProjectPets(project, false, true).then(function () {
             openDecisionModal(projectPetById(project, pet.petId) || pet, stage, project);
           });
@@ -1203,11 +1246,13 @@
         vm.modal = {
           type: "decision",
           stage: stage,
+          bulk: true,
           kicker:
             stage === "review" ? "REVIEWER DECISION" : "APPROVER DECISION",
           title: stage === "review" ? "Review PET" : "Approve PET",
           submit: "Record decision",
         };
+        buildDecisionPetRows(project, pet, stage);
         redraw();
       }
       vm.openHistory = function (project, pet) {
@@ -1337,6 +1382,8 @@
         vm.uploadFile = null;
         vm.uploadPreview = [];
         vm.bulkDecisionItems = [];
+        vm.decisionPetRows = [];
+        vm.decisionSelection = {};
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
@@ -1584,36 +1631,40 @@
           if (!vm.form.decision) { noticeError("Select a decision before recording this request."); return; }
           if ((vm.form.decision === "SendBack" || vm.form.decision === "RejectCancel") && !String(vm.form.comments || "").trim()) { noticeError("Comments / reason is required for this decision."); return; }
           if (vm.decisionCapexEditable() && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
-          var target = vm.selectedProject.pets.filter(function (p) {
-            return p.petId === vm.form.petId;
-          })[0];
-          target.status = vm.form.decision === "SendBack" ? "Sent Back" : vm.form.decision === "RejectCancel" ? "Rejected" : vm.modal.stage === "review" ? "Pending Approval" : "Approved";
-          vm.selectedProject.status = target.status;
-          if (target.status === "Pending Approval" && vm.form.budgetSourceId) {
-            var reviewBudget = vm.selectedBudgetSource();
-            vm.selectedProject.budgetSourceId = vm.form.budgetSourceId;
-            vm.selectedProject.budgetType = "CAPEX";
-            if (reviewBudget) vm.selectedProject.budgetSource = reviewBudget.externalId;
-          }
-          if (target.status === "Approved") {
-            if (vm.form.budgetSourceId) {
-              var selectedBudget = vm.selectedBudgetSource();
-              vm.selectedProject.budgetSourceId = vm.form.budgetSourceId;
-              vm.selectedProject.budgetType = "CAPEX";
-              if (selectedBudget) vm.selectedProject.budgetSource = selectedBudget.externalId;
+          var demoDecisionItems = vm.modal.bulk ? vm.bulkDecisionItems.slice(0) : [{ project: vm.selectedProject, pet: vm.form }];
+          if (!demoDecisionItems.length) { noticeError("Select at least one PET before recording this decision."); return; }
+          demoDecisionItems.forEach(function (item) {
+            var project = item.project || vm.selectedProject;
+            var target = project.pets.filter(function (p) { return p.petId === item.pet.petId; })[0];
+            if (!target) return;
+            target.status = vm.form.decision === "SendBack" ? "Sent Back" : vm.form.decision === "RejectCancel" ? "Rejected" : vm.modal.stage === "review" ? "Pending Approval" : "Approved";
+            project.status = target.status;
+            if (target.status === "Pending Approval" && vm.form.budgetSourceId) {
+              var reviewBudget = vm.selectedBudgetSource();
+              project.budgetSourceId = vm.form.budgetSourceId;
+              project.budgetType = "CAPEX";
+              if (reviewBudget) project.budgetSource = reviewBudget.externalId;
             }
-            vm.metrics.petsApproved++;
-            vm.metrics.petsOnTrack--;
-            vm.selectedProject.availableBudget -= target.requestedAmount;
-          } else if (target.status === "Rejected") {
-            vm.metrics.petsRejected++;
-            vm.metrics.petsOnTrack--;
-          }
-          if (vm.modal.stage === "review") { target.reviewerEmail = vm.session.email; target.reviewedUtc = new Date(); }
-          if (vm.modal.stage === "approve") target.approverEmail = vm.session.email;
+            if (target.status === "Approved") {
+              if (vm.form.budgetSourceId) {
+                var selectedBudget = vm.selectedBudgetSource();
+                project.budgetSourceId = vm.form.budgetSourceId;
+                project.budgetType = "CAPEX";
+                if (selectedBudget) project.budgetSource = selectedBudget.externalId;
+              }
+              vm.metrics.petsApproved++;
+              vm.metrics.petsOnTrack--;
+              project.availableBudget -= target.requestedAmount;
+            } else if (target.status === "Rejected") {
+              vm.metrics.petsRejected++;
+              vm.metrics.petsOnTrack--;
+            }
+            if (vm.modal.stage === "review") { target.reviewerEmail = vm.session.email; target.reviewedUtc = new Date(); }
+            if (vm.modal.stage === "approve") target.approverEmail = vm.session.email;
+          });
           prepareProjects();
           vm.updateView();
-          notice("Decision recorded");
+          notice(demoDecisionItems.length + " PET decision(s) recorded");
         }
         if (type === "budgetLine" && !vm.demo) {
           vm.onBudgetLinePetChange();

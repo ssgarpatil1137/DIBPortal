@@ -469,23 +469,20 @@
         <div class="section-bar">
           <div>
             <h2>Approval queue</h2>
-            <span>{{vm.approvalFilteredCount}} PETs awaiting your action</span>
+            <span>{{vm.approvalFilteredCount}} project decision entries awaiting your action</span>
           </div>
           <div class="filters">
             <label class="search"><i data-lucide="search"></i><input ng-model="vm.approvalSearch" ng-change="vm.updateApprovalView()" placeholder="Search PET, project, owner" /></label>
-            <button type="button" class="btn secondary" ng-if="vm.hasRole('Reviewer')" ng-disabled="!vm.selectedApprovalCount('review')" ng-click="vm.openBulkDecision('review')">Review selected ({{vm.selectedApprovalCount('review')}})</button>
-            <button type="button" class="btn primary" ng-if="vm.hasRole('Approver')" ng-disabled="!vm.selectedApprovalCount('approve')" ng-click="vm.openBulkDecision('approve')">Approve selected ({{vm.selectedApprovalCount('approve')}})</button>
-            <button type="button" class="btn secondary" ng-if="vm.selectedApprovalCount()" ng-click="vm.clearApprovalSelection()">Clear selected</button>
           </div>
         </div>
         <div class="table-scroll">
           <table class="data-table approvals-table">
-            <thead><tr><th>Select</th><th>Project ID</th><th>Project name</th><th>Project type</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>CapEx source</th><th>Available CapEx</th><th>Requestor</th><th>Reviewer</th><th>Approver</th><th>Action</th></tr></thead>
+            <thead><tr><th>Project ID</th><th>Project name</th><th>Project type</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>CapEx source</th><th>Available CapEx</th><th>Requestor</th><th>Reviewer</th><th>Approver</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="item in vm.visibleApprovalItems track by item.pet.petId">
-                <td><input type="checkbox" ng-checked="vm.isApprovalSelected(item)" ng-click="vm.toggleApprovalSelection(item)" /></td><td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.project.projectType||'Not supplied'}}</td><td>{{item.pet.code}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td title="{{item.project.budgetSource}}"><span class="truncate-cell">{{item.project.budgetType==='CAPEX' ? item.project.budgetSource : 'Not CapEx'}}</span></td><td>{{item.project.budgetType==='CAPEX' ? vm.money(item.project.availableBudget) : '—'}}</td><td title="{{item.project.requestorEmail}}"><span class="truncate-cell">{{item.project.requestorName||item.project.requestorEmail}}</span></td><td title="{{item.pet.reviewerEmail}}"><span class="truncate-cell">{{item.pet.reviewerEmail||item.project.accountableExecLead}}</span></td><td title="{{item.pet.approverEmail}}"><span class="truncate-cell">{{item.pet.approverEmail||item.project.accountableExec}}</span></td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.stage==='approve'?'Approve / Change CapEx':item.action}}</button></td>
+                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.project.projectType||'Not supplied'}}</td><td>{{item.petCount}} PET{{item.petCount===1?'':'s'}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.requestedAmount)}}</td><td title="{{item.project.budgetSource}}"><span class="truncate-cell">{{item.project.budgetType==='CAPEX' ? item.project.budgetSource : 'Not CapEx'}}</span></td><td>{{item.project.budgetType==='CAPEX' ? vm.money(item.project.availableBudget) : '—'}}</td><td title="{{item.project.requestorEmail}}"><span class="truncate-cell">{{item.project.requestorName||item.project.requestorEmail}}</span></td><td title="{{item.pet.reviewerEmail}}"><span class="truncate-cell">{{item.pet.reviewerEmail||item.project.accountableExecLead}}</span></td><td title="{{item.pet.approverEmail}}"><span class="truncate-cell">{{item.pet.approverEmail||item.project.accountableExec}}</span></td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.stage==='approve'?'Approve / Change CapEx':item.action}}</button></td>
               </tr>
-              <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="13"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
+              <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="12"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -899,16 +896,16 @@
                 >
               </div>
               <div class="decision-amount" ng-if="vm.modal.bulk">
-                <span>{{vm.bulkDecisionItems.length}} PET request(s)</span
+                <span>{{vm.selectedDecisionCount()}} PET request(s) selected</span
                 ><strong>{{vm.money(vm.form.requestedAmount)}}</strong
-                ><small>Selected for {{vm.modal.stage==='approve' ? 'approval' : 'review'}}</small>
+                ><small>{{vm.decisionPetRows.length}} PET request(s) for this project</small>
               </div>
-              <div class="detail-grid" ng-if="!vm.modal.bulk">
+              <div class="detail-grid">
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Requestor</small><strong>{{vm.selectedProject.requestorName||vm.selectedProject.requestorEmail}}</strong></div>
-                <div><small>Reviewer</small><strong>{{vm.form.reviewerEmail||vm.selectedProject.accountableExecLead}}</strong></div>
-                <div><small>Approver</small><strong>{{vm.form.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
+                <div><small>Reviewer</small><strong>{{vm.selectedProject.accountableExecLead}}</strong></div>
+                <div><small>Approver</small><strong>{{vm.selectedProject.accountableExec}}</strong></div>
                 <div><small>Current CapEx</small><strong>{{vm.selectedProject.budgetSource}}</strong></div>
               </div>
               <div class="detail-grid" ng-if="!vm.modal.bulk">
@@ -927,18 +924,17 @@
               </div>
               <div class="table-scroll spend-preview" ng-if="vm.modal.bulk">
                 <table class="nested">
-                  <thead><tr><th>Project ID</th><th>Project name</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>Reviewer</th><th>Approver</th></tr></thead>
-                  <tbody><tr ng-repeat="item in vm.bulkDecisionItems track by item.pet.petId"><td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.pet.code}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td></tr></tbody>
+                  <thead><tr><th>Select</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>Vendor</th><th>Reviewer</th><th>Approver</th></tr></thead>
+                  <tbody><tr ng-repeat="item in vm.decisionPetRows track by item.pet.petId"><td><input type="checkbox" ng-checked="vm.isDecisionPetSelected(item)" ng-click="vm.toggleDecisionPet(item)" ng-disabled="!vm.canSelectDecisionPet(item)" /></td><td>{{item.pet.code}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.pet.requestedAmount)}}</td><td>{{item.pet.vendorName||vm.petVendor(item.pet)||'Not supplied'}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td></tr></tbody>
                 </table>
               </div>
-              <label class="full" ng-if="!vm.modal.bulk"
+              <label class="full"
                 >Decision<select ng-model="vm.form.decision" required>
                   <option value="Approve">Approve</option>
                   <option value="SendBack">Send Back to Requester</option>
                   <option value="RejectCancel">Reject/Cancel</option>
                 </select></label
               >
-              <div class="balance full" ng-if="vm.modal.bulk"><span>Decision</span><strong>Approve</strong></div>
               <label class="full" ng-if="vm.decisionCapexEditable()"
                 >CapEx source<select falcon-select2 data-placeholder="Search CapEx source"
                   ng-model="vm.form.budgetSourceId"
