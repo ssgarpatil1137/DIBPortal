@@ -847,7 +847,7 @@
                   <div><small>Final Request AED Amount</small><strong>{{vm.money(vm.petUploadTotal)}}</strong></div>
                 </div>
               </div>
-              <label class="full option-check" ng-if="!vm.selectedPet&&!vm.petVendorOnly()"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
+              <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
               <label class="full" ng-if="vm.petVendorOnly()"
                 >Vendor Name<input ng-model="vm.form.vendorName" /></label
               >

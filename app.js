@@ -1311,6 +1311,7 @@
           vm.form.currency = vm.form.currency || pet.currency || pet.Currency || "AED";
           vm.form.requestedAmount = parseNumericInput(vm.form.requestedAmount || pet.requestedAmount || pet.RequestedAmount);
           vm.form.status = vm.form.status || pet.status || pet.Status;
+          if (vm.form.status === "Sent Back" && angular.isUndefined(vm.form.reviewRequired)) vm.form.reviewRequired = angular.isDefined(vm.form.ReviewRequired) ? !!vm.form.ReviewRequired : !project.skipReview;
           if (vm.form.status === "Sent Back") vm.form.comments = "";
           if (sameStatus(vm.form.status, "Approved")) vm.form.vendorName = existingPetVendor(pet);
         }
@@ -1755,8 +1756,8 @@
             vm.selectedProject.pets.push(vm.form);
             vm.metrics.petsOnTrack++;
           }
-          if (wasSentBack) vm.selectedPet.status = "Pending Approval";
-          vm.selectedProject.status = wasSentBack ? "Pending Approval" : vm.form.reviewRequired ? "Pending Review" : "Pending Approval";
+          if (wasSentBack) vm.selectedPet.status = vm.form.reviewRequired ? "Pending Review" : "Pending Approval";
+          vm.selectedProject.status = wasSentBack ? vm.selectedPet.status : vm.form.reviewRequired ? "Pending Review" : "Pending Approval";
           prepareProjects();
           vm.updateView();
           notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.form.reviewRequired ? "PET submitted to the Accountable Executive Lead" : "PET sent directly to the Accountable Executive");
