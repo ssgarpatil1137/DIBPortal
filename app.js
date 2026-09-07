@@ -545,7 +545,7 @@
         });
       }
       function budgetLineSpendAmount(item) {
-        return Number(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
+        return parseNumericInput(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
       }
       function setBudgetLineDate(field, items, names) {
         var value = spendItemValue((items || []).filter(function (item) { return spendItemValue(item, names); })[0], names);
@@ -689,7 +689,7 @@
       };
       vm.recalculateUploadPreview = function () {
         var sum = 0;
-        (vm.uploadPreview || []).forEach(function (row) { calculatePetUploadRow(row, false); sum += Number(row.finalAed) || 0; });
+        (vm.uploadPreview || []).forEach(function (row) { calculatePetUploadRow(row, false); sum += parseNumericInput(row.finalAed); });
         vm.petUploadTotal = Math.round(sum * 100) / 100;
         vm.form.requestedAmount = Math.round(sum * 100) / 100;
       };
@@ -734,32 +734,46 @@
         calculatePetUploadRow(prepared, !prepared.foreignAmount && !prepared.aedAmount);
         return prepared;
       }
+      function validateNumericInput(value, label, allowBlank) {
+        if (blankNumericInput(value)) {
+          if (allowBlank) return true;
+          noticeError(label + " is required.");
+          return false;
+        }
+        if (/^-?(?:\d+\.?\d*|\.\d+)$/.test(String(value).replace(/,/g, "").trim())) return true;
+        noticeError(label + " must be a numeric value.");
+        return false;
+      }
       function calculatePetUploadRow(row, deriveForeignAmount) {
         row.currency = (row.currency || "AED").toUpperCase();
-        row.units = Number(row.units) || 0;
-        row.unitPrice = Number(row.unitPrice) || 0;
-        if (deriveForeignAmount || !(Number(row.foreignAmount) > 0 || Number(row.aedAmount) > 0)) {
-          if (row.currency === "AED") row.aedAmount = row.unitPrice;
-          else row.foreignAmount = row.unitPrice;
+        var units = parseNumericInput(row.units);
+        var unitPrice = parseNumericInput(row.unitPrice);
+        var foreignAmount = blankNumericInput(row.foreignAmount) ? 0 : parseNumericInput(row.foreignAmount);
+        var aedAmount = blankNumericInput(row.aedAmount) ? 0 : parseNumericInput(row.aedAmount);
+        var foreignBlank = blankNumericInput(row.foreignAmount);
+        var aedBlank = blankNumericInput(row.aedAmount);
+        if (deriveForeignAmount || !(foreignAmount > 0 || aedAmount > 0 || foreignBlank || aedBlank)) {
+          if (row.currency === "AED") {
+            row.aedAmount = unitPrice || "";
+            aedAmount = unitPrice;
+          } else {
+            row.foreignAmount = unitPrice || "";
+            foreignAmount = unitPrice;
+          }
         }
-        row.foreignAmount = Number(row.foreignAmount) || 0;
-        row.aedAmount = Number(row.aedAmount) || 0;
         if (row.currency === "AED") {
           row.exchangeRate = 1;
-          if (!row.aedAmount) row.aedAmount = row.unitPrice;
-          if (!row.foreignAmount) row.foreignAmount = row.aedAmount;
-          row.finalAed = row.units * row.aedAmount;
+          if (!aedAmount && !aedBlank) aedAmount = unitPrice;
+          row.finalAed = units * (aedAmount || 0);
         } else {
-          row.exchangeRate = Number(row.exchangeRate) || 0;
-          if (!row.foreignAmount) row.foreignAmount = row.unitPrice;
-          row.finalAed = row.units * row.foreignAmount;
+          if (!foreignAmount && !foreignBlank) foreignAmount = unitPrice;
+          row.finalAed = units * (foreignAmount || 0);
         }
-        row.contingencyPercent = Number(row.contingencyPercent) || 0;
         row.finalAed = Math.round(row.finalAed * 100) / 100;
       }
       function recalculatePetUploadTotal() {
         var total = 0;
-        (vm.uploadPreview || []).forEach(function (row) { total += Number(row.finalAed) || 0; });
+        (vm.uploadPreview || []).forEach(function (row) { total += parseNumericInput(row.finalAed); });
         vm.petUploadTotal = Math.round(total * 100) / 100;
       }
       function validatePetUploadRow(row, rowLabel, requirePetReference, excludeRow) {
@@ -767,7 +781,13 @@
         if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on " + rowLabel + "."); return false; }
         if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("ID must be unique on " + rowLabel + "."); return false; }
         if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on " + rowLabel + "."); return false; }
-        if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on " + rowLabel + "."); return false; }
+        if (!validateNumericInput(row.units, "Units on " + rowLabel, false)) return false;
+        if (!validateNumericInput(row.unitPrice, "Unit Price on " + rowLabel, false)) return false;
+        if (!validateNumericInput(row.foreignAmount, "Amt. FCY on " + rowLabel, true)) return false;
+        if (!validateNumericInput(row.aedAmount, "Amt. LCY on " + rowLabel, true)) return false;
+        if (!validateNumericInput(row.contingencyPercent, "Contingency % on " + rowLabel, true)) return false;
+        if (!validateNumericInput(row.yearlyRecurrence, "Yearly Recurrence on " + rowLabel, true)) return false;
+        if (!(parseNumericInput(row.unitPrice) > 0)) { noticeError("Unit Price is required on " + rowLabel + "."); return false; }
         return true;
       }
       function validatePetUploadRows(requirePetReference) {
@@ -787,8 +807,8 @@
       function petLinePayloads(petId) {
         return (vm.uploadPreview || []).map(function (row) {
           calculatePetUploadRow(row, false);
-          var divisor = 1 + ((Number(row.contingencyPercent) || 0) / 100);
-          var persistedAmount = divisor ? row.finalAed / divisor : row.finalAed;
+          var divisor = 1 + (parseNumericInput(row.contingencyPercent) / 100);
+          var persistedAmount = divisor ? parseNumericInput(row.finalAed) / divisor : parseNumericInput(row.finalAed);
           return {
             spendItemId: row.spendItemId || null,
             petId: petId || row.petId || 0,
@@ -799,15 +819,15 @@
             description: row.description,
             costType: row.costType,
             unitType: row.unitType,
-            units: row.units,
-            unitPrice: row.unitPrice,
+            units: parseNumericInput(row.units),
+            unitPrice: parseNumericInput(row.unitPrice),
             currency: row.currency,
             foreignAmount: persistedAmount,
-            exchangeRate: row.exchangeRate,
+            exchangeRate: parseNumericInput(row.exchangeRate) || 1,
             aedAmount: persistedAmount,
-            contingencyPercent: row.contingencyPercent,
-            finalAed: row.finalAed,
-            yearlyRecurrence: row.yearlyRecurrence || null,
+            contingencyPercent: parseNumericInput(row.contingencyPercent),
+            finalAed: parseNumericInput(row.finalAed),
+            yearlyRecurrence: blankNumericInput(row.yearlyRecurrence) ? null : parseNumericInput(row.yearlyRecurrence),
             glNumber: row.glNumber,
           };
         });
@@ -816,6 +836,14 @@
         if (!validatePetUploadRows(true)) return;
         var rows = (vm.uploadPreview || []).map(function (row) {
           var payload = angular.copy(row);
+          payload.units = parseNumericInput(payload.units);
+          payload.unitPrice = parseNumericInput(payload.unitPrice);
+          payload.foreignAmount = parseNumericInput(payload.foreignAmount);
+          payload.exchangeRate = parseNumericInput(payload.exchangeRate) || 1;
+          payload.aedAmount = parseNumericInput(payload.aedAmount);
+          payload.contingencyPercent = parseNumericInput(payload.contingencyPercent);
+          payload.finalAed = parseNumericInput(payload.finalAed);
+          payload.yearlyRecurrence = blankNumericInput(payload.yearlyRecurrence) ? null : parseNumericInput(payload.yearlyRecurrence);
           if (angular.isDefined(reviewRequired)) payload.reviewRequired = !!reviewRequired;
           return payload;
         });
@@ -887,6 +915,13 @@
       vm.percent = function (value, total) {
         return total ? Math.round(((Number(value) || 0) * 100) / total) : 0;
       };
+      function blankNumericInput(value) {
+        return value === null || angular.isUndefined(value) || String(value).trim() === "";
+      }
+      function parseNumericInput(value) {
+        if (blankNumericInput(value)) return 0;
+        return Number(String(value).replace(/,/g, "")) || 0;
+      }
       vm.statusClass = function (status) {
         var text = (status || "").toLowerCase();
         if (/approved|paid|settled|issued|active|live/.test(text))
@@ -908,42 +943,42 @@
         return null;
       };
       vm.petFinalAed = function (pet) {
-        if (!pet.spendItems || !pet.spendItems.length) return Number(pet.requestedAmount) || 0;
-        return pet.spendItems.reduce(function (total, item) { return total + (Number(item.aedAmount) || 0) * (1 + (Number(item.contingencyPercent) || 0) / 100); }, 0);
+        if (!pet.spendItems || !pet.spendItems.length) return parseNumericInput(pet.requestedAmount);
+        return pet.spendItems.reduce(function (total, item) { return total + parseNumericInput(item.aedAmount) * (1 + parseNumericInput(item.contingencyPercent) / 100); }, 0);
       };
       function petBudgetLineTotal(pet, excludeBudgetLineId) {
         return ((pet && pet.budgetLines) || []).reduce(function (total, line) {
           if (excludeBudgetLineId && String(line.budgetLineId) === String(excludeBudgetLineId)) return total;
-          return total + (Number(line.cost) || 0);
+          return total + parseNumericInput(line.cost);
         }, 0);
       }
       vm.petBudgetLineAvailable = function (pet, excludeBudgetLineId) {
-        return Math.max((Number(pet && pet.requestedAmount) || 0) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
+        return Math.max(parseNumericInput(pet && pet.requestedAmount) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
       };
       function spendItemFinalAed(item) {
         var foreignAmount = spendForeignAmount(item);
         var aedAmount = spendAedAmount(item);
-        return aedAmount * (1 + (Number(item.contingencyPercent) || 0) / 100);
+        return aedAmount * (1 + parseNumericInput(item.contingencyPercent) / 100);
       }
       vm.spendFinalAed = spendItemFinalAed;
       function spendForeignAmount(item) {
-        return Number(item && item.foreignAmount) || (Number(item && item.units) || 0) * (Number(item && item.unitPrice) || 0);
+        return parseNumericInput(item && item.foreignAmount) || parseNumericInput(item && item.units) * parseNumericInput(item && item.unitPrice);
       }
       function spendAedAmount(item) {
         var foreignAmount = spendForeignAmount(item);
-        var explicitAed = Number(item && item.aedAmount) || 0;
+        var explicitAed = parseNumericInput(item && item.aedAmount);
         if (explicitAed) return explicitAed;
         var currency = String(item && item.currency || "AED").toUpperCase();
-        var rate = currency === "AED" ? 1 : Number(item && item.exchangeRate) || 1;
+        var rate = currency === "AED" ? 1 : parseNumericInput(item && item.exchangeRate) || 1;
         return foreignAmount * rate;
       }
       vm.recalculateSpendForm = function () {
         if (!vm.form) return;
-        vm.form.foreignAmount = spendForeignAmount(vm.form);
         var currency = String(vm.form.currency || "AED").toUpperCase();
         if (currency === "AED") vm.form.exchangeRate = 1;
-        var rate = currency === "AED" ? 1 : Number(vm.form.exchangeRate) || 1;
-        vm.form.aedAmount = Math.round(vm.form.foreignAmount * rate * 100) / 100;
+        var rate = currency === "AED" ? 1 : parseNumericInput(vm.form.exchangeRate) || 1;
+        var foreignAmount = spendForeignAmount(vm.form);
+        vm.form.aedAmount = foreignAmount ? Math.round(foreignAmount * rate * 100) / 100 : "";
       };
       function petFinalAedWithSpend(pet, item) {
         var spendItemId = item && item.spendItemId;
@@ -954,11 +989,11 @@
         return existing + spendItemFinalAed(item || {});
       }
       function projectBudgetAmount(project) {
-        return Number(project && project.budget) || Number(project && project.availableBudget) || 0;
+        return parseNumericInput(project && project.budget) || parseNumericInput(project && project.availableBudget);
       }
       vm.projectBudgetAmount = projectBudgetAmount;
       function validatePetRequestAmount(project, pet, requestedAmount) {
-        requestedAmount = Number(requestedAmount) || 0;
+        requestedAmount = parseNumericInput(requestedAmount);
         var projectBudget = projectBudgetAmount(project);
         if (projectBudget > 0 && requestedAmount > projectBudget) {
           noticeError("PET Request amount exceeds the Project Budget. Project Budget: " + vm.money(projectBudget) + "; entered amount: " + vm.money(requestedAmount) + ".");
@@ -972,14 +1007,30 @@
         return true;
       }
       function validateBudgetLineAmount() {
-        var cost = Number(String(vm.form && vm.form.cost || "").replace(/,/g, "")) || 0;
+        if (!validateNumericInput(vm.form && vm.form.cost, "Budget Line amount", false)) return false;
+        var cost = parseNumericInput(vm.form && vm.form.cost);
         if (cost <= 0) { noticeError("A positive Budget Line amount is required."); return false; }
         vm.form.cost = cost;
-        var available = (Number(vm.selectedPet && vm.selectedPet.requestedAmount) || 0) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
+        var available = parseNumericInput(vm.selectedPet && vm.selectedPet.requestedAmount) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
         if (cost > available) {
           noticeError("Budget Line amount exceeds the available balance for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available balance: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
           return false;
         }
+        return true;
+      }
+      function validateSpendFormAmounts(form) {
+        var currency = String(form && form.currency || "AED").toUpperCase();
+        if (!validateNumericInput(form && form.units, "Units", false)) return false;
+        if (!validateNumericInput(form && form.unitPrice, "Unit price", false)) return false;
+        if (!validateNumericInput(form && form.foreignAmount, "FCY amount", true)) return false;
+        if (!validateNumericInput(form && form.exchangeRate, "Exchange rate", currency === "AED")) return false;
+        if (!validateNumericInput(form && form.contingencyPercent, "Contingency %", true)) return false;
+        return true;
+      }
+      function validateBudgetSourceAmounts(form) {
+        if (!validateNumericInput(form && form.budget, "Budget", false)) return false;
+        if (!validateNumericInput(form && form.utilization, "Utilization", false)) return false;
+        if (!validateNumericInput(form && form.availableBudget, "Available budget", false)) return false;
         return true;
       }
       vm.updateView = function (keepPage) {
@@ -1258,7 +1309,7 @@
           vm.form.projectId = vm.form.projectId || project.projectId;
           vm.form.code = vm.form.code || pet.code || pet.Code;
           vm.form.currency = vm.form.currency || pet.currency || pet.Currency || "AED";
-          vm.form.requestedAmount = Number(vm.form.requestedAmount || pet.requestedAmount || pet.RequestedAmount) || 0;
+          vm.form.requestedAmount = parseNumericInput(vm.form.requestedAmount || pet.requestedAmount || pet.RequestedAmount);
           vm.form.status = vm.form.status || pet.status || pet.Status;
           if (vm.form.status === "Sent Back") vm.form.comments = "";
           if (sameStatus(vm.form.status, "Approved")) vm.form.vendorName = existingPetVendor(pet);
@@ -1291,7 +1342,7 @@
       };
       vm.editSpend = function (item) {
         vm.form = angular.copy(item);
-        vm.form.exchangeRate = Number(vm.form.exchangeRate) || (Number(vm.form.foreignAmount) ? Number(vm.form.aedAmount) / Number(vm.form.foreignAmount) : 1);
+        vm.form.exchangeRate = parseNumericInput(vm.form.exchangeRate) || (parseNumericInput(vm.form.foreignAmount) ? parseNumericInput(vm.form.aedAmount) / parseNumericInput(vm.form.foreignAmount) : 1);
         vm.spendFormVisible = true;
         redraw();
       };
@@ -1546,8 +1597,13 @@
         (vm.uploadPreview || []).forEach(function (row) {
           chain = chain.then(function () {
             var payload = angular.extend({}, row, { petId: petId });
-            payload.foreignAmount = Number(payload.foreignAmount) || (Number(payload.units) || 0) * (Number(payload.unitPrice) || 0);
-            payload.aedAmount = Number(payload.aedAmount) || payload.foreignAmount;
+            payload.units = parseNumericInput(payload.units);
+            payload.unitPrice = parseNumericInput(payload.unitPrice);
+            payload.foreignAmount = parseNumericInput(payload.foreignAmount) || payload.units * payload.unitPrice;
+            payload.exchangeRate = parseNumericInput(payload.exchangeRate) || 1;
+            payload.aedAmount = parseNumericInput(payload.aedAmount) || payload.foreignAmount;
+            payload.contingencyPercent = parseNumericInput(payload.contingencyPercent);
+            payload.yearlyRecurrence = blankNumericInput(payload.yearlyRecurrence) ? null : parseNumericInput(payload.yearlyRecurrence);
             return $http.post("api/portfolio/spend-items", payload);
           });
         });
@@ -1624,7 +1680,7 @@
               petId: vm.form.petId,
               projectId: vm.form.projectId || vm.selectedProject.projectId,
               code: vm.form.code,
-              requestedAmount: Number(vm.form.requestedAmount) || 0,
+                requestedAmount: parseNumericInput(vm.form.requestedAmount),
               currency: vm.form.currency || "AED",
               vendorName: vm.form.vendorName,
               vendorNameOnly: true,
@@ -1652,7 +1708,7 @@
             petId: vm.form.petId || null,
             projectId: vm.selectedProject.projectId,
             code: vm.form.code,
-            requestedAmount: (vm.uploadPreview || []).length ? vm.petUploadTotal : vm.form.requestedAmount,
+            requestedAmount: (vm.uploadPreview || []).length ? vm.petUploadTotal : parseNumericInput(vm.form.requestedAmount),
             currency: vm.form.currency,
             vendorName: vm.form.vendorName,
             comments: vm.form.comments,
@@ -1684,6 +1740,7 @@
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if ((vm.uploadPreview || []).length && !validatePetUploadRows()) return;
           if ((vm.uploadPreview || []).length) vm.form.requestedAmount = vm.petUploadTotal;
+          else vm.form.requestedAmount = parseNumericInput(vm.form.requestedAmount);
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
           var wasSentBack = vm.selectedPet && vm.selectedPet.status === "Sent Back";
           var demoPetId = vm.form.petId || Date.now();
@@ -1705,14 +1762,21 @@
           notice(wasSentBack ? "PET resubmitted for approval" : vm.selectedPet ? "PET updated" : vm.form.reviewRequired ? "PET submitted to the Accountable Executive Lead" : "PET sent directly to the Accountable Executive");
         }
         if (type === "spend" && !vm.demo) {
+          if (!validateSpendFormAmounts(vm.form)) return;
           vm.recalculateSpendForm();
           var spendPayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
+          spendPayload.units = parseNumericInput(spendPayload.units);
+          spendPayload.unitPrice = parseNumericInput(spendPayload.unitPrice);
+          spendPayload.foreignAmount = spendForeignAmount(spendPayload);
+          spendPayload.exchangeRate = String(spendPayload.currency || "AED").toUpperCase() === "AED" ? 1 : parseNumericInput(spendPayload.exchangeRate) || 1;
+          spendPayload.aedAmount = spendAedAmount(spendPayload);
+          spendPayload.contingencyPercent = parseNumericInput(spendPayload.contingencyPercent);
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, spendPayload))) return;
           var isNewSpend = !spendPayload.spendItemId;
           $http.post("api/portfolio/spend-items", spendPayload).then(function (response) {
             var saved = response.data || {};
             spendPayload.spendItemId = saved.spendItemId || spendPayload.spendItemId;
-            spendPayload.foreignAmount = spendPayload.units * spendPayload.unitPrice;
+            spendPayload.foreignAmount = spendPayload.foreignAmount || spendPayload.units * spendPayload.unitPrice;
             spendPayload.aedAmount = spendPayload.aedAmount || spendPayload.foreignAmount;
             if (isNewSpend) vm.selectedPet.spendItems.push(spendPayload);
             else angular.extend(vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === spendPayload.spendItemId; })[0] || {}, spendPayload);
@@ -1728,11 +1792,19 @@
           return;
         }
         if (type === "spend") {
+          if (!validateSpendFormAmounts(vm.form)) return;
           vm.recalculateSpendForm();
-          var oldSpend = vm.form.spendItemId && vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === vm.form.spendItemId; })[0];
-          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, vm.form))) return;
-          if (oldSpend) angular.extend(oldSpend, vm.form);
-          else { vm.form.spendItemId = Date.now(); vm.selectedPet.spendItems.push(vm.form); }
+          var demoSpendPayload = angular.extend({}, vm.form);
+          demoSpendPayload.units = parseNumericInput(demoSpendPayload.units);
+          demoSpendPayload.unitPrice = parseNumericInput(demoSpendPayload.unitPrice);
+          demoSpendPayload.foreignAmount = spendForeignAmount(demoSpendPayload);
+          demoSpendPayload.exchangeRate = String(demoSpendPayload.currency || "AED").toUpperCase() === "AED" ? 1 : parseNumericInput(demoSpendPayload.exchangeRate) || 1;
+          demoSpendPayload.aedAmount = spendAedAmount(demoSpendPayload);
+          demoSpendPayload.contingencyPercent = parseNumericInput(demoSpendPayload.contingencyPercent);
+          var oldSpend = demoSpendPayload.spendItemId && vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === demoSpendPayload.spendItemId; })[0];
+          if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, demoSpendPayload))) return;
+          if (oldSpend) angular.extend(oldSpend, demoSpendPayload);
+          else { demoSpendPayload.spendItemId = Date.now(); vm.selectedPet.spendItems.push(demoSpendPayload); }
           vm.selectedPet.requestedAmount = vm.petFinalAed(vm.selectedPet);
           prepareProjects();
           vm.updateView();
@@ -1838,7 +1910,9 @@
           notice("Budget line saved");
         }
         if (type === "invoice" && !vm.demo) {
+          if (!validateNumericInput(vm.form && vm.form.invoiceAmount, "Invoice amount", false)) return;
           var invoicePayload = angular.extend({}, vm.form, { budgetLineId: vm.selectedLine.budgetLineId });
+          invoicePayload.invoiceAmount = parseNumericInput(invoicePayload.invoiceAmount);
           $http.post("api/portfolio/invoices", invoicePayload).then(function () {
             notice("Invoice saved");
             vm.close();
@@ -1850,6 +1924,8 @@
           return;
         }
         if (type === "invoice") {
+          if (!validateNumericInput(vm.form && vm.form.invoiceAmount, "Invoice amount", false)) return;
+          vm.form.invoiceAmount = parseNumericInput(vm.form.invoiceAmount);
           var oldInvoice =
             vm.form.invoiceId &&
             vm.selectedLine.invoices.filter(function (x) {
@@ -1867,6 +1943,10 @@
           notice("Invoice saved");
         }
         if (type === "budget") {
+          if (!validateBudgetSourceAmounts(vm.form)) return;
+          vm.form.budget = parseNumericInput(vm.form.budget);
+          vm.form.utilization = parseNumericInput(vm.form.utilization);
+          vm.form.availableBudget = parseNumericInput(vm.form.availableBudget);
           angular.extend(vm.selectedBudget, vm.form);
           notice("Budget source updated");
         }
