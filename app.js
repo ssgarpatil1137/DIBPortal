@@ -503,6 +503,14 @@
         return "";
       }
       vm.petVendor = existingPetVendor;
+      vm.petSpendField = function (pet, field) {
+        var values = [];
+        ((pet && pet.spendItems) || []).forEach(function (item) {
+          var value = item[field];
+          if (value && values.indexOf(value) < 0) values.push(value);
+        });
+        return values.join(", ") || "Not supplied";
+      };
       // Login is by email, but JIRA only records the reviewer/approver's display name against
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
       vm.isReviewerFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExecLead); };
