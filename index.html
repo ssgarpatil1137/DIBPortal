@@ -349,7 +349,7 @@
                                 <i data-lucide="history"></i></button
                               ><button
                                 class="icon-btn"
-                                title="{{(pet.status==='Pending Review'||pet.status==='Sent Back')?'Maintain PET line items':'View PET line items'}}"
+                                title="{{pet.status==='Pending Review'?'Maintain PET line items':'View PET line items'}}"
                                 ng-if="pet.spendItems.length||(vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back'))"
                                 ng-click="vm.openSpend(pet)"
                               >
@@ -357,6 +357,7 @@
                               ><button
                                 class="icon-btn"
                                 title="Upload attachment"
+                                ng-if="pet.status!=='Rejected'"
                                 ng-click="vm.openUpload('attachment',pet)"
                               >
                                 <i data-lucide="paperclip"></i></button
