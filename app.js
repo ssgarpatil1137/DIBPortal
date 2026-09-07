@@ -1444,6 +1444,29 @@
         };
         redraw();
       };
+      vm.openInvoiceView = function (line) {
+        vm.selectedLine = line;
+        vm.selectedProject = vm.projects.filter(function (p) {
+          return p.pets.some(function (pet) { return pet.budgetLines && pet.budgetLines.indexOf(line) >= 0; });
+        })[0];
+        function showInvoices(sourceLine) {
+          vm.selectedLine = sourceLine || line;
+          vm.invoices = (vm.selectedLine && vm.selectedLine.invoices) || [];
+          vm.modal = { type: "invoiceView", kicker: "INVOICE VIEW", title: "Invoices · " + (vm.selectedLine.petReference || vm.selectedLine.petCode || vm.selectedLine.camId || "Budget Line") };
+          redraw();
+        }
+        if (vm.selectedProject && !vm.demo) {
+          refreshProjectPets(vm.selectedProject.projectId, true).then(function () {
+            var refreshedLine = null;
+            (vm.selectedProject.budgetLines || []).forEach(function (candidate) {
+              if (Number(candidate.budgetLineId) === Number(line.budgetLineId)) refreshedLine = candidate;
+            });
+            showInvoices(refreshedLine);
+          });
+          return;
+        }
+        showInvoices(line);
+      };
       vm.openBudget = function (budget) {
         vm.selectedBudget = budget;
         vm.form = angular.copy(budget);
