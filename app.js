@@ -506,12 +506,16 @@
       vm.petVendor = existingPetVendor;
       vm.petVendorOptions = function (pet) {
         var values = [];
+        function addVendors(text) {
+          String(text || "").split(",").forEach(function (part) {
+            var value = part.trim();
+            if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
+          });
+        }
         ((pet && pet.spendItems) || []).forEach(function (item) {
-          var value = String(item.vendor || item.Vendor || "").trim();
-          if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
+          addVendors(item.vendor || item.Vendor);
         });
-        var petVendor = String(pet && (pet.vendorName || pet.VendorName) || "").trim();
-        if (petVendor && values.map(function (v) { return v.toLowerCase(); }).indexOf(petVendor.toLowerCase()) < 0) values.push(petVendor);
+        addVendors(pet && (pet.vendorName || pet.VendorName));
         return values;
       };
       function spendItemValue(item, names) {
