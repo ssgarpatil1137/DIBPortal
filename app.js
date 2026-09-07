@@ -538,7 +538,11 @@
         var vendorKey = String(vendor || "").trim().toLowerCase();
         var items = (pet && pet.spendItems) || [];
         if (!vendorKey) return vm.budgetLineVendorOptions.length ? [] : items;
-        return items.filter(function (item) { return String(item.vendor || item.Vendor || "").trim().toLowerCase() === vendorKey; });
+        return items.filter(function (item) {
+          return String(item.vendor || item.Vendor || "").split(",").some(function (part) {
+            return part.trim().toLowerCase() === vendorKey;
+          });
+        });
       }
       function budgetLineSpendAmount(item) {
         return Number(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
@@ -968,8 +972,9 @@
         return true;
       }
       function validateBudgetLineAmount() {
-        var cost = Number(vm.form && vm.form.cost) || 0;
+        var cost = Number(String(vm.form && vm.form.cost || "").replace(/,/g, "")) || 0;
         if (cost <= 0) { noticeError("A positive Budget Line amount is required."); return false; }
+        vm.form.cost = cost;
         var available = (Number(vm.selectedPet && vm.selectedPet.requestedAmount) || 0) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
         if (cost > available) {
           noticeError("Budget Line amount exceeds the available balance for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available balance: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
@@ -1390,7 +1395,7 @@
         };
         redraw();
       };
-      vm.onBudgetLinePetChange = function () {
+      vm.onBudgetLinePetChange = function (skipAutoFill) {
         var pet = projectPetById(vm.selectedProject, vm.form && vm.form.petId);
         if (!pet) { vm.selectedPet = null; vm.budgetLineVendorOptions = []; if (vm.form) vm.form.petReference = null; return; }
         var petChanged = !vm.selectedPet || Number(vm.selectedPet.petId) !== Number(pet.petId);
@@ -1401,6 +1406,7 @@
         vm.budgetLineVendorOptions = petVendors;
         if (petVendors.length && petVendors.indexOf(vm.form.vendor) < 0) vm.form.vendor = petVendors[0];
         if (!petVendors.length && petChanged) vm.form.vendor = "";
+        if (skipAutoFill) return;
         applyBudgetLinePetValues();
       };
       vm.openProjectBudgetLine = function (project) {
@@ -1772,7 +1778,7 @@
           notice(demoDecisionItems.length + " PET decision(s) recorded");
         }
         if (type === "budgetLine" && !vm.demo) {
-          vm.onBudgetLinePetChange();
+          vm.onBudgetLinePetChange(true);
           if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
           if (!validateBudgetLineVendorSelection()) return;
           if (!validateBudgetLineAmount()) return;
@@ -1788,7 +1794,7 @@
           return;
         }
         if (type === "budgetLine") {
-          vm.onBudgetLinePetChange();
+          vm.onBudgetLinePetChange(true);
           if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
           if (!validateBudgetLineVendorSelection()) return;
           if (!validateBudgetLineAmount()) return;
