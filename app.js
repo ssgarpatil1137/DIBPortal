@@ -516,7 +516,7 @@
         var formData = new FormData();
         formData.append("file", file);
         $http.post("api/portfolio/bulk/pet/" + projectId + "/preview", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
-          vm.uploadPreview = (response.data.rows || []).map(function (row) { return preparePetUploadRow(row); });
+          vm.uploadPreview = preparePetUploadRows(response.data.rows || []);
           recalculatePetUploadTotal();
           redraw();
         }, function (response) {
@@ -530,7 +530,7 @@
         var formData = new FormData();
         formData.append("file", file);
         $http.post("api/portfolio/bulk/pet/" + vm.selectedProject.projectId + "/preview", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
-          var rows = (response.data.rows || []).map(function (row) { return preparePetUploadRow(row); });
+          var rows = preparePetUploadRows(response.data.rows || []);
           vm.uploadPreview = (vm.uploadPreview || []).concat(rows);
           vm.recalculateUploadPreview();
           notice(rows.length + " PET line row(s) imported for editing.");
@@ -541,8 +541,38 @@
         });
       };
       vm.addPetUploadRow = function () {
-        vm.uploadPreview = vm.uploadPreview || [];
-        vm.uploadPreview.push(preparePetUploadRow({}));
+        vm.openPetUploadRow();
+      };
+      vm.openPetUploadRow = function (row) {
+        vm.petRowEditor = {
+          original: row || null,
+          row: preparePetUploadRow(row ? angular.copy(row) : {}, !row),
+          isEdit: !!row,
+        };
+        if (!row) assignUniquePetReference(vm.petRowEditor.row);
+        calculatePetUploadRow(vm.petRowEditor.row, false);
+        redraw();
+      };
+      vm.closePetUploadRow = function () {
+        vm.petRowEditor = null;
+        redraw();
+      };
+      vm.recalculatePetRowEditor = function (deriveForeignAmount) {
+        if (!vm.petRowEditor) return;
+        calculatePetUploadRow(vm.petRowEditor.row, deriveForeignAmount);
+        redraw();
+      };
+      vm.submitPetUploadRow = function () {
+        if (!vm.petRowEditor) return;
+        var row = vm.petRowEditor.row;
+        assignUniquePetReference(row, vm.petRowEditor.original);
+        if (!validatePetUploadRow(row, "popup", true, vm.petRowEditor.original)) return;
+        if (vm.petRowEditor.original) angular.extend(vm.petRowEditor.original, row);
+        else {
+          vm.uploadPreview = vm.uploadPreview || [];
+          vm.uploadPreview.push(row);
+        }
+        vm.petRowEditor = null;
         vm.recalculateUploadPreview();
         redraw();
       };
@@ -561,14 +591,44 @@
         vm.petUploadTotal = Math.round(sum * 100) / 100;
         vm.form.requestedAmount = Math.round(sum * 100) / 100;
       };
-      function preparePetUploadRow(row) {
+      function petReferenceExists(reference, excludeRow, extraRows) {
+        var normalized = String(reference || "").trim().toLowerCase();
+        if (!normalized) return false;
+        var rows = (vm.uploadPreview || []).concat(extraRows || []);
+        return rows.some(function (row) { return row !== excludeRow && String(row.petReference || "").trim().toLowerCase() === normalized; });
+      }
+      function generatedPetReference(excludeRow, extraRows) {
+        var year = new Date().getFullYear();
+        var reference;
+        do {
+          vm.petReferenceSequence = (vm.petReferenceSequence || 0) + 1;
+          reference = "PET-" + year + "-" + String(Date.now()).slice(-5) + "-" + ("00" + vm.petReferenceSequence).slice(-3);
+        } while (petReferenceExists(reference, excludeRow, extraRows));
+        return reference;
+      }
+      function assignUniquePetReference(row, excludeRow, extraRows) {
+        var reference = String(row.petReference || "").trim();
+        row.petReference = !reference || petReferenceExists(reference, excludeRow, extraRows) ? generatedPetReference(excludeRow, extraRows) : reference;
+      }
+      function preparePetUploadRows(rows) {
+        var preparedRows = [];
+        (rows || []).forEach(function (row) {
+          var prepared = preparePetUploadRow(row, true);
+          prepared.petReference = "";
+          assignUniquePetReference(prepared, null, preparedRows);
+          preparedRows.push(prepared);
+        });
+        return preparedRows;
+      }
+      function preparePetUploadRow(row, generateReference) {
         var project = vm.form.item || vm.selectedProject || {};
-        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: vm.form.code || "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, row || {});
+        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: generateReference ? "" : vm.form.code || "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, row || {});
         if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
         if (prepared.spendItemId && prepared.unitPrice) {
           if ((prepared.currency || "AED").toUpperCase() === "AED") prepared.aedAmount = prepared.unitPrice;
           else prepared.foreignAmount = prepared.unitPrice;
         }
+        if (generateReference) assignUniquePetReference(prepared);
         calculatePetUploadRow(prepared, !prepared.foreignAmount && !prepared.aedAmount);
         return prepared;
       }
@@ -600,14 +660,24 @@
         (vm.uploadPreview || []).forEach(function (row) { total += Number(row.finalAed) || 0; });
         vm.petUploadTotal = Math.round(total * 100) / 100;
       }
+      function validatePetUploadRow(row, rowLabel, requirePetReference, excludeRow) {
+        calculatePetUploadRow(row, false);
+        if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on " + rowLabel + "."); return false; }
+        if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("ID must be unique on " + rowLabel + "."); return false; }
+        if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on " + rowLabel + "."); return false; }
+        if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on " + rowLabel + "."); return false; }
+        return true;
+      }
       function validatePetUploadRows(requirePetReference) {
         if (!(vm.uploadPreview || []).length) { noticeError("Upload Excel/CSV rows or add a PET row before saving."); return false; }
+        var seenReferences = {};
         for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
           var row = vm.uploadPreview[rowIndex];
-          calculatePetUploadRow(row, false);
-          if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on row " + (rowIndex + 1) + "."); return false; }
-          if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on row " + (rowIndex + 1) + "."); return false; }
-          if (!(Number(row.unitPrice) > 0)) { noticeError("Unit Price is required on row " + (rowIndex + 1) + "."); return false; }
+          if (requirePetReference) assignUniquePetReference(row, row);
+          if (!validatePetUploadRow(row, "row " + (rowIndex + 1), requirePetReference, row)) return false;
+          var referenceKey = String(row.petReference || "").trim().toLowerCase();
+          if (requirePetReference && seenReferences[referenceKey]) { noticeError("ID must be unique on row " + (rowIndex + 1) + "."); return false; }
+          if (referenceKey) seenReferences[referenceKey] = true;
         }
         recalculatePetUploadTotal();
         return true;
