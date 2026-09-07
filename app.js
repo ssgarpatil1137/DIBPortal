@@ -61,6 +61,7 @@
       vm.bulkDecisionItems = [];
       vm.decisionPetRows = [];
       vm.decisionSelection = {};
+      vm.budgetLineVendorOptions = [];
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -503,6 +504,14 @@
         return "";
       }
       vm.petVendor = existingPetVendor;
+      vm.petVendorOptions = function (pet) {
+        var values = [];
+        ((pet && pet.spendItems) || []).forEach(function (item) {
+          var value = item.vendor || item.Vendor;
+          if (value && values.indexOf(value) < 0) values.push(value);
+        });
+        return values;
+      };
       vm.petSpendField = function (pet, field) {
         var values = [];
         ((pet && pet.spendItems) || []).forEach(function (item) {
@@ -1289,7 +1298,9 @@
         vm.form.petId = vm.form.petId || pet.petId;
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
-        vm.form.vendor = existingPetVendor(vm.selectedPet);
+        var petVendors = vm.petVendorOptions(vm.selectedPet);
+        vm.budgetLineVendorOptions = line ? [] : petVendors;
+        vm.form.vendor = line ? vm.form.vendor : petVendors[0] || "";
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
         if (vm.form.lpoIssueDate) vm.form.lpoIssueDate = new Date(vm.form.lpoIssueDate);
@@ -1303,10 +1314,12 @@
       };
       vm.onBudgetLinePetChange = function () {
         var pet = projectPetById(vm.selectedProject, vm.form && vm.form.petId);
-        if (!pet) { vm.selectedPet = null; if (vm.form) vm.form.petReference = null; return; }
+        if (!pet) { vm.selectedPet = null; vm.budgetLineVendorOptions = []; if (vm.form) vm.form.petReference = null; return; }
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
-        vm.form.vendor = existingPetVendor(pet);
+        var petVendors = vm.petVendorOptions(pet);
+        vm.budgetLineVendorOptions = petVendors;
+        vm.form.vendor = petVendors[0] || "";
       };
       vm.openProjectBudgetLine = function (project) {
         var pet = vm.petForNewBudgetLine(project);
@@ -1393,6 +1406,7 @@
         vm.bulkDecisionItems = [];
         vm.decisionPetRows = [];
         vm.decisionSelection = {};
+        vm.budgetLineVendorOptions = [];
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
