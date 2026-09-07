@@ -57,6 +57,8 @@
       vm.approvalPageCount = 1;
       vm.approvalFilteredCount = 0;
       vm.visibleApprovalItems = [];
+      vm.approvalSelection = {};
+      vm.bulkDecisionItems = [];
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -744,9 +746,18 @@
       };
       function refreshProjectPets(projectId, expandRegardless) {
         var project = vm.projects.filter(function (p) { return p.projectId === projectId; })[0];
-        if (!project) return;
+        if (!project) return $q.when();
         project.petsLoaded = false;
-        loadProjectPets(project, expandRegardless);
+        return loadProjectPets(project, expandRegardless);
+      }
+      function refreshProjectsFromDatabase(projectIds) {
+        var ids = [];
+        (projectIds || []).forEach(function (projectId) {
+          if (projectId && ids.indexOf(projectId) < 0) ids.push(projectId);
+        });
+        return loadDashboard().then(function () {
+          return $q.all(ids.map(function (projectId) { return refreshProjectPets(projectId, true); }));
+        });
       }
       // Computed once whenever jira/jiraPlan change (not called from the template) - calling this
       // from ng-repeat would rebuild new arrays/objects every digest and trigger an infinite digest loop.
@@ -936,6 +947,21 @@
         var start = (vm.approvalPage - 1) * vm.approvalPageSize;
         vm.visibleApprovalItems = filtered.slice(start, start + vm.approvalPageSize);
       };
+      function approvalSelectionKey(item) { return item && item.pet ? String(item.pet.petId) : ""; }
+      vm.isApprovalSelected = function (item) { return !!vm.approvalSelection[approvalSelectionKey(item)]; };
+      vm.toggleApprovalSelection = function (item) {
+        var key = approvalSelectionKey(item);
+        if (!key) return;
+        if (vm.approvalSelection[key]) delete vm.approvalSelection[key];
+        else vm.approvalSelection[key] = item.stage;
+      };
+      vm.selectedApprovalItems = function (stage) {
+        return (vm.approvalItems || []).filter(function (item) {
+          return vm.approvalSelection[approvalSelectionKey(item)] && (!stage || item.stage === stage);
+        });
+      };
+      vm.selectedApprovalCount = function (stage) { return vm.selectedApprovalItems(stage).length; };
+      vm.clearApprovalSelection = function () { vm.approvalSelection = {}; };
       vm.updateBudgetView = function (keepPage) {
         var query = (vm.budgetSearch || "").toLowerCase();
         var filtered = (vm.budgets || []).filter(function (budget) {
@@ -1130,6 +1156,7 @@
         redraw();
       };
       vm.openDecision = function (pet, stage) {
+        vm.bulkDecisionItems = [];
         var project = vm.projects.filter(function (p) {
           return p.pets.indexOf(pet) >= 0;
         })[0];
@@ -1141,7 +1168,31 @@
         }
         openDecisionModal(pet, stage, project);
       };
+      vm.openBulkDecision = function (stage) {
+        var items = vm.selectedApprovalItems(stage);
+        if (!items.length) { noticeError("Select at least one PET to " + (stage === "approve" ? "approve" : "review") + "."); return; }
+        vm.bulkDecisionItems = items;
+        vm.selectedProject = items[0].project;
+        vm.selectedPet = items[0].pet;
+        vm.form = {
+          decision: "Approve",
+          comments: "",
+          budgetSourceId: vm.selectedProject && vm.selectedProject.budgetSourceId,
+          requestedAmount: items.reduce(function (total, item) { return total + (Number(item.pet.requestedAmount) || 0); }, 0),
+          code: items.length + " PETs selected",
+        };
+        vm.modal = {
+          type: "decision",
+          stage: stage,
+          bulk: true,
+          kicker: stage === "review" ? "REVIEWER DECISION" : "APPROVER DECISION",
+          title: stage === "review" ? "Review selected PETs" : "Approve selected PETs",
+          submit: "Record decisions",
+        };
+        redraw();
+      };
       function openDecisionModal(pet, stage, project) {
+        vm.bulkDecisionItems = [];
         vm.selectedProject = project;
         vm.selectedPet = pet;
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
@@ -1285,6 +1336,7 @@
         vm.form = {};
         vm.uploadFile = null;
         vm.uploadPreview = [];
+        vm.bulkDecisionItems = [];
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
@@ -1512,13 +1564,19 @@
           if (vm.decisionCapexEditable() && !vm.form.budgetSourceId) { noticeError("Select a CapEx source before approval."); return; }
           var decisionPayload = { comments: vm.form.comments, decision: vm.form.decision, approve: vm.form.decision === "Approve" };
           if (vm.decisionCapexEditable()) decisionPayload.budgetSourceId = vm.form.budgetSourceId;
-          $http.post("api/portfolio/pets/" + vm.form.petId + "/" + decisionRoute, decisionPayload).then(function () {
-            notice("Decision recorded");
+          var decisionItems = vm.modal.bulk ? vm.bulkDecisionItems.slice(0) : [{ project: vm.selectedProject, pet: vm.form }];
+          if (!decisionItems.length) { noticeError("Select at least one PET before recording this decision."); return; }
+          var projectIds = decisionItems.map(function (item) { return item.project && item.project.projectId; });
+          $q.all(decisionItems.map(function (item) {
+            return $http.post("api/portfolio/pets/" + item.pet.petId + "/" + decisionRoute, angular.copy(decisionPayload));
+          })).then(function () {
+            notice(vm.modal.bulk ? decisionItems.length + " PET decision(s) recorded" : "Decision recorded");
+            vm.clearApprovalSelection();
             vm.close();
-            refreshProjectPets(vm.selectedProject.projectId, true);
-            loadDashboard();
+            refreshProjectsFromDatabase(projectIds);
           }, function (response) {
             noticeError(responseMessage(response, "Unable to record this decision."));
+            refreshProjectsFromDatabase(projectIds);
           });
           return;
         }

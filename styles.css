@@ -1056,6 +1056,10 @@ textarea {
 .pet-upload-grid select {
   min-width: 96px;
 }
+.approvals-table input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
 .pet-excel-field {
   margin: 0;
   min-width: 260px;
