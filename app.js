@@ -387,7 +387,7 @@
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
           else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
           redraw();
-        }, function (response) { vm.auth.error = response.data && response.data.message ? response.data.message : "Unable to complete this request."; });
+        }, function (response) { vm.auth.error = authResponseMessage(response, "Unable to complete this request."); });
       };
       function rememberedLoginEmail() {
         try { return localStorage.getItem("dfmRememberedEmail") || ""; }
@@ -1673,6 +1673,12 @@
         if (response.status === 401) { vm.signOut(); return "Your session has expired or is not authenticated. Please sign in again before saving."; }
         if (response.status === 403) return "Your account does not have permission to save this item. Ask an admin to assign the required role.";
         if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
+        return response.data.message || response.data.Message || fallback;
+      }
+      function authResponseMessage(response, fallback) {
+        if (!response || response.data == null) return fallback;
+        if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
+        if (response.status === 401) return "Invalid email ID, password, or security answer.";
         return response.data.message || response.data.Message || fallback;
       }
       vm.saveModal = function () {

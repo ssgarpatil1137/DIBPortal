@@ -43,6 +43,8 @@ namespace DFM.Web.Controllers
         public IHttpActionResult FirstTimeSetup(PasswordSetupRequest request)
         {
             if (!ValidPassword(request == null ? null : request.Password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
+            if (request.SecurityQuestionId <= 0) return BadRequest("Security question is required.");
+            if (string.IsNullOrWhiteSpace(request.SecurityAnswer)) return BadRequest("Security answer is required.");
             var email = NormalizeEmail(request == null ? null : request.Email);
             if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
             var users = Db.Query("SELECT UserId,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", email));
@@ -57,6 +59,8 @@ namespace DFM.Web.Controllers
         {
             var email = NormalizeEmail(request == null ? null : request.Email);
             if (request == null || string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
+            if (request.SecurityQuestionId <= 0) return BadRequest("Security question is required.");
+            if (string.IsNullOrWhiteSpace(request.SecurityAnswer)) return BadRequest("Security answer is required.");
             var rows = Db.Query("SELECT u.UserId,u.SecurityAnswerSalt,u.SecurityAnswerHash FROM Users u WHERE u.Email=@email AND u.SecurityQuestionId=@question AND u.IsActive=1", new SqlParameter("@email", email), new SqlParameter("@question", request.SecurityQuestionId));
             if (rows.Count == 0 || rows[0]["SecurityAnswerHash"] == null || !PasswordSecurity.Verify((request.SecurityAnswer ?? "").Trim().ToUpperInvariant(), (byte[])rows[0]["SecurityAnswerSalt"], (byte[])rows[0]["SecurityAnswerHash"])) return Unauthorized();
             var token = PasswordSecurity.Token();
