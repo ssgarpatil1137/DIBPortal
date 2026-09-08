@@ -497,7 +497,14 @@ caption {
   height: 14px;
   transition: transform 0.16s ease;
 }
-.icon-btn.disclosure.expanded svg {
+.disclosure-glyph {
+  display: block;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1;
+  transition: transform 0.16s ease;
+}
+.icon-btn.disclosure.expanded .disclosure-glyph {
   transform: rotate(90deg);
 }
 .status {

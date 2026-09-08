@@ -1045,13 +1045,24 @@
         if (!validateNumericInput(form && form.availableBudget, "Available budget", false)) return false;
         return true;
       }
+      function projectHasStatus(project, pets, status) {
+        if (!status) return true;
+        if (sameStatus(project && project.status, status)) return true;
+        if ((pets || []).some(function (pet) { return sameStatus(pet.status, status); })) return true;
+        if (sameStatus(status, "Approved")) return Number(project && project.approvedPetCount) > 0;
+        if (sameStatus(status, "Pending Review")) return Number(project && project.pendingReviewPetCount) > 0;
+        if (sameStatus(status, "Pending Approval")) return Number(project && project.pendingApprovalPetCount) > 0;
+        if (sameStatus(status, "Rejected")) return Number(project && project.rejectedPetCount) > 0;
+        if (sameStatus(status, "Sent Back")) return Number(project && project.sentBackPetCount) > 0;
+        return false;
+      }
       vm.updateView = function (keepPage) {
         var query = vm.search.toLowerCase();
         var currentEmail = (vm.session && vm.session.email || "").toLowerCase();
         var currentName = (vm.session && vm.session.displayName || "").toLowerCase();
         var filtered = vm.projects.filter(function (p) {
           var pets = p.pets || [];
-          var statusMatch = !vm.statusFilter || sameStatus(p.status, vm.statusFilter) || pets.some(function (pet) { return sameStatus(pet.status, vm.statusFilter); });
+          var statusMatch = projectHasStatus(p, pets, vm.statusFilter);
           var isMine = (p.requestorEmail || "").toLowerCase() === currentEmail || (p.requestorName || "").toLowerCase() === currentName;
           var viewMatch = vm.viewFilter === "all" ||
             (vm.viewFilter === "my" && isMine) ||
@@ -1249,6 +1260,9 @@
         var id = Number(petId);
         return ((project && project.pets) || []).filter(function (pet) { return Number(pet.petId) === id; })[0];
       }
+      vm.canExpandProject = function (project) {
+        return !!project && ((project.petsLoaded && project.pets && project.pets.length) || Number(project.petCount) > 0 || Number(project.spendRequestCount) > 0 || Number(project.budgetLineCount) > 0 || Number(project.invoiceCount) > 0);
+      };
       vm.toggleProject = function (project) {
         if (project.expanded) { project.expanded = false; redraw(); return; }
         if (project.petsLoaded || vm.demo) { project.expanded = true; redraw(); return; }
@@ -2128,6 +2142,7 @@
       vm.refreshTransactions = function () {
         if (vm.refreshing) return;
         vm.refreshing = true;
+        var loadedProjectIds = (vm.projects || []).filter(function (project) { return project.expanded || project.petsLoaded; }).map(function (project) { return project.projectId; });
         if (vm.demo) {
           prepareProjects();
           vm.updateView(true);
@@ -2137,6 +2152,8 @@
           return;
         }
         loadDashboard().then(function () {
+          return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
+        }).then(function () {
           return loadRoles();
         }).then(function () {
           notice("Transactions refreshed");

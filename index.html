@@ -187,13 +187,13 @@
             >
               <tr class="project-row">
                 <td>
-                  <button ng-if="project.petCount"
+                  <button ng-if="vm.canExpandProject(project)"
                     class="icon-btn disclosure"
                     ng-class="{expanded:project.expanded}"
-                    title="Expand project"
+                    title="{{project.expanded ? 'Collapse project' : 'Expand project'}}"
                     ng-click="vm.toggleProject(project)"
                   >
-                    <i data-lucide="chevron-right"></i>
+                    <span class="disclosure-glyph">›</span>
                   </button>
                 </td>
                 <td>
