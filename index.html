@@ -281,6 +281,10 @@
                         <span class="level-label">PET REQUESTS</span
                         ><strong>{{project.projectName}}</strong>
                       </div>
+                      <div class="child-total" ng-if="project.pets.length">
+                        <span>Total amount</span>
+                        <strong>{{vm.money(vm.projectPetRequestTotal(project))}}</strong>
+                      </div>
                     </div>
                     <div class="empty" ng-if="!project.pets.length">
                       <i data-lucide="file-plus-2"></i>
@@ -371,7 +375,7 @@
                               ><button
                                 class="icon-btn"
                                 title="Delete PET"
-                                ng-if="vm.can('request')&&pet.status==='Pending Review'"
+                                ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back')"
                                 ng-click="vm.deletePet(project,pet)"
                               >
                                 <i data-lucide="trash-2"></i>
@@ -984,15 +988,13 @@
                   ng-options="pet.petId as pet.code for pet in vm.selectedProject.pets | filter:vm.canAddBudgetLine"
                   required
                 ></select></label
-              ><label ng-if="vm.budgetLineVendorOptions.length"
-                >Vendor Name<select ng-model="vm.form.vendor" ng-change="vm.onBudgetLineVendorChange()" ng-options="vendor as vendor for vendor in vm.budgetLineVendorOptions" required></select></label
-              ><label ng-if="!vm.budgetLineVendorOptions.length"
-                >Vendor Name<input ng-model="vm.form.vendor" ng-readonly="vm.form.budgetLineId" required /></label
+              ><label
+                >Vendor Name<input ng-model="vm.form.vendor" ng-change="vm.onBudgetLineVendorChange()" ng-readonly="vm.form.budgetLineId" required /></label
               ><div class="full detail-grid" ng-if="vm.selectedPet" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>Selected PET</small><strong>{{vm.selectedPet.code}}</strong></div>
                 <div><small>Status</small><strong>{{vm.selectedPet.status}}</strong></div>
-                <div><small>PET amount</small><strong>{{vm.money(vm.selectedPet.requestedAmount)}}</strong></div>
-                <div><small>Available balance</small><strong>{{vm.money(vm.petBudgetLineAvailable(vm.selectedPet,vm.form.budgetLineId))}}</strong></div>
+                <div><small>Approved PET Amount</small><strong>{{vm.money(vm.selectedPet.requestedAmount)}}</strong></div>
+                <div><small>Available PET Amount</small><strong>{{vm.money(vm.petBudgetLineAvailable(vm.selectedPet,vm.form.budgetLineId))}}</strong></div>
                 <div><small>Reviewer</small><strong>{{vm.selectedPet.reviewerEmail||vm.selectedProject.accountableExecLead}}</strong></div>
                 <div><small>Approver</small><strong>{{vm.selectedPet.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
               </div

@@ -506,16 +506,14 @@
       vm.petVendor = existingPetVendor;
       vm.petVendorOptions = function (pet) {
         var values = [];
-        function addVendors(text) {
-          String(text || "").split(",").forEach(function (part) {
-            var value = part.trim();
-            if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
-          });
+        function addVendor(text) {
+          var value = String(text || "").trim();
+          if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
         }
         ((pet && pet.spendItems) || []).forEach(function (item) {
-          addVendors(item.vendor || item.Vendor);
+          addVendor(item.vendor || item.Vendor);
         });
-        addVendors(pet && (pet.vendorName || pet.VendorName));
+        addVendor(pet && (pet.vendorName || pet.VendorName));
         return values;
       };
       function spendItemValue(item, names) {
@@ -539,9 +537,7 @@
         var items = (pet && pet.spendItems) || [];
         if (!vendorKey) return vm.budgetLineVendorOptions.length ? [] : items;
         return items.filter(function (item) {
-          return String(item.vendor || item.Vendor || "").split(",").some(function (part) {
-            return part.trim().toLowerCase() === vendorKey;
-          });
+          return String(item.vendor || item.Vendor || "").trim().toLowerCase() === vendorKey;
         });
       }
       function budgetLineSpendAmount(item) {
@@ -590,7 +586,6 @@
       vm.onBudgetLineVendorChange = applyBudgetLinePetValues;
       function validateBudgetLineVendorSelection() {
         if (!String(vm.form && vm.form.vendor || "").trim()) { noticeError("Vendor Name is required."); return false; }
-        if (vm.budgetLineVendorOptions.length && vm.budgetLineVendorOptions.indexOf(vm.form.vendor) < 0) { noticeError("Select one Vendor Name from the selected PET request."); return false; }
         return true;
       }
       vm.petSpendField = function (pet, field) {
@@ -716,10 +711,10 @@
         return String(project && (project.budgetType || project.BudgetType) || "").toUpperCase();
       }
       vm.petProjectExpenseHead = function (project) {
-        return petProjectExpenseHead(project || vm.selectedProject || vm.form.item) || "Not supplied";
+        return petProjectExpenseHead(project || vm.selectedProject || (vm.form && vm.form.item)) || "Not supplied";
       };
       function applyPetProjectDefaults(row, project) {
-        var head = petProjectExpenseHead(project || vm.selectedProject || vm.form.item);
+        var head = petProjectExpenseHead(project || vm.selectedProject || (vm.form && vm.form.item));
         if (head) row.head = head;
         return row;
       }
@@ -960,6 +955,9 @@
         if (!pet.spendItems || !pet.spendItems.length) return parseNumericInput(pet.requestedAmount);
         return pet.spendItems.reduce(function (total, item) { return total + parseNumericInput(item.aedAmount) * (1 + parseNumericInput(item.contingencyPercent) / 100); }, 0);
       };
+      vm.projectPetRequestTotal = function (project) {
+        return ((project && project.pets) || []).reduce(function (total, pet) { return total + parseNumericInput(pet.requestedAmount); }, 0);
+      };
       function petBudgetLineTotal(pet, excludeBudgetLineId) {
         return ((pet && pet.budgetLines) || []).reduce(function (total, line) {
           if (excludeBudgetLineId && String(line.budgetLineId) === String(excludeBudgetLineId)) return total;
@@ -1027,7 +1025,7 @@
         vm.form.cost = cost;
         var available = parseNumericInput(vm.selectedPet && vm.selectedPet.requestedAmount) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
         if (cost > available) {
-          noticeError("Budget Line amount exceeds the available balance for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available balance: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
+          noticeError("Budget Line amount exceeds the Available PET Amount for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available PET Amount: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
           return false;
         }
         return true;

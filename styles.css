@@ -392,10 +392,11 @@ caption {
   min-width: 1420px;
 }
 .data-table th,
-.nested th {
+.nested th,
+.report-table table th {
   position: sticky;
   top: 0;
-  z-index: 2;
+  z-index: 6;
   text-align: left;
   background: #f0f4f1;
   color: #53645c;
@@ -405,6 +406,8 @@ caption {
   padding: 10px 8px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
+  background-clip: padding-box;
+  box-shadow: 0 1px 0 var(--line);
 }
 .data-table td,
 .nested td {
@@ -530,10 +533,27 @@ caption {
   font-weight: 800;
   letter-spacing: 1px;
 }
+.child-total {
+  min-width: 190px;
+  padding: 7px 12px;
+  border: 1px solid #bfd8ca;
+  border-radius: 6px;
+  background: #f8fbf9;
+  text-align: right;
+}
+.child-total span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.child-total strong {
+  color: var(--green-3);
+}
 .nested th {
   background: var(--green);
   color: #fff;
-  position: static;
 }
 .nested td {
   font-size: 10px;
@@ -814,7 +834,7 @@ dd {
 .modal > header {
   position: sticky;
   top: 0;
-  z-index: 3;
+  z-index: 12;
   background: #fff;
   border-bottom: 1px solid var(--line);
   display: flex;
@@ -1331,7 +1351,8 @@ textarea {
   font-size: 11px;
 }
 .data-table th,
-.nested th {
+.nested th,
+.report-table table th {
   font-size: 11px;
 }
 .data-table td,
