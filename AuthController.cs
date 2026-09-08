@@ -11,6 +11,8 @@ namespace DFM.Web.Controllers
     [RoutePrefix("api/auth")]
     public class AuthController : ApiController
     {
+        internal const int SessionTimeoutMinutes = 10;
+
         [AllowAnonymous, HttpPost, Route("login")]
         public IHttpActionResult Login(LoginRequest request)
         {
@@ -78,7 +80,7 @@ namespace DFM.Web.Controllers
         private static AuthResult CreateSession(int userId, string email, string displayName)
         {
             var token = PasswordSecurity.Token();
-            Db.Execute("DELETE UserSessions WHERE UserId=@user; INSERT UserSessions(UserId,TokenHash,ExpiresUtc) VALUES(@user,HASHBYTES('SHA2_256',@token),DATEADD(HOUR,8,GETUTCDATE()))", new SqlParameter("@user", userId), new SqlParameter("@token", token));
+            Db.Execute("DELETE UserSessions WHERE UserId=@user; INSERT UserSessions(UserId,TokenHash,ExpiresUtc) VALUES(@user,HASHBYTES('SHA2_256',@token),DATEADD(MINUTE,@timeout,GETUTCDATE()))", new SqlParameter("@user", userId), new SqlParameter("@token", token), new SqlParameter("@timeout", SessionTimeoutMinutes));
             var roles = Db.Query("SELECT r.Name FROM UserRoles ur JOIN Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@user", new SqlParameter("@user", userId)).Select(row => Convert.ToString(row["Name"])).ToArray();
             return new AuthResult { Token = token, Email = email, DisplayName = displayName, Roles = roles };
         }
