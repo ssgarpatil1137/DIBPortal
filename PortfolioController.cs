@@ -258,6 +258,13 @@ namespace DFM.Web.Controllers
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
+        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("budget-lines/{budgetLineId:int}")]
+        public IHttpActionResult DeleteBudgetLine(int budgetLineId)
+        {
+            try { Db.Execute("EXEC dbo.sp_DeleteBudgetLine @BudgetLineId,@User", P("@BudgetLineId", budgetLineId), P("@User", User.Identity.Name)); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices")]
         public IHttpActionResult SaveInvoice(InvoiceRequest value)
         {

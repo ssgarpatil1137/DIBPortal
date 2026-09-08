@@ -881,6 +881,14 @@
           loadDashboard();
         }, function (response) { noticeError((response.data && response.data.message) || "Unable to delete this PET."); });
       };
+      vm.deleteBudgetLine = function (project, line) {
+        if (!window.confirm("Delete Budget Line " + (line.petReference || line.camId || line.budgetLineId) + "? This will also delete its invoices.")) return;
+        $http.delete("api/portfolio/budget-lines/" + line.budgetLineId).then(function () {
+          notice("Budget line deleted");
+          refreshProjectPets(project.projectId, true);
+          loadDashboard();
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete this Budget Line.")); });
+      };
       function refreshProjectPets(projectId, expandRegardless, keepExpandedState) {
         var project = vm.projects.filter(function (p) { return p.projectId === projectId; })[0];
         if (!project) return $q.when();
