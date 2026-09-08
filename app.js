@@ -1051,6 +1051,7 @@
         var currentName = (vm.session && vm.session.displayName || "").toLowerCase();
         var filtered = vm.projects.filter(function (p) {
           var pets = p.pets || [];
+          var statusMatch = !vm.statusFilter || sameStatus(p.status, vm.statusFilter) || pets.some(function (pet) { return sameStatus(pet.status, vm.statusFilter); });
           var isMine = (p.requestorEmail || "").toLowerCase() === currentEmail || (p.requestorName || "").toLowerCase() === currentName;
           var viewMatch = vm.viewFilter === "all" ||
             (vm.viewFilter === "my" && isMine) ||
@@ -1062,7 +1063,7 @@
             (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; }));
           return (
             viewMatch &&
-            (!vm.statusFilter || p.status === vm.statusFilter) &&
+            statusMatch &&
             (!query ||
               [
                 p.projectCode,
@@ -1162,6 +1163,25 @@
         var key = decisionSelectionKey(item.pet);
         if (vm.decisionSelection[key]) delete vm.decisionSelection[key];
         else vm.decisionSelection[key] = true;
+        rebuildBulkDecisionItems();
+      };
+      function decisionSelectableItems() {
+        return (vm.decisionPetRows || []).filter(function (item) { return vm.canSelectDecisionPet(item); });
+      }
+      vm.decisionSelectableCount = function () { return decisionSelectableItems().length; };
+      vm.allDecisionPetsSelected = function () {
+        var items = decisionSelectableItems();
+        return !!items.length && items.every(function (item) { return vm.isDecisionPetSelected(item); });
+      };
+      vm.toggleAllDecisionPets = function () {
+        var items = decisionSelectableItems();
+        if (!items.length) return;
+        var selectAll = !vm.allDecisionPetsSelected();
+        items.forEach(function (item) {
+          var key = decisionSelectionKey(item.pet);
+          if (selectAll) vm.decisionSelection[key] = true;
+          else delete vm.decisionSelection[key];
+        });
         rebuildBulkDecisionItems();
       };
       vm.selectedDecisionCount = function () { return vm.bulkDecisionItems.length; };

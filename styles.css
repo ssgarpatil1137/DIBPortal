@@ -153,6 +153,15 @@ svg {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.user-email {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e6f2ec;
+  font-size: 12px;
+  font-weight: 700;
+}
 .avatar {
   width: 34px;
   height: 34px;
@@ -450,6 +459,18 @@ caption {
 .text-link:hover {
   color: var(--green-2);
   text-decoration: underline;
+}
+.grid-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.grid-check input {
+  width: auto;
+  margin: 0;
 }
 .project-name,.truncate-cell{display:block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wide-cell{max-width:420px}.count-chip{display:inline-grid;place-items:center;min-width:25px;height:22px;padding:0 6px;border-radius:4px;background:#e8f0eb;color:var(--green);font-weight:800}.pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:11px}.pagination button:disabled{opacity:.35;cursor:not-allowed}.source-utilization{grid-column:1/-1}.source-utilization table{min-width:760px}.option-check{display:flex!important;align-items:center;gap:8px;padding:10px;background:#f3f7f4;border:1px solid var(--line);border-radius:4px}.option-check input{width:auto;margin:0}.select2-container{margin-top:5px;text-transform:none}.select2-container .select2-selection--single{height:38px;border-color:#bdcbc3}.select2-container--default .select2-selection--single .select2-selection__rendered{line-height:36px;padding-left:10px}.select2-container--default .select2-selection--single .select2-selection__arrow{height:36px}.spend-preview{max-height:260px;margin-bottom:16px}.approvals-table{min-width:1420px}.budget-register,.role-table{min-width:980px}.inline-empty{padding:34px}.role-summary{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:#f7faf8}.role-summary span{font-size:11px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:4px;padding:7px 9px}.role-summary b{color:var(--green);font-size:14px;margin-right:4px}
 .icon-btn {
@@ -1161,28 +1182,34 @@ textarea {
   padding: 12px 16px;
   border-radius: 5px;
   box-shadow: var(--shadow);
-  z-index: 120;
+  z-index: 140;
   display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: 420px;
+  align-items: flex-start;
+  gap: 10px;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 48px));
 }
-.toast span {
+.toast-message {
   flex: 1 1 auto;
   min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 .toast.error {
   background: var(--red);
 }
-.toast .icon-btn {
+.toast .toast-close {
   flex: 0 0 30px;
   width: 30px;
   height: 30px;
   color: #fff;
   background: rgba(255, 255, 255, 0.16);
   border: 1px solid rgba(255, 255, 255, 0.28);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
 }
-.toast .icon-btn:hover {
+.toast .toast-close:hover {
   color: #fff;
   background: rgba(255, 255, 255, 0.26);
 }

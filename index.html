@@ -42,6 +42,7 @@
       </nav>
       <div class="user-area">
         <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
+        <span class="user-email" title="{{vm.session.email}}">{{vm.session.email}}</span>
         <button class="btn secondary topbar-btn" type="button" ng-click="vm.refreshTransactions()" ng-disabled="vm.refreshing"><i data-lucide="refresh-cw"></i>{{vm.refreshing ? 'Refreshing' : 'Refresh'}}</button>
         <button class="btn secondary topbar-btn" type="button" ng-click="vm.signOut()"><i data-lucide="log-out"></i>Sign out</button>
       </div>
@@ -935,7 +936,7 @@
               </div>
               <div class="table-scroll spend-preview" ng-if="vm.modal.bulk">
                 <table class="nested">
-                  <thead><tr><th>Select</th><th>Code</th><th>Status</th><th>Budget source</th><th>Exp. Head</th><th>Topic</th><th>Description</th><th>Cost Type</th><th>Final request (AED)</th><th>Vendor</th><th>Reviewer</th><th>Approver</th><th>Submitted</th></tr></thead>
+                  <thead><tr><th><label class="grid-check"><input type="checkbox" ng-checked="vm.allDecisionPetsSelected()" ng-click="vm.toggleAllDecisionPets()" ng-disabled="!vm.decisionSelectableCount()" />Select all</label></th><th>Code</th><th>Status</th><th>Budget source</th><th>Exp. Head</th><th>Topic</th><th>Description</th><th>Cost Type</th><th>Final request (AED)</th><th>Vendor</th><th>Reviewer</th><th>Approver</th><th>Submitted</th></tr></thead>
                   <tbody><tr ng-repeat="item in vm.decisionPetRows track by item.pet.petId"><td><input type="checkbox" ng-checked="vm.isDecisionPetSelected(item)" ng-click="vm.toggleDecisionPet(item)" ng-disabled="!vm.canSelectDecisionPet(item)" /></td><td><b>{{item.pet.code}}</b></td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{item.project.budgetType}} · {{item.project.budgetSource}}</td><td>{{vm.petSpendField(item.pet,'head')}}</td><td>{{vm.petSpendField(item.pet,'topic')}}</td><td>{{vm.petSpendField(item.pet,'description')}}</td><td>{{vm.petSpendField(item.pet,'costType')}}</td><td>{{vm.amount(item.pet.requestedAmount)}}</td><td>{{item.pet.vendorName||vm.petVendor(item.pet)||'Not supplied'}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td><td>{{item.pet.createdUtc|date:'dd-MMM-yyyy'}}</td></tr></tbody>
                 </table>
               </div>
@@ -1210,8 +1211,8 @@
       </section>
     </div>
     <div class="toast" ng-class="{error:vm.toastIsError}" ng-if="vm.toast">
-      <i data-lucide="{{vm.toastIsError?'alert-triangle':'check-circle-2'}}"></i><span>{{vm.toast}}</span
-      ><button class="icon-btn" title="Dismiss" ng-click="vm.dismissToast()"><i data-lucide="x"></i></button>
+      <i data-lucide="{{vm.toastIsError?'alert-triangle':'check-circle-2'}}"></i><span class="toast-message">{{vm.toast}}</span
+      ><button type="button" class="icon-btn toast-close" title="Dismiss" ng-click="vm.dismissToast()"><span aria-hidden="true">&times;</span></button>
     </div>
     <script src="vendor/jquery.min.js"></script>
     <script src="vendor/select2.min.js"></script>
