@@ -989,7 +989,7 @@
                   required
                 ></select></label
               ><label
-                >Vendor Name<input ng-model="vm.form.vendor" ng-change="vm.onBudgetLineVendorChange()" ng-readonly="vm.form.budgetLineId" required /></label
+                >Vendor Name<input ng-model="vm.form.vendor" ng-change="vm.onBudgetLineVendorChange()" readonly required /></label
               ><div class="full detail-grid" ng-if="vm.selectedPet" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>Selected PET</small><strong>{{vm.selectedPet.code}}</strong></div>
                 <div><small>Status</small><strong>{{vm.selectedPet.status}}</strong></div>

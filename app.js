@@ -881,11 +881,11 @@
           loadDashboard();
         }, function (response) { noticeError((response.data && response.data.message) || "Unable to delete this PET."); });
       };
-      function refreshProjectPets(projectId, expandRegardless) {
+      function refreshProjectPets(projectId, expandRegardless, keepExpandedState) {
         var project = vm.projects.filter(function (p) { return p.projectId === projectId; })[0];
         if (!project) return $q.when();
         project.petsLoaded = false;
-        return loadProjectPets(project, expandRegardless);
+        return loadProjectPets(project, expandRegardless, keepExpandedState);
       }
       function refreshProjectsFromDatabase(projectIds) {
         var ids = [];
@@ -1238,6 +1238,7 @@
         project.loading = true;
         return $http.get("api/portfolio/projects/" + project.projectId).then(function (response) {
           var data = response.data;
+          if (data.project) angular.extend(project, data.project);
           project.pets = data.pets || [];
           project.pets.forEach(function (pet) {
             pet.spendItems = (data.spendItems || []).filter(function (item) { return item.petId === pet.petId; });
@@ -1304,6 +1305,15 @@
         vm.openJira(project || row);
       };
       vm.openPet = function (project, pet) {
+        if (!vm.demo && project) {
+          return refreshProjectPets(project.projectId, false, true).then(function () {
+            var refreshedPet = pet && projectPetById(project, pet.petId || pet.PetId);
+            openPetModal(project, refreshedPet || pet);
+          });
+        }
+        openPetModal(project, pet);
+      };
+      function openPetModal(project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
         vm.uploadFile = null;
@@ -1336,7 +1346,7 @@
           submit: pet && sameStatus(vm.form.status, "Approved") ? "Save vendor name" : pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
-      };
+      }
       vm.petVendorOnly = function () { return vm.selectedPet && sameStatus(vm.form && vm.form.status || vm.selectedPet.status, "Approved"); };
       vm.openSpend = function (pet) {
         vm.selectedPet = pet;
