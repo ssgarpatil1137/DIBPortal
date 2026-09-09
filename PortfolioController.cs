@@ -251,6 +251,7 @@ namespace DFM.Web.Controllers
                         lpoStatus = existing["LpoStatus"];
                     }
                 }
+                value.Vendor = NormalizeBudgetLineVendors(value.PetId, value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
                 return Ok(Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault());
             }
@@ -378,6 +379,48 @@ namespace DFM.Web.Controllers
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
+
+        private static string NormalizeBudgetLineVendors(int petId, string vendor)
+        {
+            var selected = SplitVendorNames(vendor);
+            if (selected.Count == 0) throw new ArgumentException("Vendor Name is required.");
+            var allowed = AllowedPetVendors(petId);
+            if (allowed.Count == 0) throw new ArgumentException("Selected PET does not have an approved Vendor Name.");
+            var normalized = new List<string>();
+            foreach (var value in selected)
+            {
+                var match = allowed.FirstOrDefault(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
+                if (match == null) throw new ArgumentException("Vendor Name can include only vendors from the selected PET: " + string.Join(", ", allowed.ToArray()) + ".");
+                if (!normalized.Any(item => string.Equals(item, match, StringComparison.OrdinalIgnoreCase))) normalized.Add(match);
+            }
+            return string.Join(", ", normalized.ToArray());
+        }
+
+        private static List<string> AllowedPetVendors(int petId)
+        {
+            var values = new List<string>();
+            var rows = Db.Query(@"SELECT VendorName Vendor FROM dbo.PETRequests WHERE PetId=@PetId
+                UNION ALL SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId", P("@PetId", petId));
+            foreach (var row in rows)
+            {
+                foreach (var vendor in SplitVendorNames(Convert.ToString(row["Vendor"])))
+                {
+                    if (!values.Any(item => string.Equals(item, vendor, StringComparison.OrdinalIgnoreCase))) values.Add(vendor);
+                }
+            }
+            return values;
+        }
+
+        private static List<string> SplitVendorNames(string vendor)
+        {
+            var values = new List<string>();
+            foreach (var part in (vendor ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var value = part.Trim();
+                if (value.Length > 0 && !values.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase))) values.Add(value);
+            }
+            return values;
+        }
 
         private static void ExecutePetDecision(int petId, string stage, DecisionRequest value, string user)
         {

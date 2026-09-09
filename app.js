@@ -504,11 +504,20 @@
         return "";
       }
       vm.petVendor = existingPetVendor;
+      function splitVendorNames(text) {
+        var values = [];
+        String(text || "").split(",").forEach(function (part) {
+          var value = part.trim();
+          if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
+        });
+        return values;
+      }
       vm.petVendorOptions = function (pet) {
         var values = [];
         function addVendor(text) {
-          var value = String(text || "").trim();
-          if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
+          splitVendorNames(text).forEach(function (value) {
+            if (values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
+          });
         }
         ((pet && pet.spendItems) || []).forEach(function (item) {
           addVendor(item.vendor || item.Vendor);
@@ -533,11 +542,11 @@
         return values;
       }
       function budgetLineSpendItemsForVendor(pet, vendor) {
-        var vendorKey = String(vendor || "").trim().toLowerCase();
+        var vendorKeys = splitVendorNames(vendor).map(function (value) { return value.toLowerCase(); });
         var items = (pet && pet.spendItems) || [];
-        if (!vendorKey) return vm.budgetLineVendorOptions.length ? [] : items;
+        if (!vendorKeys.length) return vm.budgetLineVendorOptions.length ? [] : items;
         return items.filter(function (item) {
-          return String(item.vendor || item.Vendor || "").trim().toLowerCase() === vendorKey;
+          return splitVendorNames(item.vendor || item.Vendor).some(function (itemVendor) { return vendorKeys.indexOf(itemVendor.toLowerCase()) >= 0; });
         });
       }
       function budgetLineSpendAmount(item) {
@@ -585,7 +594,17 @@
       }
       vm.onBudgetLineVendorChange = applyBudgetLinePetValues;
       function validateBudgetLineVendorSelection() {
-        if (!String(vm.form && vm.form.vendor || "").trim()) { noticeError("Vendor Name is required."); return false; }
+        var selected = splitVendorNames(vm.form && vm.form.vendor);
+        if (!selected.length) { noticeError("Vendor Name is required."); return false; }
+        var allowed = vm.budgetLineVendorOptions || [];
+        if (!allowed.length) { noticeError("Selected PET does not have an approved Vendor Name."); return false; }
+        var normalized = [];
+        for (var index = 0; index < selected.length; index++) {
+          var match = allowed.filter(function (vendor) { return vendor.toLowerCase() === selected[index].toLowerCase(); })[0];
+          if (!match) { noticeError("Vendor Name can include only vendors from the selected PET: " + allowed.join(", ") + "."); return false; }
+          if (normalized.map(function (vendor) { return vendor.toLowerCase(); }).indexOf(match.toLowerCase()) < 0) normalized.push(match);
+        }
+        vm.form.vendor = normalized.join(", ");
         return true;
       }
       vm.petSpendField = function (pet, field) {
@@ -1498,8 +1517,8 @@
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         var petVendors = vm.petVendorOptions(vm.selectedPet);
-        vm.budgetLineVendorOptions = line ? [] : petVendors;
-        vm.form.vendor = line ? vm.form.vendor : petVendors[0] || "";
+        vm.budgetLineVendorOptions = petVendors;
+        vm.form.vendor = line ? vm.form.vendor : petVendors.join(", ");
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1521,7 +1540,9 @@
         if (vm.form.budgetLineId) return;
         var petVendors = vm.petVendorOptions(pet);
         vm.budgetLineVendorOptions = petVendors;
-        if (petVendors.length && petVendors.indexOf(vm.form.vendor) < 0) vm.form.vendor = petVendors[0];
+        var selectedVendors = splitVendorNames(vm.form.vendor);
+        var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
+        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors.join(", ");
         if (!petVendors.length && petChanged) vm.form.vendor = "";
         if (skipAutoFill) return;
         applyBudgetLinePetValues();
