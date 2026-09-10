@@ -510,7 +510,6 @@
       }
       function existingPetVendor(pet) {
         if (!pet) return "";
-        if (pet.vendorName || pet.VendorName) return pet.vendorName || pet.VendorName;
         if (pet.spendItems && pet.spendItems.length) return pet.spendItems[0].vendor || pet.spendItems[0].Vendor || "";
         if (pet.budgetLines && pet.budgetLines.length) return pet.budgetLines[0].vendor || pet.budgetLines[0].Vendor || "";
         return "";
@@ -532,7 +531,6 @@
         ((pet && pet.spendItems) || []).forEach(function (item) {
           addVendor(item.vendor || item.Vendor);
         });
-        if (!values.length) addVendor(pet && (pet.vendorName || pet.VendorName));
         return values;
       };
       function spendItemValue(item, names) {
@@ -1834,7 +1832,6 @@
               vendorNameOnly: true,
             };
             $http.post("api/portfolio/pets", vendorPayload).then(function () {
-              vm.selectedPet.vendorName = vm.form.vendorName;
               (vm.selectedPet.spendItems || []).forEach(function (item) { item.vendor = vm.form.vendorName; });
               notice("PET vendor name updated");
               vm.close();
@@ -1882,7 +1879,7 @@
         }
         if (type === "pet") {
           if (vm.petVendorOnly()) {
-            vm.selectedPet.vendorName = vm.form.vendorName;
+            (vm.selectedPet.spendItems || []).forEach(function (item) { item.vendor = vm.form.vendorName; });
             notice("PET vendor name updated");
             vm.close();
             return;

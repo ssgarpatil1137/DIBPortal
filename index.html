@@ -935,7 +935,7 @@
                 <div><small>PET status</small><strong>{{vm.form.status}}</strong></div>
                 <div><small>Currency</small><strong>{{vm.form.currency}}</strong></div>
                 <div><small>Requested amount</small><strong>{{vm.money(vm.form.requestedAmount)}}</strong></div>
-                <div><small>Vendor</small><strong>{{vm.form.vendorName||vm.petVendor(vm.selectedPet)||'Not supplied'}}</strong></div>
+                <div><small>Vendor</small><strong>{{vm.petVendor(vm.selectedPet)||'Not supplied'}}</strong></div>
                 <div><small>Submitted</small><strong>{{vm.form.createdUtc|date:'dd-MMM-yyyy'}}</strong></div>
               </div>
               <div class="table-scroll spend-preview" ng-if="!vm.modal.bulk&&vm.selectedPet.spendItems.length">
@@ -947,7 +947,7 @@
               <div class="table-scroll spend-preview" ng-if="vm.modal.bulk">
                 <table class="nested">
                   <thead><tr><th><label class="grid-check"><input type="checkbox" ng-checked="vm.allDecisionPetsSelected()" ng-click="vm.toggleAllDecisionPets()" ng-disabled="!vm.decisionSelectableCount()" />Select all</label></th><th>Code</th><th>Status</th><th>Budget source</th><th>Exp. Head</th><th>Topic</th><th>Description</th><th>Cost Type</th><th>Final request (AED)</th><th>Vendor</th><th>Reviewer</th><th>Approver</th><th>Submitted</th></tr></thead>
-                  <tbody><tr ng-repeat="item in vm.decisionPetRows track by item.pet.petId"><td><input type="checkbox" ng-checked="vm.isDecisionPetSelected(item)" ng-click="vm.toggleDecisionPet(item)" ng-disabled="!vm.canSelectDecisionPet(item)" /></td><td><b>{{item.pet.code}}</b></td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{item.project.budgetType}} · {{item.project.budgetSource}}</td><td>{{vm.petSpendField(item.pet,'head')}}</td><td>{{vm.petSpendField(item.pet,'topic')}}</td><td>{{vm.petSpendField(item.pet,'description')}}</td><td>{{vm.petSpendField(item.pet,'costType')}}</td><td>{{vm.amount(item.pet.requestedAmount)}}</td><td>{{item.pet.vendorName||vm.petVendor(item.pet)||'Not supplied'}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td><td>{{item.pet.createdUtc|date:'dd-MMM-yyyy'}}</td></tr></tbody>
+                  <tbody><tr ng-repeat="item in vm.decisionPetRows track by item.pet.petId"><td><input type="checkbox" ng-checked="vm.isDecisionPetSelected(item)" ng-click="vm.toggleDecisionPet(item)" ng-disabled="!vm.canSelectDecisionPet(item)" /></td><td><b>{{item.pet.code}}</b></td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{item.project.budgetType}} · {{item.project.budgetSource}}</td><td>{{vm.petSpendField(item.pet,'head')}}</td><td>{{vm.petSpendField(item.pet,'topic')}}</td><td>{{vm.petSpendField(item.pet,'description')}}</td><td>{{vm.petSpendField(item.pet,'costType')}}</td><td>{{vm.amount(item.pet.requestedAmount)}}</td><td>{{vm.petVendor(item.pet)||'Not supplied'}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td><td>{{item.pet.createdUtc|date:'dd-MMM-yyyy'}}</td></tr></tbody>
                 </table>
               </div>
               <label class="full"

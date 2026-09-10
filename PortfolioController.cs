@@ -146,7 +146,6 @@ namespace DFM.Web.Controllers
                     if (value.VendorNameOnly || string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only approved PET requests allow vendor-name-only editing.");
-                        Db.Execute("UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId AND Status='Approved'", P("@VendorName", value.VendorName), P("@PetId", value.PetId));
                         Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", value.VendorName), P("@PetId", value.PetId));
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
@@ -422,7 +421,7 @@ namespace DFM.Web.Controllers
             foreach (var value in selected)
             {
                 var match = allowed.FirstOrDefault(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
-                if (match == null) throw new ArgumentException("Vendor Name can include only vendors from the selected PET: " + string.Join(", ", allowed.ToArray()) + ".");
+                if (match == null) throw new ArgumentException("Vendor Name must be selected from SpendItems for the selected PET.");
                 if (!normalized.Any(item => string.Equals(item, match, StringComparison.OrdinalIgnoreCase))) normalized.Add(match);
             }
             return string.Join(", ", normalized.ToArray());
@@ -431,8 +430,7 @@ namespace DFM.Web.Controllers
         private static List<string> AllowedPetVendors(int petId)
         {
             var values = new List<string>();
-            var rows = Db.Query(@"SELECT VendorName Vendor FROM dbo.PETRequests WHERE PetId=@PetId
-                UNION ALL SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId", P("@PetId", petId));
+            var rows = Db.Query("SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId", P("@PetId", petId));
             foreach (var row in rows)
             {
                 foreach (var vendor in SplitVendorNames(Convert.ToString(row["Vendor"])))
