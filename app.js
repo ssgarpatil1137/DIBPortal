@@ -924,8 +924,7 @@
           notice((response.data.imported || 0) + " PET row(s) saved.");
           vm.uploadFile = null;
           vm.close();
-          onDone();
-          loadDashboard();
+          loadDashboard().then(function () { if (onDone) onDone(); });
         }, function (response) {
           noticeError(responseMessage(response, "Unable to save PET rows."));
         });
@@ -1714,8 +1713,7 @@
           notice((response.data.imported || 0) + " row(s) imported.");
           vm.uploadFile = null;
           vm.close();
-          onDone();
-          loadDashboard();
+          loadDashboard().then(function () { if (onDone) onDone(); });
         }, function (response) {
           noticeError(responseMessage(response, "Import failed."));
         });
@@ -1838,7 +1836,8 @@
           }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!vm.selectedPet && (vm.uploadPreview || []).length) {
-            savePetUploadRows(vm.selectedProject.projectId, function () { refreshProjectPets(vm.selectedProject.projectId, true); }, vm.form.reviewRequired);
+            var bulkPetProjectId = vm.selectedProject.projectId;
+            savePetUploadRows(bulkPetProjectId, function () { refreshProjectPets(bulkPetProjectId, true); }, vm.form.reviewRequired);
             return;
           }
           if (!vm.selectedPet && !(vm.uploadPreview || []).length) { noticeError("Upload Excel rows or add a PET row before saving."); return; }
