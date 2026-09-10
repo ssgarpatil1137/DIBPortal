@@ -517,10 +517,8 @@
       vm.petVendor = existingPetVendor;
       function splitVendorNames(text) {
         var values = [];
-        String(text || "").split(",").forEach(function (part) {
-          var value = part.trim();
-          if (value && values.map(function (v) { return v.toLowerCase(); }).indexOf(value.toLowerCase()) < 0) values.push(value);
-        });
+        var value = String(text || "").trim();
+        if (value) values.push(value);
         return values;
       }
       vm.petVendorOptions = function (pet) {
@@ -591,19 +589,19 @@
         var currencies = uniqueSpendValues(items, ["currency", "Currency"]);
         if (!amount && currencies.length === 1) vm.form.currency = currencies[0];
         var descriptions = uniqueSpendValues(items, ["description", "Description"]);
-        if (descriptions.length) vm.form.justification = descriptions.join(", ");
+        if (descriptions.length) vm.form.justification = descriptions.join(" | ");
         var glNumbers = uniqueSpendValues(items, ["glNumber", "GlNumber", "GLNumber"]);
-        if (glNumbers.length) vm.form.glNumber = glNumbers.join(", ");
+        if (glNumbers.length) vm.form.glNumber = glNumbers.join(" | ");
         var camIds = uniqueSpendValues(items, ["camId", "CamId", "CAMId"]);
         if (camIds.length) vm.form.camId = camIds[0];
         var statuses = uniqueSpendValues(items, ["camStatus", "CamStatus", "status", "Status"]);
         if (statuses.length) vm.form.camStatus = statuses[0];
         var camComments = uniqueSpendValues(items, ["camComments", "CamComments"]);
-        if (camComments.length) vm.form.camComments = camComments.join(", ");
+        if (camComments.length) vm.form.camComments = camComments.join(" | ");
         var lpoRequests = uniqueSpendValues(items, ["lpoRequest", "LpoRequest", "lpoNumber", "LpoNumber"]);
         if (lpoRequests.length) vm.form.lpoRequest = lpoRequests[0];
         var lpoComments = uniqueSpendValues(items, ["lpoComments", "LpoComments"]);
-        if (lpoComments.length) vm.form.lpoComments = lpoComments.join(", ");
+        if (lpoComments.length) vm.form.lpoComments = lpoComments.join(" | ");
         setBudgetLineDate("camCreatedDate", items, ["camCreatedDate", "CamCreatedDate"]);
         setBudgetLineDate("camApprovedDate", items, ["camApprovedDate", "CamApprovedDate"]);
         setBudgetLineDate("lpoIssueDate", items, ["lpoIssueDate", "LpoIssueDate"]);
@@ -614,13 +612,9 @@
         if (!selected.length) { noticeError("Vendor Name is required."); return false; }
         var allowed = vm.budgetLineVendorOptions || [];
         if (!allowed.length) { noticeError("Selected PET does not have an approved Vendor Name."); return false; }
-        var normalized = [];
-        for (var index = 0; index < selected.length; index++) {
-          var match = allowed.filter(function (vendor) { return vendor.toLowerCase() === selected[index].toLowerCase(); })[0];
-          if (!match) { noticeError("Vendor Name can include only vendors from the selected PET: " + allowed.join(", ") + "."); return false; }
-          if (normalized.map(function (vendor) { return vendor.toLowerCase(); }).indexOf(match.toLowerCase()) < 0) normalized.push(match);
-        }
-        vm.form.vendor = normalized.join(", ");
+        var match = allowed.filter(function (vendor) { return vendor.toLowerCase() === selected[0].toLowerCase(); })[0];
+        if (!match) { noticeError("Vendor Name must be selected from the selected PET."); return false; }
+        vm.form.vendor = match;
         return true;
       }
       vm.petSpendField = function (pet, field) {
@@ -629,7 +623,7 @@
           var value = item[field];
           if (value && values.indexOf(value) < 0) values.push(value);
         });
-        return values.join(", ") || "Not supplied";
+        return values.join(" | ") || "Not supplied";
       };
       // Login is by email, but JIRA only records the reviewer/approver's display name against
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
