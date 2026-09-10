@@ -16,6 +16,7 @@ namespace DFM.Web.Controllers
     [ApiAuthorize, RoutePrefix("api/portfolio")]
     public class PortfolioController : ApiController
     {
+        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
         private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
         private static readonly string[] CostTypeOptions = {
             "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
@@ -230,7 +231,7 @@ namespace DFM.Web.Controllers
         {
             try
             {
-                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence)).FirstOrDefault();
+                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence,@LineId", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence), P("@LineId", value.LineId)).FirstOrDefault();
             }
             catch (SqlException ex)
             {
@@ -398,11 +399,14 @@ namespace DFM.Web.Controllers
         private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
         {
             if (value == null) throw new ArgumentException("PET line item details are required.");
+            var department = DepartmentOptions.FirstOrDefault(option => string.Equals(option, value.Department, StringComparison.OrdinalIgnoreCase));
+            if (department == null) throw new ArgumentException("Department is required.");
             var unitType = UnitTypeOptions.FirstOrDefault(option => string.Equals(option, value.UnitType, StringComparison.OrdinalIgnoreCase));
             if (unitType == null) throw new ArgumentException("Unit Type is required.");
             var costType = CostTypeOptions.FirstOrDefault(option => string.Equals(option, value.CostType, StringComparison.OrdinalIgnoreCase));
             if (costType == null) throw new ArgumentException("Cost Type is required.");
             if (!value.YearlyRecurrence.HasValue || value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required.");
+            value.Department = department;
             value.UnitType = unitType;
             value.CostType = costType;
         }

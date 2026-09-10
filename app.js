@@ -78,15 +78,16 @@
       vm.visibleRoleUsers = [];
       vm.roleSummary = { reviewer: 0, approver: 0, admin: 0 };
       vm.availableManagedRoles = ["Reviewer", "Approver", "Admin"];
-        vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
-        vm.costTypeOptions = [
-          "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
-          "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
-          "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
-          "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
-          "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out",
-        ];
-        vm.yearlyRecurrenceOptions = [1, 2, 3, 4, 5];
+      vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
+      vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
+      vm.costTypeOptions = [
+        "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
+        "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
+        "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+        "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
+        "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out",
+      ];
+      vm.yearlyRecurrenceOptions = [1, 2, 3, 4, 5];
       vm.tabs = [
         { id: "portfolio", label: "Portfolio", icon: "layout-dashboard", roles: ["Requestor", "Reviewer", "Approver", "Admin", "Master"] },
         { id: "approvals", label: "Approvals", icon: "stamp", roles: ["Reviewer", "Approver"] },
@@ -758,7 +759,7 @@
       }
       function preparePetUploadRow(row, generateReference) {
         var project = vm.form.item || vm.selectedProject || {};
-        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: generateReference ? "" : vm.form.code || "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, row || {});
+        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: generateReference ? "" : vm.form.code || "", lineId: "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, row || {});
         applyPetProjectDefaults(prepared, project);
         if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
         if (prepared.spendItemId && prepared.unitPrice) {
@@ -786,9 +787,11 @@
         return options.filter(function (option) { return String(option).toLowerCase() === String(value || "").trim().toLowerCase(); })[0] || value;
       }
       function validatePetRequiredDropdowns(row, rowLabel) {
+        if (!validOption(row && row.department, vm.departmentOptions)) { noticeError("Department is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.unitType, vm.unitTypeOptions)) { noticeError("Unit Type is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.costType, vm.costTypeOptions)) { noticeError("Cost Type is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.yearlyRecurrence, vm.yearlyRecurrenceOptions)) { noticeError("Yearly Recurrence is required on " + rowLabel + "."); return false; }
+        row.department = normalizeOption(row.department, vm.departmentOptions);
         row.unitType = normalizeOption(row.unitType, vm.unitTypeOptions);
         row.costType = normalizeOption(row.costType, vm.costTypeOptions);
         row.yearlyRecurrence = parseNumericInput(row.yearlyRecurrence);
@@ -829,8 +832,8 @@
       function validatePetUploadRow(row, rowLabel, requirePetReference, excludeRow) {
         applyPetProjectDefaults(row);
         calculatePetUploadRow(row, false);
-        if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on " + rowLabel + "."); return false; }
-        if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("ID must be unique on " + rowLabel + "."); return false; }
+        if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("PET Reference No is required on " + rowLabel + "."); return false; }
+        if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("PET Reference No must be unique on " + rowLabel + "."); return false; }
         if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on " + rowLabel + "."); return false; }
         if (!validatePetRequiredDropdowns(row, rowLabel)) return false;
         if (!validateNumericInput(row.units, "Units on " + rowLabel, false)) return false;
@@ -849,7 +852,7 @@
           if (requirePetReference) assignUniquePetReference(row, row);
           if (!validatePetUploadRow(row, "row " + (rowIndex + 1), requirePetReference, row)) return false;
           var referenceKey = String(row.petReference || "").trim().toLowerCase();
-          if (requirePetReference && seenReferences[referenceKey]) { noticeError("ID must be unique on row " + (rowIndex + 1) + "."); return false; }
+          if (requirePetReference && seenReferences[referenceKey]) { noticeError("PET Reference No must be unique on row " + (rowIndex + 1) + "."); return false; }
           if (referenceKey) seenReferences[referenceKey] = true;
         }
         recalculatePetUploadTotal();
@@ -864,6 +867,7 @@
           return {
             spendItemId: row.spendItemId || null,
             petId: petId || row.petId || 0,
+            lineId: row.lineId,
             department: row.department,
             head: row.head,
             topic: row.topic,
@@ -888,6 +892,7 @@
         if (!validatePetUploadRows(true)) return;
         var rows = (vm.uploadPreview || []).map(function (row) {
           var payload = angular.copy(row);
+          payload.lineId = row.lineId;
           payload.units = parseNumericInput(payload.units);
           payload.unitPrice = parseNumericInput(payload.unitPrice);
           payload.foreignAmount = parseNumericInput(payload.foreignAmount);
@@ -1440,12 +1445,12 @@
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
         vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
         vm.spendFormVisible = false;
-        vm.form = { petId: pet.petId, head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
+        vm.form = { petId: pet.petId, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.modal = { type: "spend", kicker: "PET COST DETAIL", title: "PET line items · " + pet.code, submit: "Save PET line item" };
         redraw();
       };
       vm.addSpend = function () {
-        vm.form = { petId: vm.selectedPet.petId, head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
+        vm.form = { petId: vm.selectedPet.petId, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.spendFormVisible = true;
         redraw();
       };
