@@ -531,7 +531,7 @@
         ((pet && pet.spendItems) || []).forEach(function (item) {
           addVendor(item.vendor || item.Vendor);
         });
-        addVendor(pet && (pet.vendorName || pet.VendorName));
+        if (!values.length) addVendor(pet && (pet.vendorName || pet.VendorName));
         return values;
       };
       function spendItemValue(item, names) {
@@ -1564,7 +1564,7 @@
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         var petVendors = vm.petVendorOptions(vm.selectedPet);
         vm.budgetLineVendorOptions = petVendors;
-        vm.form.vendor = line ? vm.form.vendor : petVendors.length === 1 ? petVendors[0] : "";
+        if (!line) vm.form.vendor = petVendors[0] || "";
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1588,7 +1588,7 @@
         if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
         var selectedVendors = splitVendorNames(vm.form.vendor);
         var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
-        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors.length === 1 ? petVendors[0] : "";
+        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors[0];
         if (!petVendors.length && petChanged) vm.form.vendor = "";
         if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
