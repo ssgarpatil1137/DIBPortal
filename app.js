@@ -62,6 +62,7 @@
       vm.decisionPetRows = [];
       vm.decisionSelection = {};
       vm.budgetLineVendorOptions = [];
+      vm.budgetLineVendorPlaceholder = "Select Vendor";
       vm.budgetLineSpendDetails = [];
       vm.budgetSearch = "";
       vm.budgetPage = 1;
@@ -561,6 +562,9 @@
       function refreshBudgetLineSpendDetails() {
         vm.budgetLineSpendDetails = budgetLineSpendItemsForVendor(vm.selectedPet, vm.form && vm.form.vendor).map(normalizeSpendItem);
       }
+      function setBudgetLineVendorOptions(vendors) {
+        vm.budgetLineVendorOptions = [vm.budgetLineVendorPlaceholder].concat(vendors || []);
+      }
       function shouldAutoSelectBudgetLineVendor(pet, vendors) {
         return ((pet && pet.spendItems) || []).length <= 1 && (vendors || []).length === 1;
       }
@@ -612,8 +616,8 @@
       vm.onBudgetLineVendorChange = applyBudgetLinePetValues;
       function validateBudgetLineVendorSelection() {
         var selected = splitVendorNames(vm.form && vm.form.vendor);
-        if (!selected.length) { noticeError("Vendor Name is required."); return false; }
-        var allowed = vm.budgetLineVendorOptions || [];
+        if (!selected.length || selected[0] === vm.budgetLineVendorPlaceholder) { noticeError("Vendor Name is required."); return false; }
+        var allowed = (vm.budgetLineVendorOptions || []).filter(function (vendor) { return vendor !== vm.budgetLineVendorPlaceholder; });
         if (!allowed.length) { noticeError("Selected PET does not have an approved Vendor Name."); return false; }
         var match = allowed.filter(function (vendor) { return vendor.toLowerCase() === selected[0].toLowerCase(); })[0];
         if (!match) { noticeError("Vendor Name must be selected from the selected PET."); return false; }
@@ -1566,8 +1570,8 @@
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         var petVendors = vm.petVendorOptions(vm.selectedPet);
-        vm.budgetLineVendorOptions = petVendors;
-        if (!line) vm.form.vendor = shouldAutoSelectBudgetLineVendor(vm.selectedPet, petVendors) ? petVendors[0] : "";
+        setBudgetLineVendorOptions(petVendors);
+        if (!line) vm.form.vendor = shouldAutoSelectBudgetLineVendor(vm.selectedPet, petVendors) ? petVendors[0] : vm.budgetLineVendorPlaceholder;
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1587,11 +1591,11 @@
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
         var petVendors = vm.petVendorOptions(pet);
-        vm.budgetLineVendorOptions = petVendors;
+        setBudgetLineVendorOptions(petVendors);
         if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
         var selectedVendors = splitVendorNames(vm.form.vendor);
         var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
-        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = shouldAutoSelectBudgetLineVendor(pet, petVendors) ? petVendors[0] : "";
+        if (petVendors.length && (!selectedVendors.length || selectedVendors[0] === vm.budgetLineVendorPlaceholder || hasInvalidVendor)) vm.form.vendor = shouldAutoSelectBudgetLineVendor(pet, petVendors) ? petVendors[0] : vm.budgetLineVendorPlaceholder;
         if (!petVendors.length && petChanged) vm.form.vendor = "";
         if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
