@@ -1831,6 +1831,7 @@
             };
             $http.post("api/portfolio/pets", vendorPayload).then(function () {
               vm.selectedPet.vendorName = vm.form.vendorName;
+              (vm.selectedPet.spendItems || []).forEach(function (item) { item.vendor = vm.form.vendorName; });
               notice("PET vendor name updated");
               vm.close();
             }, function (response) {

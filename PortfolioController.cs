@@ -147,6 +147,7 @@ namespace DFM.Web.Controllers
                     {
                         if (!string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only approved PET requests allow vendor-name-only editing.");
                         Db.Execute("UPDATE dbo.PETRequests SET VendorName=@VendorName,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId AND Status='Approved'", P("@VendorName", value.VendorName), P("@PetId", value.PetId));
+                        Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", value.VendorName), P("@PetId", value.PetId));
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
                 }
@@ -445,11 +446,8 @@ namespace DFM.Web.Controllers
         private static List<string> SplitVendorNames(string vendor)
         {
             var values = new List<string>();
-            foreach (var part in (vendor ?? "").Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var value = part.Trim();
-                if (value.Length > 0 && !values.Any(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase))) values.Add(value);
-            }
+            var value = (vendor ?? "").Trim();
+            if (value.Length > 0) values.Add(value);
             return values;
         }
 
