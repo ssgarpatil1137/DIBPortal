@@ -723,6 +723,12 @@
         var rows = (vm.uploadPreview || []).concat(extraRows || []);
         return rows.some(function (row) { return row !== excludeRow && String(row.petReference || "").trim().toLowerCase() === normalized; });
       }
+      function normalizeSpendItem(item) {
+        if (!item) return item;
+        item.serialNo = item.serialNo || item.srNo || item.SrNo || "";
+        if (item.lineDate && !angular.isDate(item.lineDate)) item.lineDate = new Date(item.lineDate);
+        return item;
+      }
       function generatedPetReference(excludeRow, extraRows) {
         var year = new Date().getFullYear();
         var reference;
@@ -732,9 +738,17 @@
         } while (petReferenceExists(reference, excludeRow, extraRows));
         return reference;
       }
-      function assignUniquePetReference(row, excludeRow, extraRows) {
-        var reference = String(row.petReference || "").trim();
-        row.petReference = !reference || petReferenceExists(reference, excludeRow, extraRows) ? generatedPetReference(excludeRow, extraRows) : reference;
+      function ensurePetReferenceNo() {
+        vm.form = vm.form || {};
+        var reference = String(vm.form.code || "").trim();
+        if (!reference) {
+          reference = generatedPetReference();
+          vm.form.code = reference;
+        }
+        return reference;
+      }
+      function assignUniquePetReference(row) {
+        row.petReference = ensurePetReferenceNo();
       }
       function petProjectExpenseHead(project) {
         return String(project && (project.budgetType || project.BudgetType) || "").toUpperCase();
@@ -750,16 +764,17 @@
       function preparePetUploadRows(rows) {
         var preparedRows = [];
         (rows || []).forEach(function (row) {
-          var prepared = preparePetUploadRow(row, true);
-          prepared.petReference = "";
-          assignUniquePetReference(prepared, null, preparedRows);
+          var prepared = preparePetUploadRow(row, false);
+          assignUniquePetReference(prepared);
           preparedRows.push(prepared);
         });
         return preparedRows;
       }
       function preparePetUploadRow(row, generateReference) {
         var project = vm.form.item || vm.selectedProject || {};
-        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: generateReference ? "" : vm.form.code || "", lineId: "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, row || {});
+        var prepared = angular.extend({ projectId: vm.projectDisplayId(project), petReference: ensurePetReferenceNo(), serialNo: "", lineDate: null, lineId: "", department: "", currency: "AED", head: "", topic: "", vendor: "", description: "", costType: "", unitType: "", units: 1, unitPrice: 0, foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0, finalAed: 0, yearlyRecurrence: null, glNumber: "" }, normalizeSpendItem(row || {}));
+        prepared.petReference = ensurePetReferenceNo();
+        if (prepared.lineDate && !angular.isDate(prepared.lineDate)) prepared.lineDate = new Date(prepared.lineDate);
         applyPetProjectDefaults(prepared, project);
         if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
         if (prepared.spendItemId && prepared.unitPrice) {
@@ -831,9 +846,9 @@
       }
       function validatePetUploadRow(row, rowLabel, requirePetReference, excludeRow) {
         applyPetProjectDefaults(row);
+        assignUniquePetReference(row);
         calculatePetUploadRow(row, false);
         if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("PET Reference No is required on " + rowLabel + "."); return false; }
-        if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("PET Reference No must be unique on " + rowLabel + "."); return false; }
         if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on " + rowLabel + "."); return false; }
         if (!validatePetRequiredDropdowns(row, rowLabel)) return false;
         if (!validateNumericInput(row.units, "Units on " + rowLabel, false)) return false;
@@ -846,14 +861,10 @@
       }
       function validatePetUploadRows(requirePetReference) {
         if (!(vm.uploadPreview || []).length) { noticeError("Upload Excel/CSV rows or add a PET row before saving."); return false; }
-        var seenReferences = {};
         for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
           var row = vm.uploadPreview[rowIndex];
-          if (requirePetReference) assignUniquePetReference(row, row);
+          if (requirePetReference) assignUniquePetReference(row);
           if (!validatePetUploadRow(row, "row " + (rowIndex + 1), requirePetReference, row)) return false;
-          var referenceKey = String(row.petReference || "").trim().toLowerCase();
-          if (requirePetReference && seenReferences[referenceKey]) { noticeError("PET Reference No must be unique on row " + (rowIndex + 1) + "."); return false; }
-          if (referenceKey) seenReferences[referenceKey] = true;
         }
         recalculatePetUploadTotal();
         return true;
@@ -867,6 +878,8 @@
           return {
             spendItemId: row.spendItemId || null,
             petId: petId || row.petId || 0,
+            serialNo: row.serialNo,
+            lineDate: row.lineDate,
             lineId: row.lineId,
             department: row.department,
             head: row.head,
@@ -892,6 +905,9 @@
         if (!validatePetUploadRows(true)) return;
         var rows = (vm.uploadPreview || []).map(function (row) {
           var payload = angular.copy(row);
+          payload.petReference = ensurePetReferenceNo();
+          payload.serialNo = row.serialNo;
+          payload.lineDate = row.lineDate;
           payload.lineId = row.lineId;
           payload.units = parseNumericInput(payload.units);
           payload.unitPrice = parseNumericInput(payload.unitPrice);
@@ -1332,7 +1348,7 @@
           if (data.project) angular.extend(project, data.project);
           project.pets = data.pets || [];
           project.pets.forEach(function (pet) {
-            pet.spendItems = (data.spendItems || []).filter(function (item) { return item.petId === pet.petId; });
+            pet.spendItems = (data.spendItems || []).filter(function (item) { return item.petId === pet.petId; }).map(normalizeSpendItem);
             pet.budgetLines = (data.budgetLines || []).filter(function (line) { return line.petId === pet.petId; });
             pet.budgetLines.forEach(function (line) { line.invoices = (data.invoices || []).filter(function (invoice) { return invoice.budgetLineId === line.budgetLineId; }); });
           });
@@ -1412,7 +1428,7 @@
         vm.uploadPreview = [];
         vm.form = angular.copy(pet || {
             projectId: project.projectId,
-            code: "PET-2026-" + String(Date.now()).slice(-4),
+          code: generatedPetReference(),
             currency: "AED",
             requestedAmount: 0,
             reviewRequired: !project.skipReview,
@@ -1445,17 +1461,18 @@
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
         vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
         vm.spendFormVisible = false;
-        vm.form = { petId: pet.petId, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
+        vm.form = { petId: pet.petId, serialNo: "", lineDate: null, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.modal = { type: "spend", kicker: "PET COST DETAIL", title: "PET line items · " + pet.code, submit: "Save PET line item" };
         redraw();
       };
       vm.addSpend = function () {
-        vm.form = { petId: vm.selectedPet.petId, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
+        vm.form = { petId: vm.selectedPet.petId, serialNo: "", lineDate: null, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.spendFormVisible = true;
         redraw();
       };
       vm.editSpend = function (item) {
         vm.form = angular.copy(item);
+        if (vm.form.lineDate && !angular.isDate(vm.form.lineDate)) vm.form.lineDate = new Date(vm.form.lineDate);
         vm.form.head = petProjectExpenseHead(vm.selectedProject) || vm.form.head;
         vm.form.exchangeRate = parseNumericInput(vm.form.exchangeRate) || (parseNumericInput(vm.form.foreignAmount) ? parseNumericInput(vm.form.aedAmount) / parseNumericInput(vm.form.foreignAmount) : 1);
         vm.spendFormVisible = true;
@@ -1672,6 +1689,7 @@
         vm.uploadFile = null;
         vm.uploadPreview = [];
         vm.form = { item: item };
+        if (kind === "pet") ensurePetReferenceNo();
         redraw();
       };
       vm.download = function (kind) {

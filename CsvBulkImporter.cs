@@ -49,7 +49,10 @@ namespace DFM.Web.Infrastructure
 
         public static int ImportPetRows(int projectId, IEnumerable<PetUploadRowRequest> rows, string user)
         {
-            var uploadRows = (rows ?? Enumerable.Empty<PetUploadRowRequest>()).Where(row => row != null).Select(row => CalculatePetRow(row, true)).ToList();
+            var sourceRows = (rows ?? Enumerable.Empty<PetUploadRowRequest>()).Where(row => row != null).ToList();
+            var petReference = sourceRows.Select(row => row.PetReference).FirstOrDefault(reference => !string.IsNullOrWhiteSpace(reference));
+            if (string.IsNullOrWhiteSpace(petReference)) petReference = GeneratedPetReference();
+            var uploadRows = sourceRows.Select(row => { row.PetReference = petReference; return CalculatePetRow(row, true); }).ToList();
             if (uploadRows.Count == 0) throw new ArgumentException("Add at least one PET row before saving.");
             var imported = 0;
             foreach (var group in uploadRows.GroupBy(row => row.PetReference, StringComparer.OrdinalIgnoreCase))
@@ -80,7 +83,7 @@ namespace DFM.Web.Infrastructure
                     var persistedAmount = divisor == 0 ? item.FinalAed : item.FinalAed / divisor;
                     try
                     {
-                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl,@department,@description,@yearlyRecurrence,@lineId", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber), P("@department", item.Department), P("@description", item.Description), P("@yearlyRecurrence", item.YearlyRecurrence), P("@lineId", item.LineId)); imported++;
+                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl,@department,@description,@yearlyRecurrence,@lineId,@srNo,@lineDate", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber), P("@department", item.Department), P("@description", item.Description), P("@yearlyRecurrence", item.YearlyRecurrence), P("@lineId", item.LineId), P("@srNo", item.SerialNo), P("@lineDate", item.LineDate)); imported++;
                     }
                     catch (SqlException ex)
                     {
@@ -96,7 +99,7 @@ namespace DFM.Web.Infrastructure
         {
             RequireAny(headers, "vendor", new[] { "vendor", "vendorname", "supplier", "vendorsupplier" });
             RequireAny(headers, "unitprice", new[] { "unitprice", "price" });
-            return rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), LineId = GetAny(row, headers, "", "id", "lineid"), Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
+            return rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), SerialNo = GetAny(row, headers, "", "srno", "serialno", "serialnumber"), LineDate = DateNullable(row, headers, "date", "linedate"), LineId = GetAny(row, headers, "", "id", "lineid"), Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
         }
 
         private static PetUploadRowRequest CalculatePetRow(PetUploadRowRequest row, bool strict)
@@ -199,6 +202,22 @@ namespace DFM.Web.Infrastructure
         private static bool HasAny(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name)); }
         private static int Int(List<string> row, Dictionary<string, int> headers, string name, int fallback) { int value; return int.TryParse(Get(row, headers, name), out value) ? value : fallback; }
         private static int? IntNullable(List<string> row, Dictionary<string, int> headers, string name) { int value; return int.TryParse(Get(row, headers, name), out value) ? (int?)value : null; }
+        private static DateTime? DateNullable(List<string> row, Dictionary<string, int> headers, params string[] names)
+        {
+            foreach (var name in names)
+            {
+                var value = Get(row, headers, name);
+                DateTime date;
+                if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out date)) return date.Date;
+                double serial;
+                if (double.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out serial) && serial > 0)
+                {
+                    try { return DateTime.FromOADate(serial).Date; }
+                    catch (ArgumentException) { }
+                }
+            }
+            return null;
+        }
         private static bool Empty(List<string> row) { return row.All(string.IsNullOrWhiteSpace); }
         private static void Require(Dictionary<string, int> headers, params string[] names) { var missing = names.Where(name => !headers.ContainsKey(name)).ToArray(); if (missing.Length > 0) throw new ArgumentException("Missing upload columns: " + string.Join(", ", missing)); }
         private static bool HasRequiredHeader(Dictionary<string, int> headers, string name) { return name == "vendor" ? HasAnyHeader(headers, "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor") : name == "unitprice" ? HasAnyHeader(headers, "unitprice", "price") : headers.ContainsKey(name); }
