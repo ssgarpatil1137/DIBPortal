@@ -10,6 +10,15 @@ namespace DFM.Web.Infrastructure
 {
     public static class CsvBulkImporter
     {
+        private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
+        private static readonly string[] CostTypeOptions = {
+            "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
+            "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
+            "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+            "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
+            "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out"
+        };
+
         public static int Import(string kind, int parentId, string csv, string user)
         {
             return ImportRows(kind, parentId, Parse(csv), user, "CSV");
@@ -93,6 +102,7 @@ namespace DFM.Web.Infrastructure
         {
             if (strict && string.IsNullOrWhiteSpace(row.PetReference)) throw new ArgumentException("PET reference is required for every PET row.");
             if (strict && string.IsNullOrWhiteSpace(row.Vendor)) throw new ArgumentException("Vendor is required for every PET row.");
+            if (strict) ValidatePetRequiredDropdowns(row);
             if (strict && row.UnitPrice <= 0) throw new ArgumentException("Unit Price is required for every PET row.");
             row.Currency = string.IsNullOrWhiteSpace(row.Currency) ? "AED" : row.Currency.Trim().ToUpperInvariant();
             row.Units = row.Units == 0 ? 1 : row.Units;
@@ -109,6 +119,17 @@ namespace DFM.Web.Infrastructure
             }
             row.FinalAed = row.Units * (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? row.AedAmount : row.ForeignAmount);
             return row;
+        }
+
+        private static void ValidatePetRequiredDropdowns(PetUploadRowRequest row)
+        {
+            var unitType = UnitTypeOptions.FirstOrDefault(option => string.Equals(option, row.UnitType, StringComparison.OrdinalIgnoreCase));
+            if (unitType == null) throw new ArgumentException("Unit Type is required for every PET row.");
+            var costType = CostTypeOptions.FirstOrDefault(option => string.Equals(option, row.CostType, StringComparison.OrdinalIgnoreCase));
+            if (costType == null) throw new ArgumentException("Cost Type is required for every PET row.");
+            if (!row.YearlyRecurrence.HasValue || row.YearlyRecurrence.Value < 1 || row.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required for every PET row.");
+            row.UnitType = unitType;
+            row.CostType = costType;
         }
 
         private static int ImportBudgetLines(int petId, List<List<string>> rows, Dictionary<string, int> headers, string user)

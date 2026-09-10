@@ -16,6 +16,15 @@ namespace DFM.Web.Controllers
     [ApiAuthorize, RoutePrefix("api/portfolio")]
     public class PortfolioController : ApiController
     {
+        private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
+        private static readonly string[] CostTypeOptions = {
+            "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
+            "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
+            "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+            "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
+            "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out"
+        };
+
         [HttpGet, Route("dashboard")]
         public IHttpActionResult Dashboard(string projectKey = "DMGT", string accountableExec = "Zahoor Ul Islam (IT Dept)")
         {
@@ -140,7 +149,11 @@ namespace DFM.Web.Controllers
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
                 }
-                if (value.SpendItems != null && value.SpendItems.Count > 0) value.RequestedAmount = value.SpendItems.Sum(item => item.FinalAed > 0 ? item.FinalAed : item.AedAmount * (1 + item.ContingencyPercent / 100));
+                if (value.SpendItems != null && value.SpendItems.Count > 0)
+                {
+                    foreach (var item in value.SpendItems) ValidatePetRequiredDropdowns(item);
+                    value.RequestedAmount = value.SpendItems.Sum(item => item.FinalAed > 0 ? item.FinalAed : item.AedAmount * (1 + item.ContingencyPercent / 100));
+                }
                 AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
                 var isSentBack = false;
                 if (value.PetId.HasValue)
@@ -180,6 +193,8 @@ namespace DFM.Web.Controllers
         public IHttpActionResult SaveSpendItem(SpendItemRequest value)
         {
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
+            try { ValidatePetRequiredDropdowns(value); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
             var foreignAmount = value.ForeignAmount == 0 ? value.Units * value.UnitPrice : value.ForeignAmount;
             if (!string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) && value.AedAmount == 0 && value.ExchangeRate == 0) return BadRequest("Exchange Rate or AED Amount is required for non-AED PET line items.");
             var rate = value.ExchangeRate == 0 ? 1 : value.ExchangeRate;
@@ -379,6 +394,18 @@ namespace DFM.Web.Controllers
         }
 
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
+
+        private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
+        {
+            if (value == null) throw new ArgumentException("PET line item details are required.");
+            var unitType = UnitTypeOptions.FirstOrDefault(option => string.Equals(option, value.UnitType, StringComparison.OrdinalIgnoreCase));
+            if (unitType == null) throw new ArgumentException("Unit Type is required.");
+            var costType = CostTypeOptions.FirstOrDefault(option => string.Equals(option, value.CostType, StringComparison.OrdinalIgnoreCase));
+            if (costType == null) throw new ArgumentException("Cost Type is required.");
+            if (!value.YearlyRecurrence.HasValue || value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required.");
+            value.UnitType = unitType;
+            value.CostType = costType;
+        }
 
         private static string NormalizeBudgetLineVendors(int petId, string vendor)
         {

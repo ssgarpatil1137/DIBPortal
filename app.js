@@ -78,6 +78,15 @@
       vm.visibleRoleUsers = [];
       vm.roleSummary = { reviewer: 0, approver: 0, admin: 0 };
       vm.availableManagedRoles = ["Reviewer", "Approver", "Admin"];
+        vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
+        vm.costTypeOptions = [
+          "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
+          "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
+          "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+          "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
+          "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out",
+        ];
+        vm.yearlyRecurrenceOptions = [1, 2, 3, 4, 5];
       vm.tabs = [
         { id: "portfolio", label: "Portfolio", icon: "layout-dashboard", roles: ["Requestor", "Reviewer", "Approver", "Admin", "Master"] },
         { id: "approvals", label: "Approvals", icon: "stamp", roles: ["Reviewer", "Approver"] },
@@ -770,6 +779,21 @@
         noticeError(label + " must be a numeric value.");
         return false;
       }
+      function validOption(value, options) {
+        return options.some(function (option) { return String(option).toLowerCase() === String(value || "").trim().toLowerCase(); });
+      }
+      function normalizeOption(value, options) {
+        return options.filter(function (option) { return String(option).toLowerCase() === String(value || "").trim().toLowerCase(); })[0] || value;
+      }
+      function validatePetRequiredDropdowns(row, rowLabel) {
+        if (!validOption(row && row.unitType, vm.unitTypeOptions)) { noticeError("Unit Type is required on " + rowLabel + "."); return false; }
+        if (!validOption(row && row.costType, vm.costTypeOptions)) { noticeError("Cost Type is required on " + rowLabel + "."); return false; }
+        if (!validOption(row && row.yearlyRecurrence, vm.yearlyRecurrenceOptions)) { noticeError("Yearly Recurrence is required on " + rowLabel + "."); return false; }
+        row.unitType = normalizeOption(row.unitType, vm.unitTypeOptions);
+        row.costType = normalizeOption(row.costType, vm.costTypeOptions);
+        row.yearlyRecurrence = parseNumericInput(row.yearlyRecurrence);
+        return true;
+      }
       function calculatePetUploadRow(row, deriveForeignAmount) {
         row.currency = (row.currency || "AED").toUpperCase();
         var units = parseNumericInput(row.units);
@@ -808,12 +832,12 @@
         if (requirePetReference && !String(row.petReference || "").trim()) { noticeError("ID is required on " + rowLabel + "."); return false; }
         if (requirePetReference && petReferenceExists(row.petReference, excludeRow || row)) { noticeError("ID must be unique on " + rowLabel + "."); return false; }
         if (!String(row.vendor || "").trim()) { noticeError("Vendor is required on " + rowLabel + "."); return false; }
+        if (!validatePetRequiredDropdowns(row, rowLabel)) return false;
         if (!validateNumericInput(row.units, "Units on " + rowLabel, false)) return false;
         if (!validateNumericInput(row.unitPrice, "Unit Price on " + rowLabel, false)) return false;
         if (!validateNumericInput(row.foreignAmount, "Amt. FCY on " + rowLabel, true)) return false;
         if (!validateNumericInput(row.aedAmount, "Amt. LCY on " + rowLabel, true)) return false;
         if (!validateNumericInput(row.contingencyPercent, "Contingency % on " + rowLabel, true)) return false;
-        if (!validateNumericInput(row.yearlyRecurrence, "Yearly Recurrence on " + rowLabel, true)) return false;
         if (!(parseNumericInput(row.unitPrice) > 0)) { noticeError("Unit Price is required on " + rowLabel + "."); return false; }
         return true;
       }
@@ -1059,6 +1083,7 @@
       }
       function validateSpendFormAmounts(form) {
         var currency = String(form && form.currency || "AED").toUpperCase();
+        if (!validatePetRequiredDropdowns(form, "PET line item")) return false;
         if (!validateNumericInput(form && form.units, "Units", false)) return false;
         if (!validateNumericInput(form && form.unitPrice, "Unit price", false)) return false;
         if (!validateNumericInput(form && form.foreignAmount, "FCY amount", true)) return false;
