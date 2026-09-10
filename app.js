@@ -561,6 +561,9 @@
       function refreshBudgetLineSpendDetails() {
         vm.budgetLineSpendDetails = budgetLineSpendItemsForVendor(vm.selectedPet, vm.form && vm.form.vendor).map(normalizeSpendItem);
       }
+      function shouldAutoSelectBudgetLineVendor(pet, vendors) {
+        return ((pet && pet.spendItems) || []).length <= 1 && (vendors || []).length === 1;
+      }
       function budgetLineSpendAmount(item) {
         return parseNumericInput(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
       }
@@ -1564,7 +1567,7 @@
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         var petVendors = vm.petVendorOptions(vm.selectedPet);
         vm.budgetLineVendorOptions = petVendors;
-        if (!line) vm.form.vendor = petVendors[0] || "";
+        if (!line) vm.form.vendor = shouldAutoSelectBudgetLineVendor(vm.selectedPet, petVendors) ? petVendors[0] : "";
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1588,7 +1591,7 @@
         if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
         var selectedVendors = splitVendorNames(vm.form.vendor);
         var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
-        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors[0];
+        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = shouldAutoSelectBudgetLineVendor(pet, petVendors) ? petVendors[0] : "";
         if (!petVendors.length && petChanged) vm.form.vendor = "";
         if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
