@@ -1002,7 +1002,18 @@
                   required
                 ></select></label
               ><label
-                >Vendor Name<input ng-model="vm.form.vendor" ng-change="vm.onBudgetLineVendorChange()" required /></label
+                >Vendor Name<select
+                  ng-model="vm.form.vendor"
+                  ng-change="vm.onBudgetLineVendorChange()"
+                  ng-options="vendor as vendor for vendor in vm.budgetLineVendorOptions"
+                  required
+                ><option value="">Select vendor</option></select></label
+              ><div class="full table-scroll spend-preview" ng-if="vm.budgetLineSpendDetails.length">
+                <table class="nested">
+                  <thead><tr><th>Sr No</th><th>Date</th><th>ID</th><th>Department</th><th>Head</th><th>Topic</th><th>Vendor</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>CCY</th><th>FCY amt</th><th>AED amt</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
+                  <tbody><tr ng-repeat="item in vm.budgetLineSpendDetails track by item.spendItemId || $index"><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.department}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.description}}</td><td>{{item.costType}}</td><td>{{item.unitType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.amount(item.finalAedAmount||item.finalAed||vm.spendFinalAed(item))}}</td><td>{{item.glNumber}}</td></tr></tbody>
+                </table>
+              </div
               ><div class="full detail-grid" ng-if="vm.selectedPet" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>Selected PET</small><strong>{{vm.selectedPet.code}}</strong></div>
                 <div><small>Status</small><strong>{{vm.selectedPet.status}}</strong></div>

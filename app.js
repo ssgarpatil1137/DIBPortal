@@ -62,6 +62,7 @@
       vm.decisionPetRows = [];
       vm.decisionSelection = {};
       vm.budgetLineVendorOptions = [];
+      vm.budgetLineSpendDetails = [];
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -559,6 +560,9 @@
           return splitVendorNames(item.vendor || item.Vendor).some(function (itemVendor) { return vendorKeys.indexOf(itemVendor.toLowerCase()) >= 0; });
         });
       }
+      function refreshBudgetLineSpendDetails() {
+        vm.budgetLineSpendDetails = budgetLineSpendItemsForVendor(vm.selectedPet, vm.form && vm.form.vendor).map(normalizeSpendItem);
+      }
       function budgetLineSpendAmount(item) {
         return parseNumericInput(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
       }
@@ -567,8 +571,10 @@
         vm.form[field] = value ? new Date(value) : null;
       }
       function applyBudgetLinePetValues() {
-        if (!vm.form || vm.form.budgetLineId) return;
-        var items = budgetLineSpendItemsForVendor(vm.selectedPet, vm.form.vendor);
+        if (!vm.form) return;
+        refreshBudgetLineSpendDetails();
+        if (vm.form.budgetLineId) return;
+        var items = vm.budgetLineSpendDetails;
         vm.form.cost = null;
         vm.form.justification = "";
         vm.form.glNumber = "";
@@ -1564,7 +1570,7 @@
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
         var petVendors = vm.petVendorOptions(vm.selectedPet);
         vm.budgetLineVendorOptions = petVendors;
-        vm.form.vendor = line ? vm.form.vendor : petVendors.join(", ");
+        vm.form.vendor = line ? vm.form.vendor : petVendors.length === 1 ? petVendors[0] : "";
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1579,18 +1585,18 @@
       };
       vm.onBudgetLinePetChange = function (skipAutoFill) {
         var pet = projectPetById(vm.selectedProject, vm.form && vm.form.petId);
-        if (!pet) { vm.selectedPet = null; vm.budgetLineVendorOptions = []; if (vm.form) vm.form.petReference = null; return; }
+        if (!pet) { vm.selectedPet = null; vm.budgetLineVendorOptions = []; vm.budgetLineSpendDetails = []; if (vm.form) vm.form.petReference = null; return; }
         var petChanged = !vm.selectedPet || Number(vm.selectedPet.petId) !== Number(pet.petId);
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
-        if (vm.form.budgetLineId) return;
         var petVendors = vm.petVendorOptions(pet);
         vm.budgetLineVendorOptions = petVendors;
+        if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
         var selectedVendors = splitVendorNames(vm.form.vendor);
         var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
-        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors.join(", ");
+        if (petVendors.length && (!selectedVendors.length || hasInvalidVendor)) vm.form.vendor = petVendors.length === 1 ? petVendors[0] : "";
         if (!petVendors.length && petChanged) vm.form.vendor = "";
-        if (skipAutoFill) return;
+        if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
       };
       vm.openProjectBudgetLine = function (project) {
@@ -1703,6 +1709,7 @@
         vm.decisionPetRows = [];
         vm.decisionSelection = {};
         vm.budgetLineVendorOptions = [];
+        vm.budgetLineSpendDetails = [];
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
