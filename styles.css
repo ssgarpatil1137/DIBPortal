@@ -971,6 +971,14 @@ textarea {
   margin-top: 5px;
   background: #f6faf7;
 }
+.link-btn {
+  border: 0;
+  background: none;
+  color: var(--green-2);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 4px;
+}
 .jira-hero {
   background: var(--green);
   color: #fff;

@@ -1065,7 +1065,16 @@
               /></label
               ><label class="full"
                 >LPO comments<input ng-model="vm.form.lpoComments"
-              /></label>
+              /></label
+              ><div class="full detail-grid" style="grid-template-columns:repeat(3,1fr)">
+                <div ng-repeat="type in vm.budgetLineDocumentTypes">
+                  <small>{{type.label}} Document</small>
+                  <label class="file-field"><input type="file" file-change="vm.setBudgetLineDocumentFile(type.key,$file)" /><span><i data-lucide="paperclip"></i>{{vm.budgetLineDocumentFiles[type.key].name || 'Upload ' + type.label}}</span></label>
+                  <div ng-if="vm.budgetLineDocuments(vm.form,type.key).length">
+                    <p ng-repeat="doc in vm.budgetLineDocuments(vm.form,type.key) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p>
+                  </div>
+                </div>
+              </div>
             </div>
             <div ng-if="vm.modal.type==='invoice'" class="form-grid">
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">

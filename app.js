@@ -64,6 +64,12 @@
       vm.budgetLineVendorOptions = [];
       vm.budgetLineVendorPlaceholder = "Select Vendor";
       vm.budgetLineSpendDetails = [];
+      vm.budgetLineDocumentTypes = [
+        { key: "cam", label: "CAM", entityType: "BudgetLineCAM" },
+        { key: "memo", label: "Memo", entityType: "BudgetLineMemo" },
+        { key: "lpo", label: "LPO", entityType: "BudgetLineLPO" },
+      ];
+      vm.budgetLineDocumentFiles = {};
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -568,6 +574,23 @@
       function setBudgetLineVendorOptions(vendors) {
         vm.budgetLineVendorOptions = [vm.budgetLineVendorPlaceholder].concat(vendors || []);
       }
+      function budgetLineDocumentType(key) {
+        return vm.budgetLineDocumentTypes.filter(function (type) { return type.key === key; })[0];
+      }
+      function budgetLineDocumentEntityTypes() {
+        return vm.budgetLineDocumentTypes.map(function (type) { return type.entityType.toLowerCase(); });
+      }
+      function budgetLineDocuments(line, key) {
+        var type = budgetLineDocumentType(key);
+        if (!line || !type) return [];
+        return (line.attachments || []).filter(function (attachment) { return String(attachment.entityType || "").toLowerCase() === type.entityType.toLowerCase(); });
+      }
+      vm.budgetLineDocuments = budgetLineDocuments;
+      vm.setBudgetLineDocumentFile = function (key, file) {
+        vm.budgetLineDocumentFiles = vm.budgetLineDocumentFiles || {};
+        vm.budgetLineDocumentFiles[key] = file || null;
+        redraw();
+      };
       function shouldAutoSelectBudgetLineVendor(pet, vendors) {
         return ((pet && pet.spendItems) || []).length <= 1 && (vendors || []).length === 1;
       }
@@ -1356,10 +1379,14 @@
           var data = response.data;
           if (data.project) angular.extend(project, data.project);
           project.pets = data.pets || [];
+          var budgetLineAttachmentTypes = budgetLineDocumentEntityTypes();
           project.pets.forEach(function (pet) {
             pet.spendItems = (data.spendItems || []).filter(function (item) { return item.petId === pet.petId; }).map(normalizeSpendItem);
             pet.budgetLines = (data.budgetLines || []).filter(function (line) { return line.petId === pet.petId; });
-            pet.budgetLines.forEach(function (line) { line.invoices = (data.invoices || []).filter(function (invoice) { return invoice.budgetLineId === line.budgetLineId; }); });
+            pet.budgetLines.forEach(function (line) {
+              line.invoices = (data.invoices || []).filter(function (invoice) { return invoice.budgetLineId === line.budgetLineId; });
+              line.attachments = (data.attachments || []).filter(function (attachment) { return Number(attachment.entityId) === Number(line.budgetLineId) && budgetLineAttachmentTypes.indexOf(String(attachment.entityType || "").toLowerCase()) >= 0; });
+            });
           });
           project.petsLoaded = true;
           project.loading = false;
@@ -1562,6 +1589,7 @@
       vm.openBudgetLine = function (pet, line) {
         vm.selectedPet = pet;
         vm.selectedProject = vm.projects.filter(function (p) { return p.pets.indexOf(pet) >= 0; })[0];
+        vm.budgetLineDocumentFiles = {};
         vm.form = angular.copy(
           line || {
             petId: pet.petId,
@@ -1714,6 +1742,7 @@
         vm.decisionSelection = {};
         vm.budgetLineVendorOptions = [];
         vm.budgetLineSpendDetails = [];
+        vm.budgetLineDocumentFiles = {};
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
@@ -1735,6 +1764,40 @@
         formData.append("file", file);
         return $http.post("api/portfolio/attachments/" + entityType + "/" + entityId, formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } });
       }
+      function uploadBudgetLineDocuments(budgetLineId) {
+        if (!budgetLineId || vm.demo) return $q.when();
+        var uploads = [];
+        vm.budgetLineDocumentTypes.forEach(function (type) {
+          var file = vm.budgetLineDocumentFiles && vm.budgetLineDocumentFiles[type.key];
+          if (file) uploads.push(uploadAttachment(type.entityType, budgetLineId, file));
+        });
+        return uploads.length ? $q.all(uploads) : $q.when();
+      }
+      vm.downloadAttachment = function (attachment, viewInline) {
+        if (!attachment || !attachment.attachmentId) return;
+        var viewer = viewInline ? window.open("", "_blank") : null;
+        $http.get("api/portfolio/attachments/" + attachment.attachmentId, { responseType: "blob" }).then(function (response) {
+          var type = response.headers("Content-Type") || attachment.contentType || "application/octet-stream";
+          var blob = new Blob([response.data], { type: type });
+          var url = window.URL.createObjectURL(blob);
+          if (viewInline) {
+            if (viewer) viewer.location.href = url;
+            else window.open(url, "_blank");
+          }
+          else {
+            var link = document.createElement("a");
+            link.href = url;
+            link.download = attachment.originalName || "attachment";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+          setTimeout(function () { window.URL.revokeObjectURL(url); }, 60000);
+        }, function (response) {
+          if (viewer) viewer.close();
+          noticeError(responseMessage(response, "Unable to download the document."));
+        });
+      };
       function savePreviewItems(petId) {
         if ((vm.uploadPreview || []).length && !petId) return $q.reject({ data: { message: "PET was saved, but the PET id was not returned." } });
         var chain = $q.when();
@@ -2032,11 +2095,17 @@
           if (!validateBudgetLineVendorSelection()) return;
           if (!validateBudgetLineAmount()) return;
           var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId, petReference: vm.form.petReference || vm.selectedPet.code });
-          $http.post("api/portfolio/budget-lines", budgetLinePayload).then(function () {
-            notice("Budget line saved");
-            vm.close();
-            if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
-            loadDashboard();
+          var budgetLineProjectId = vm.selectedProject && vm.selectedProject.projectId;
+          $http.post("api/portfolio/budget-lines", budgetLinePayload).then(function (response) {
+            var saved = response.data || {};
+            var budgetLineId = budgetLinePayload.budgetLineId || saved.budgetLineId || saved.BudgetLineId;
+            uploadBudgetLineDocuments(budgetLineId).then(function () {
+              notice("Budget line saved");
+              vm.close();
+              loadDashboard().then(function () { if (budgetLineProjectId) refreshProjectPets(budgetLineProjectId, true); });
+            }, function (uploadResponse) {
+              noticeError(responseMessage(uploadResponse, "Budget line was saved, but document upload failed."));
+            });
           }, function (response) {
             noticeError(responseMessage(response, "Unable to save the budget line."));
           });

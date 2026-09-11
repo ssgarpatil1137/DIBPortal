@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http;
@@ -43,13 +44,18 @@ namespace DFM.Web.Controllers
         public IHttpActionResult Project(int projectId)
         {
             var sets = Db.QueryMultiple("EXEC dbo.sp_GetProjectDetail @id", new SqlParameter("@id", projectId));
+            var attachments = sets[5];
+            attachments.AddRange(Db.Query(@"SELECT AttachmentId,EntityType,EntityId,OriginalName,ContentType,FileSize,UploadedUtc
+                FROM dbo.Attachments
+                WHERE EntityType IN ('BudgetLineCAM','BudgetLineMemo','BudgetLineLPO')
+                  AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId)", P("@ProjectId", projectId)));
             return Ok(new {
                 project = sets[0].FirstOrDefault(),
                 pets = sets[1],
                 spendItems = sets[2],
                 budgetLines = sets[3],
                 invoices = sets[4],
-                attachments = sets[5]
+                attachments = attachments
             });
         }
 
@@ -305,6 +311,21 @@ namespace DFM.Web.Controllers
                 Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", entityType), P("@id", entityId), P("@original", Path.GetFileName(original)), P("@stored", Path.GetFileName(file.LocalFileName)), P("@content", file.Headers.ContentType == null ? "application/octet-stream" : file.Headers.ContentType.MediaType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", User.Identity.Name));
             }
             return Ok();
+        }
+
+        [HttpGet, Route("attachments/{attachmentId:long}")]
+        public IHttpActionResult DownloadAttachment(long attachmentId)
+        {
+            var row = Db.Query("SELECT OriginalName,StoredName,ContentType FROM dbo.Attachments WHERE AttachmentId=@AttachmentId", P("@AttachmentId", attachmentId)).FirstOrDefault();
+            if (row == null) return NotFound();
+            var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments");
+            var path = Path.Combine(root, Convert.ToString(row["StoredName"]));
+            if (!File.Exists(path)) return NotFound();
+            var response = Request.CreateResponse(HttpStatusCode.OK);
+            response.Content = new StreamContent(File.OpenRead(path));
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue(Convert.ToString(row["ContentType"] ?? "application/octet-stream"));
+            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = Convert.ToString(row["OriginalName"]) };
+            return ResponseMessage(response);
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/preview")]
