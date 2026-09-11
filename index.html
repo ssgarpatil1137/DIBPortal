@@ -958,14 +958,14 @@
                   <tbody><tr ng-repeat="item in vm.decisionPetRows track by item.pet.petId"><td><input type="checkbox" ng-checked="vm.isDecisionPetSelected(item)" ng-click="vm.toggleDecisionPet(item)" ng-disabled="!vm.canSelectDecisionPet(item)" /></td><td><b>{{item.pet.code}}</b></td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{item.project.budgetType}} · {{item.project.budgetSource}}</td><td>{{vm.petSpendField(item.pet,'head')}}</td><td>{{vm.amount(item.pet.requestedAmount)}}</td><td>{{item.pet.reviewerEmail||item.project.accountableExecLead}}</td><td>{{item.pet.approverEmail||item.project.accountableExec}}</td><td>{{item.pet.createdUtc|date:'dd-MMM-yyyy'}}</td><td><button type="button" class="btn compact" ng-click="vm.viewDecisionPetLines(item)">View PET Lines</button></td></tr></tbody>
                 </table>
               </div>
-              <div class="pet-row-dialog" ng-if="vm.modal.bulk&&vm.decisionLinePet">
-                <div class="pet-row-card">
+              <div class="pet-row-dialog decision-lines-dialog" ng-if="vm.modal.bulk&&vm.decisionLinePet">
+                <div class="pet-row-card decision-lines-card">
                   <header>
                     <div><p class="eyebrow">PET LINES</p><h3>{{vm.decisionLinePet.code}}</h3></div>
                     <button type="button" class="icon-btn" ng-click="vm.closeDecisionPetLines()" title="Close"><i data-lucide="x"></i></button>
                   </header>
-                  <div class="table-scroll spend-preview" ng-if="vm.decisionLinePet.spendItems.length">
-                    <table class="nested">
+                  <div class="table-scroll spend-preview decision-lines-scroll" ng-if="vm.decisionLinePet.spendItems.length">
+                    <table class="nested decision-lines-table">
                       <thead><tr><th>Sr No</th><th>Date</th><th>ID</th><th>Department</th><th>Head</th><th>Topic</th><th>Vendor</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>CCY</th><th>FCY amt</th><th>AED amt</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
                       <tbody><tr ng-repeat="item in vm.decisionLinePet.spendItems"><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.department}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.description}}</td><td>{{item.costType}}</td><td>{{item.unitType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}</td><td>{{vm.amount(item.finalAedAmount||item.finalAed||vm.spendFinalAed(item))}}</td><td>{{item.glNumber}}</td></tr></tbody>
                     </table>

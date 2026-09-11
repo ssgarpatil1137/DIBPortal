@@ -1148,6 +1148,20 @@ textarea {
   border-radius: 7px;
   box-shadow: var(--shadow);
 }
+.decision-lines-dialog {
+  padding: 8px;
+}
+.decision-lines-card {
+  width: 98vw;
+  max-height: 94vh;
+}
+.decision-lines-scroll {
+  max-height: calc(94vh - 92px);
+  margin: 0;
+}
+.decision-lines-table {
+  min-width: 1780px;
+}
 .pet-row-card > header,
 .pet-row-card > footer {
   display: flex;
