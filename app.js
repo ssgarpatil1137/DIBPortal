@@ -518,7 +518,12 @@
       function splitVendorNames(text) {
         var values = [];
         var value = String(text || "").trim();
-        if (value) values.push(value);
+        function addVendor(part) {
+          var vendor = String(part || "").trim();
+          if (vendor && values.map(function (item) { return item.toLowerCase(); }).indexOf(vendor.toLowerCase()) < 0) values.push(vendor);
+        }
+        addVendor(value);
+        if (value.indexOf(",") >= 0) value.split(",").forEach(addVendor);
         return values;
       }
       vm.petVendorOptions = function (pet) {

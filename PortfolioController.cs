@@ -413,18 +413,13 @@ namespace DFM.Web.Controllers
 
         private static string NormalizeBudgetLineVendors(int petId, string vendor)
         {
-            var selected = SplitVendorNames(vendor);
-            if (selected.Count == 0) throw new ArgumentException("Vendor Name is required.");
+            var selected = (vendor ?? "").Trim();
+            if (selected.Length == 0) throw new ArgumentException("Vendor Name is required.");
             var allowed = AllowedPetVendors(petId);
             if (allowed.Count == 0) throw new ArgumentException("Selected PET does not have an approved Vendor Name.");
-            var normalized = new List<string>();
-            foreach (var value in selected)
-            {
-                var match = allowed.FirstOrDefault(item => string.Equals(item, value, StringComparison.OrdinalIgnoreCase));
-                if (match == null) throw new ArgumentException("Vendor Name must be selected from SpendItems for the selected PET.");
-                if (!normalized.Any(item => string.Equals(item, match, StringComparison.OrdinalIgnoreCase))) normalized.Add(match);
-            }
-            return string.Join(", ", normalized.ToArray());
+            var match = allowed.FirstOrDefault(item => string.Equals(item, selected, StringComparison.OrdinalIgnoreCase));
+            if (match == null) throw new ArgumentException("Vendor Name must be selected from SpendItems for the selected PET.");
+            return match;
         }
 
         private static List<string> AllowedPetVendors(int petId)
@@ -445,7 +440,13 @@ namespace DFM.Web.Controllers
         {
             var values = new List<string>();
             var value = (vendor ?? "").Trim();
-            if (value.Length > 0) values.Add(value);
+            Action<string> addVendor = part =>
+            {
+                var item = (part ?? "").Trim();
+                if (item.Length > 0 && !values.Any(existing => string.Equals(existing, item, StringComparison.OrdinalIgnoreCase))) values.Add(item);
+            };
+            addVendor(value);
+            if (value.Contains(",")) foreach (var part in value.Split(',')) addVendor(part);
             return values;
         }
 
