@@ -298,6 +298,13 @@ namespace DFM.Web.Controllers
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
+        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("invoices/{invoiceId:int}")]
+        public IHttpActionResult DeleteInvoice(int invoiceId)
+        {
+            try { Db.Execute("EXEC dbo.sp_DeleteInvoice @InvoiceId,@User", P("@InvoiceId", invoiceId), P("@User", User.Identity.Name)); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Master"), HttpPut, Route("budgets/{budgetSourceId:int}")]
         public IHttpActionResult UpdateBudget(int budgetSourceId, dynamic value) { Db.Execute("EXEC dbo.sp_UpdateBudget @Id,@Description,@Budget,@Utilization,@Available,@User", P("@Id", budgetSourceId), P("@Description", (string)value.description), P("@Budget", (decimal)value.budget), P("@Utilization", (decimal)value.utilization), P("@Available", (decimal)value.availableBudget), P("@User", User.Identity.Name)); return Ok(); }
 

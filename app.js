@@ -994,6 +994,34 @@
           loadDashboard();
         }, function (response) { noticeError(responseMessage(response, "Unable to delete this Budget Line.")); });
       };
+      vm.canDeleteInvoice = function (invoice) {
+        var status = String(invoice && invoice.invoiceStatus || "").trim().toLowerCase();
+        return status !== "settled" && status !== "paid";
+      };
+      vm.deleteInvoice = function (invoice) {
+        if (!vm.canDeleteInvoice(invoice)) { noticeError("Settled or Paid invoices cannot be deleted."); return; }
+        if (!window.confirm("Delete Invoice " + (invoice.invoiceNumber || invoice.invoiceId) + "? This cannot be undone.")) return;
+        var projectId = vm.selectedProject && vm.selectedProject.projectId;
+        var budgetLineId = vm.selectedLine && vm.selectedLine.budgetLineId;
+        $http.delete("api/portfolio/invoices/" + invoice.invoiceId).then(function () {
+          notice("Invoice deleted");
+          vm.invoices = (vm.invoices || []).filter(function (item) { return Number(item.invoiceId) !== Number(invoice.invoiceId); });
+          if (vm.selectedLine && vm.selectedLine.invoices) vm.selectedLine.invoices = vm.invoices;
+          loadDashboard().then(function () {
+            if (!projectId) return;
+            refreshProjectPets(projectId, true).then(function () {
+              var refreshedLine = null;
+              ((vm.selectedProject && vm.selectedProject.budgetLines) || []).forEach(function (line) {
+                if (Number(line.budgetLineId) === Number(budgetLineId)) refreshedLine = line;
+              });
+              if (refreshedLine) {
+                vm.selectedLine = refreshedLine;
+                vm.invoices = refreshedLine.invoices || [];
+              }
+            });
+          });
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete this Invoice.")); });
+      };
       function refreshProjectPets(projectId, expandRegardless, keepExpandedState) {
         var project = vm.projects.filter(function (p) { return p.projectId === projectId; })[0];
         if (!project) return $q.when();

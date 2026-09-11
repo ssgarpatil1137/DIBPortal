@@ -1145,8 +1145,21 @@
               </div>
               <div class="table-scroll spend-preview" ng-if="vm.invoices.length">
                 <table class="nested">
-                  <thead><tr><th>Invoice Number</th><th>Vendor Name</th><th>GL Number</th><th>Justification</th><th>Invoice Amount</th><th>Invoice Status</th><th>Payment Date</th><th>Created Date</th><th>Documents</th></tr></thead>
-                  <tbody><tr ng-repeat="invoice in vm.invoices track by invoice.invoiceId"><td>{{invoice.invoiceNumber}}</td><td>{{invoice.vendorName}}</td><td>{{invoice.glNumber}}</td><td>{{invoice.justification}}</td><td>{{vm.money(invoice.invoiceAmount)}}</td><td><span class="status" ng-class="vm.statusClass(invoice.invoiceStatus)">{{invoice.invoiceStatus}}</span></td><td>{{invoice.paymentDate|date:'dd-MMM-yyyy'}}</td><td>{{invoice.createdUtc|date:'dd-MMM-yyyy'}}</td><td><p ng-repeat="doc in vm.invoiceDocuments(invoice) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p><span ng-if="!vm.invoiceDocuments(invoice).length">Not uploaded</span></td></tr></tbody>
+                  <thead><tr><th>Invoice Number</th><th>Vendor Name</th><th>GL Number</th><th>Justification</th><th>Invoice Amount</th><th>Invoice Status</th><th>Payment Date</th><th>Created Date</th><th>Documents</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr ng-repeat="invoice in vm.invoices track by invoice.invoiceId">
+                      <td>{{invoice.invoiceNumber}}</td>
+                      <td>{{invoice.vendorName}}</td>
+                      <td>{{invoice.glNumber}}</td>
+                      <td>{{invoice.justification}}</td>
+                      <td>{{vm.money(invoice.invoiceAmount)}}</td>
+                      <td><span class="status" ng-class="vm.statusClass(invoice.invoiceStatus)">{{invoice.invoiceStatus}}</span></td>
+                      <td>{{invoice.paymentDate|date:'dd-MMM-yyyy'}}</td>
+                      <td>{{invoice.createdUtc|date:'dd-MMM-yyyy'}}</td>
+                      <td><p ng-repeat="doc in vm.invoiceDocuments(invoice) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p><span ng-if="!vm.invoiceDocuments(invoice).length">Not uploaded</span></td>
+                      <td><button type="button" class="icon-btn danger" ng-if="vm.canDeleteInvoice(invoice)" ng-click="vm.deleteInvoice(invoice)" title="Delete invoice"><i data-lucide="trash-2"></i></button><span ng-if="!vm.canDeleteInvoice(invoice)">Locked</span></td>
+                    </tr>
+                  </tbody>
                 </table>
               </div>
               <div class="empty" ng-if="!vm.invoices.length">
