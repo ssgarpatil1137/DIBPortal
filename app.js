@@ -1556,6 +1556,7 @@
         vm.bulkDecisionItems = [];
         vm.decisionPetRows = [];
         vm.decisionSelection = {};
+        vm.decisionLinePet = null;
         var project = vm.projects.filter(function (p) {
           return p.pets.indexOf(pet) >= 0;
         })[0];
@@ -1572,6 +1573,7 @@
         var items = vm.selectedApprovalItems(stage);
         if (!items.length) { noticeError("Select at least one PET to " + (stage === "approve" ? "approve" : "review") + "."); return; }
         vm.bulkDecisionItems = items;
+        vm.decisionLinePet = null;
         vm.selectedProject = items[0].project;
         vm.selectedPet = items[0].pet;
         vm.form = {
@@ -1593,6 +1595,7 @@
       };
       function openDecisionModal(pet, stage, project) {
         vm.bulkDecisionItems = [];
+        vm.decisionLinePet = null;
         vm.selectedProject = project;
         vm.selectedPet = pet;
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
@@ -1612,6 +1615,10 @@
         buildDecisionPetRows(project, pet, stage);
         redraw();
       }
+      vm.viewDecisionPetLines = function (item) {
+        vm.decisionLinePet = item && item.pet;
+        redraw();
+      };
       vm.openHistory = function (project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
