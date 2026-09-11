@@ -943,6 +943,17 @@
           };
         });
       }
+      function petLineVendorPayloads(petId) {
+        return (vm.uploadPreview || []).map(function (row) {
+          return { spendItemId: row.spendItemId || null, petId: petId || row.petId || 0, vendor: row.vendor };
+        });
+      }
+      function validatePetLineVendors() {
+        for (var rowIndex = 0; rowIndex < (vm.uploadPreview || []).length; rowIndex++) {
+          if (!String(vm.uploadPreview[rowIndex].vendor || "").trim()) { noticeError("Vendor is required on PET line " + (rowIndex + 1) + "."); return false; }
+        }
+        return true;
+      }
       function savePetUploadRows(projectId, onDone, reviewRequired) {
         if (!validatePetUploadRows(true)) return;
         var rows = (vm.uploadPreview || []).map(function (row) {
@@ -1953,6 +1964,7 @@
         }
         if (type === "pet" && !vm.demo) {
           if (vm.petVendorOnly()) {
+            if (!validatePetLineVendors()) return;
             var vendorPayload = {
               petId: vm.form.petId,
               projectId: vm.form.projectId || vm.selectedProject.projectId,
@@ -1961,9 +1973,13 @@
               currency: vm.form.currency || "AED",
               vendorName: vm.form.vendorName,
               vendorNameOnly: true,
+              spendItems: petLineVendorPayloads(vm.form.petId),
             };
             $http.post("api/portfolio/pets", vendorPayload).then(function () {
-              (vm.selectedPet.spendItems || []).forEach(function (item) { item.vendor = vm.form.vendorName; });
+              (vm.uploadPreview || []).forEach(function (row) {
+                var item = (vm.selectedPet.spendItems || []).filter(function (candidate) { return Number(candidate.spendItemId) === Number(row.spendItemId); })[0];
+                if (item) item.vendor = row.vendor;
+              });
               notice("PET vendor name updated");
               vm.close();
             }, function (response) {
@@ -2010,7 +2026,11 @@
         }
         if (type === "pet") {
           if (vm.petVendorOnly()) {
-            (vm.selectedPet.spendItems || []).forEach(function (item) { item.vendor = vm.form.vendorName; });
+            if (!validatePetLineVendors()) return;
+            (vm.uploadPreview || []).forEach(function (row) {
+              var item = (vm.selectedPet.spendItems || []).filter(function (candidate) { return Number(candidate.spendItemId) === Number(row.spendItemId); })[0];
+              if (item) item.vendor = row.vendor;
+            });
             notice("PET vendor name updated");
             vm.close();
             return;

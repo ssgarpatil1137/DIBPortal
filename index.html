@@ -875,9 +875,19 @@
                 </div>
               </div>
               <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
-              <label class="full" ng-if="vm.petVendorOnly()"
-                >Vendor Name<input ng-model="vm.form.vendorName" /></label
-              >
+              <div class="full pet-upload-workspace" ng-if="vm.petVendorOnly()">
+                <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+                  <div><small>PET Reference No</small><strong>{{vm.form.code}}</strong></div>
+                  <div><small>PET lines</small><strong>{{vm.uploadPreview.length}}</strong></div>
+                </div>
+                <div class="table-scroll spend-preview" ng-if="vm.uploadPreview.length">
+                  <table class="nested decision-lines-table">
+                    <thead><tr><th>Sr No</th><th>Date</th><th>Department</th><th>ID</th><th>Exp. Head</th><th>Topic</th><th>Vendor Name</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>Base CY</th><th>Amt. FCY</th><th>Amt. LCY</th><th>Cont. %</th><th>Final Amt LCY</th><th>Yearly Recurrence</th><th>GL#</th></tr></thead>
+                    <tbody><tr ng-repeat="row in vm.uploadPreview track by $index"><td>{{row.serialNo}}</td><td>{{row.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{row.department}}</td><td>{{row.lineId}}</td><td>{{row.head}}</td><td>{{row.topic}}</td><td><input ng-model="row.vendor" required /></td><td>{{row.description}}</td><td>{{row.costType}}</td><td>{{row.unitType}}</td><td>{{row.units}}</td><td>{{vm.amount(row.unitPrice)}}</td><td>{{row.currency}}</td><td>{{vm.amount(row.foreignAmount)}}</td><td>{{vm.amount(row.aedAmount)}}</td><td>{{row.contingencyPercent}}</td><td>{{vm.amount(row.finalAed)}}</td><td>{{row.yearlyRecurrence}}</td><td>{{row.glNumber}}</td></tr></tbody>
+                  </table>
+                </div>
+                <div class="empty" ng-if="!vm.uploadPreview.length"><i data-lucide="list-tree"></i><strong>No PET lines available.</strong></div>
+              </div>
               <label class="full" ng-if="vm.form.status==='Sent Back'"
                 >Requester comments / amendment notes<textarea
                   ng-model="vm.form.comments"

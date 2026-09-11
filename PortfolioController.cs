@@ -154,7 +154,7 @@ namespace DFM.Web.Controllers
                     if (value.VendorNameOnly || string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase))
                     {
                         if (!string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only approved PET requests allow vendor-name-only editing.");
-                        Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", value.VendorName), P("@PetId", value.PetId));
+                        UpdateApprovedPetVendors(value.PetId.Value, value.SpendItems, value.VendorName);
                         return Ok(new { PetId = value.PetId, Status = "Approved" });
                     }
                 }
@@ -178,6 +178,22 @@ namespace DFM.Web.Controllers
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private static void UpdateApprovedPetVendors(int petId, List<SpendItemRequest> items, string vendorName)
+        {
+            if (items != null && items.Count > 0)
+            {
+                foreach (var item in items)
+                {
+                    if (!item.SpendItemId.HasValue) continue;
+                    if (string.IsNullOrWhiteSpace(item.Vendor)) throw new ArgumentException("Vendor is required on each PET line.");
+                    Db.Execute("UPDATE dbo.SpendItems SET Vendor=@Vendor WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@Vendor", item.Vendor), P("@PetId", petId), P("@SpendItemId", item.SpendItemId));
+                }
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(vendorName)) throw new ArgumentException("Vendor is required.");
+            Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", vendorName), P("@PetId", petId));
         }
 
         private List<Dictionary<string, object>> SavePetRow(PetRequest value, bool isSentBack)
