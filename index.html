@@ -463,6 +463,14 @@
                                   <i data-lucide="eye"></i>
                                 </button
                                 ><button
+                                  class="icon-btn"
+                                  ng-if="vm.budgetLineHasDocuments(line)"
+                                  ng-click="vm.openBudgetLineDocuments(line)"
+                                  title="View budget line documents"
+                                >
+                                  <i data-lucide="files"></i>
+                                </button
+                                ><button
                                   class="icon-btn danger"
                                   ng-click="vm.deleteBudgetLine(project,line)"
                                   title="Delete budget line"
@@ -1108,7 +1116,25 @@
                 </select></label
               ><label
                 >Payment date<input type="date" ng-model="vm.form.paymentDate"
-              /></label>
+              /></label
+              ><label class="full file-field"
+                >Invoice Document<input type="file" file-change="vm.setInvoiceDocumentFile($file)" /><span><i data-lucide="paperclip"></i>{{vm.invoiceDocumentFile.name || 'Upload Invoice'}}</span></label
+              ><div class="full" ng-if="vm.invoiceDocuments(vm.form).length">
+                <p ng-repeat="doc in vm.invoiceDocuments(vm.form) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p>
+              </div>
+            </div>
+            <div ng-if="vm.modal.type==='budgetLineDocuments'">
+              <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Budget Line</small><strong>{{vm.selectedLine.petReference||vm.selectedLine.petCode}}</strong></div>
+                <div><small>Vendor</small><strong>{{vm.selectedLine.vendor}}</strong></div>
+              </div>
+              <div class="table-scroll spend-preview" ng-if="vm.budgetLineHasDocuments(vm.selectedLine)">
+                <table class="nested">
+                  <thead><tr><th>Document Type</th><th>File Name</th><th>Uploaded</th><th>Action</th></tr></thead>
+                  <tbody ng-repeat="type in vm.budgetLineDocumentTypes"><tr ng-repeat="doc in vm.budgetLineDocuments(vm.selectedLine,type.key) track by doc.attachmentId"><td>{{type.label}}</td><td>{{doc.originalName}}</td><td>{{doc.uploadedUtc|date:'dd-MMM-yyyy HH:mm'}}</td><td><button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button><button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></td></tr></tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.budgetLineHasDocuments(vm.selectedLine)"><i data-lucide="files"></i><strong>No documents uploaded.</strong></div>
             </div>
             <div ng-if="vm.modal.type==='invoiceView'">
               <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1119,8 +1145,8 @@
               </div>
               <div class="table-scroll spend-preview" ng-if="vm.invoices.length">
                 <table class="nested">
-                  <thead><tr><th>Invoice Number</th><th>Vendor Name</th><th>GL Number</th><th>Justification</th><th>Invoice Amount</th><th>Invoice Status</th><th>Payment Date</th><th>Created Date</th></tr></thead>
-                  <tbody><tr ng-repeat="invoice in vm.invoices track by invoice.invoiceId"><td>{{invoice.invoiceNumber}}</td><td>{{invoice.vendorName}}</td><td>{{invoice.glNumber}}</td><td>{{invoice.justification}}</td><td>{{vm.money(invoice.invoiceAmount)}}</td><td><span class="status" ng-class="vm.statusClass(invoice.invoiceStatus)">{{invoice.invoiceStatus}}</span></td><td>{{invoice.paymentDate|date:'dd-MMM-yyyy'}}</td><td>{{invoice.createdUtc|date:'dd-MMM-yyyy'}}</td></tr></tbody>
+                  <thead><tr><th>Invoice Number</th><th>Vendor Name</th><th>GL Number</th><th>Justification</th><th>Invoice Amount</th><th>Invoice Status</th><th>Payment Date</th><th>Created Date</th><th>Documents</th></tr></thead>
+                  <tbody><tr ng-repeat="invoice in vm.invoices track by invoice.invoiceId"><td>{{invoice.invoiceNumber}}</td><td>{{invoice.vendorName}}</td><td>{{invoice.glNumber}}</td><td>{{invoice.justification}}</td><td>{{vm.money(invoice.invoiceAmount)}}</td><td><span class="status" ng-class="vm.statusClass(invoice.invoiceStatus)">{{invoice.invoiceStatus}}</span></td><td>{{invoice.paymentDate|date:'dd-MMM-yyyy'}}</td><td>{{invoice.createdUtc|date:'dd-MMM-yyyy'}}</td><td><p ng-repeat="doc in vm.invoiceDocuments(invoice) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p><span ng-if="!vm.invoiceDocuments(invoice).length">Not uploaded</span></td></tr></tbody>
                 </table>
               </div>
               <div class="empty" ng-if="!vm.invoices.length">
@@ -1235,7 +1261,7 @@
               </div>
             </div>
           </div>
-          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'">
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">

@@ -70,6 +70,7 @@
         { key: "lpo", label: "LPO", entityType: "BudgetLineLPO" },
       ];
       vm.budgetLineDocumentFiles = {};
+      vm.invoiceDocumentFile = null;
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -586,9 +587,17 @@
         return (line.attachments || []).filter(function (attachment) { return String(attachment.entityType || "").toLowerCase() === type.entityType.toLowerCase(); });
       }
       vm.budgetLineDocuments = budgetLineDocuments;
+      vm.budgetLineHasDocuments = function (line) { return !!(line && line.attachments && line.attachments.length); };
       vm.setBudgetLineDocumentFile = function (key, file) {
         vm.budgetLineDocumentFiles = vm.budgetLineDocumentFiles || {};
         vm.budgetLineDocumentFiles[key] = file || null;
+        redraw();
+      };
+      vm.invoiceDocuments = function (invoice) {
+        return (invoice && invoice.attachments) || [];
+      };
+      vm.setInvoiceDocumentFile = function (file) {
+        vm.invoiceDocumentFile = file || null;
         redraw();
       };
       function shouldAutoSelectBudgetLineVendor(pet, vendors) {
@@ -1386,6 +1395,7 @@
             pet.budgetLines.forEach(function (line) {
               line.invoices = (data.invoices || []).filter(function (invoice) { return invoice.budgetLineId === line.budgetLineId; });
               line.attachments = (data.attachments || []).filter(function (attachment) { return Number(attachment.entityId) === Number(line.budgetLineId) && budgetLineAttachmentTypes.indexOf(String(attachment.entityType || "").toLowerCase()) >= 0; });
+              line.invoices.forEach(function (invoice) { invoice.attachments = (data.attachments || []).filter(function (attachment) { return Number(attachment.entityId) === Number(invoice.invoiceId) && String(attachment.entityType || "").toLowerCase() === "invoicedocument"; }); });
             });
           });
           project.petsLoaded = true;
@@ -1645,6 +1655,7 @@
       };
       vm.openInvoice = function (line, invoice) {
         vm.selectedLine = line;
+        vm.invoiceDocumentFile = null;
         vm.selectedProject = vm.projects.filter(function (p) {
           return p.pets.some(function (pet) { return pet.budgetLines && pet.budgetLines.indexOf(line) >= 0; });
         })[0];
@@ -1664,6 +1675,14 @@
           title: invoice ? "Update invoice" : "Add invoice",
           submit: "Save invoice",
         };
+        redraw();
+      };
+      vm.openBudgetLineDocuments = function (line) {
+        vm.selectedLine = line;
+        vm.selectedProject = vm.projects.filter(function (p) {
+          return p.pets.some(function (pet) { return pet.budgetLines && pet.budgetLines.indexOf(line) >= 0; });
+        })[0];
+        vm.modal = { type: "budgetLineDocuments", kicker: "BUDGET LINE DOCUMENTS", title: "Documents · " + (line.petReference || line.petCode || line.camId || "Budget Line") };
         redraw();
       };
       vm.openInvoiceView = function (line) {
@@ -1743,6 +1762,7 @@
         vm.budgetLineVendorOptions = [];
         vm.budgetLineSpendDetails = [];
         vm.budgetLineDocumentFiles = {};
+        vm.invoiceDocumentFile = null;
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
@@ -1772,6 +1792,10 @@
           if (file) uploads.push(uploadAttachment(type.entityType, budgetLineId, file));
         });
         return uploads.length ? $q.all(uploads) : $q.when();
+      }
+      function uploadInvoiceDocument(invoiceId) {
+        if (!invoiceId || !vm.invoiceDocumentFile || vm.demo) return $q.when();
+        return uploadAttachment("InvoiceDocument", invoiceId, vm.invoiceDocumentFile);
       }
       vm.downloadAttachment = function (attachment, viewInline) {
         if (!attachment || !attachment.attachmentId) return;
@@ -2136,11 +2160,17 @@
           if (!validateNumericInput(vm.form && vm.form.invoiceAmount, "Invoice amount", false)) return;
           var invoicePayload = angular.extend({}, vm.form, { budgetLineId: vm.selectedLine.budgetLineId });
           invoicePayload.invoiceAmount = parseNumericInput(invoicePayload.invoiceAmount);
-          $http.post("api/portfolio/invoices", invoicePayload).then(function () {
-            notice("Invoice saved");
-            vm.close();
-            if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
-            loadDashboard();
+          var invoiceProjectId = vm.selectedProject && vm.selectedProject.projectId;
+          $http.post("api/portfolio/invoices", invoicePayload).then(function (response) {
+            var saved = response.data || {};
+            var invoiceId = invoicePayload.invoiceId || saved.invoiceId || saved.InvoiceId;
+            uploadInvoiceDocument(invoiceId).then(function () {
+              notice("Invoice saved");
+              vm.close();
+              loadDashboard().then(function () { if (invoiceProjectId) refreshProjectPets(invoiceProjectId, true); });
+            }, function (uploadResponse) {
+              noticeError(responseMessage(uploadResponse, "Invoice was saved, but document upload failed."));
+            });
           }, function (response) {
             noticeError(responseMessage(response, "Unable to save the invoice."));
           });

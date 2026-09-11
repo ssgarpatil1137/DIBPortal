@@ -47,8 +47,10 @@ namespace DFM.Web.Controllers
             var attachments = sets[5];
             attachments.AddRange(Db.Query(@"SELECT AttachmentId,EntityType,EntityId,OriginalName,ContentType,FileSize,UploadedUtc
                 FROM dbo.Attachments
-                WHERE EntityType IN ('BudgetLineCAM','BudgetLineMemo','BudgetLineLPO')
-                  AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId)", P("@ProjectId", projectId)));
+                                WHERE (EntityType IN ('BudgetLineCAM','BudgetLineMemo','BudgetLineLPO')
+                                    AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))
+                                    OR (EntityType='InvoiceDocument'
+                                    AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines b ON b.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))", P("@ProjectId", projectId)));
             return Ok(new {
                 project = sets[0].FirstOrDefault(),
                 pets = sets[1],
