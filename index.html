@@ -80,58 +80,58 @@
           </div>
           <div>
             <span>Registered projects</span
-            ><strong>{{vm.metrics.projectsRegistered}}</strong
-            ><small>{{vm.metrics.activeProjects}} currently active</small>
+            ><strong>{{vm.reportMetrics.projectsRegistered}}</strong
+            ><small>{{vm.reportMetrics.activeProjects}} currently active</small>
           </div>
         </article>
         <article class="metric">
           <div class="metric-icon gold"><i data-lucide="file-check-2"></i></div>
           <div>
             <span>Approved PETs</span
-            ><strong>{{vm.metrics.petsApproved}}</strong
-            ><small>{{vm.metrics.petsOnTrack}} awaiting action</small>
+            ><strong>{{vm.reportMetrics.petsApproved}}</strong
+            ><small>{{vm.reportMetrics.petsOnTrack}} awaiting action</small>
           </div>
         </article>
         <article class="metric">
           <div class="metric-icon blue"><i data-lucide="receipt-text"></i></div>
           <div>
             <span>Invoices raised</span
-            ><strong>{{vm.metrics.invoicesRaised}}</strong
-            ><small>{{vm.metrics.invoicesOutstanding}} outstanding</small>
+            ><strong>{{vm.reportMetrics.invoicesRaised}}</strong
+            ><small>{{vm.reportMetrics.invoicesOutstanding}} outstanding</small>
           </div>
         </article>
         <article class="metric wide">
           <div class="metric-top">
             <span>CAPEX utilization</span
             ><b
-              >{{vm.percent(vm.metrics.capexUtilized,vm.metrics.capexBudget)}}%</b
+              >{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%</b
             >
           </div>
           <div class="progress">
             <span
-              style="width:{{vm.percent(vm.metrics.capexUtilized,vm.metrics.capexBudget)}}%"
+              style="width:{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%"
             ></span>
           </div>
           <small
-            >{{vm.money(vm.metrics.capexUtilized)}} of
-            {{vm.money(vm.metrics.capexBudget)}}</small
+            >{{vm.money(vm.reportMetrics.capexUtilized)}} of
+            {{vm.money(vm.reportMetrics.capexBudget)}}</small
           >
         </article>
         <article class="metric wide">
           <div class="metric-top">
             <span>OPEX utilization</span
             ><b
-              >{{vm.percent(vm.metrics.opexUtilized,vm.metrics.opexBudget)}}%</b
+              >{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%</b
             >
           </div>
           <div class="progress goldbar">
             <span
-              style="width:{{vm.percent(vm.metrics.opexUtilized,vm.metrics.opexBudget)}}%"
+              style="width:{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%"
             ></span>
           </div>
           <small
-            >{{vm.money(vm.metrics.opexUtilized)}} of
-            {{vm.money(vm.metrics.opexBudget)}}</small
+            >{{vm.money(vm.reportMetrics.opexUtilized)}} of
+            {{vm.money(vm.reportMetrics.opexBudget)}}</small
           >
         </article>
       </section>
@@ -567,6 +567,14 @@
       </section>
 
       <section ng-if="vm.tab==='reports'" class="reports">
+        <div class="report-filter-bar">
+          <label
+            >Project<select ng-model="vm.reportProjectId" ng-change="vm.onReportProjectChange()">
+              <option value="">All Projects</option>
+              <option ng-repeat="project in vm.projects track by project.projectId" value="{{project.projectId}}">{{vm.projectDisplayId(project)}} · {{project.projectName}}</option>
+            </select></label
+          >
+        </div>
         <div class="report-band">
           <div>
             <p class="eyebrow">MANAGEMENT SNAPSHOT</p>
@@ -578,7 +586,7 @@
           </div>
           <div class="report-score">
             <strong
-              >{{vm.percent(vm.metrics.capexUtilized+vm.metrics.opexUtilized,vm.metrics.capexBudget+vm.metrics.opexBudget)}}%</strong
+              >{{vm.percent(vm.reportMetrics.capexUtilized+vm.reportMetrics.opexUtilized,vm.reportMetrics.capexBudget+vm.reportMetrics.opexBudget)}}%</strong
             ><span>Total budget utilized</span>
           </div>
         </div>
@@ -587,20 +595,20 @@
             <h3>PET disposition</h3>
             <div
               class="donut"
-              style="--value:{{vm.percent(vm.metrics.petsApproved,vm.metrics.petsApproved+vm.metrics.petsOnTrack+vm.metrics.petsRejected)}}"
+              style="--value:{{vm.percent(vm.reportMetrics.petsApproved,vm.reportMetrics.petsApproved+vm.reportMetrics.petsOnTrack+vm.reportMetrics.petsRejected)}}"
             >
-              <span>{{vm.metrics.petsApproved}}</span>
+              <span>{{vm.reportMetrics.petsApproved}}</span>
             </div>
             <div class="legend">
               <span
                 ><i class="dot green-dot"></i>Approved
-                {{vm.metrics.petsApproved}}</span
+                {{vm.reportMetrics.petsApproved}}</span
               ><span
                 ><i class="dot gold-dot"></i>On track
-                {{vm.metrics.petsOnTrack}}</span
+                {{vm.reportMetrics.petsOnTrack}}</span
               ><span
                 ><i class="dot red-dot"></i>Rejected
-                {{vm.metrics.petsRejected}}</span
+                {{vm.reportMetrics.petsRejected}}</span
               >
             </div>
           </article>
@@ -608,15 +616,15 @@
             <h3>Invoice position</h3>
             <div class="bar-pair">
               <div>
-                <span>Outstanding</span><b>{{vm.metrics.invoicesOutstanding}}</b
+                <span>Outstanding</span><b>{{vm.reportMetrics.invoicesOutstanding}}</b
                 ><i
-                  style="width:{{vm.percent(vm.metrics.invoicesOutstanding,vm.metrics.invoicesRaised)}}%"
+                  style="width:{{vm.percent(vm.reportMetrics.invoicesOutstanding,vm.reportMetrics.invoicesRaised)}}%"
                 ></i>
               </div>
               <div>
-                <span>Settled</span><b>{{vm.metrics.invoicesSettled}}</b
+                <span>Settled</span><b>{{vm.reportMetrics.invoicesSettled}}</b
                 ><i
-                  style="width:{{vm.percent(vm.metrics.invoicesSettled,vm.metrics.invoicesRaised)}}%"
+                  style="width:{{vm.percent(vm.reportMetrics.invoicesSettled,vm.reportMetrics.invoicesRaised)}}%"
                 ></i>
               </div>
             </div>
@@ -632,25 +640,25 @@
               </tr>
               <tr>
                 <td>CAPEX</td>
-                <td>{{vm.money(vm.metrics.capexBudget)}}</td>
-                <td>{{vm.money(vm.metrics.capexUtilized)}}</td>
+                <td>{{vm.money(vm.reportMetrics.capexBudget)}}</td>
+                <td>{{vm.money(vm.reportMetrics.capexUtilized)}}</td>
                 <td>
-                  {{vm.money(vm.metrics.capexBudget-vm.metrics.capexUtilized)}}
+                  {{vm.money(vm.reportMetrics.capexBudget-vm.reportMetrics.capexUtilized)}}
                 </td>
               </tr>
               <tr>
                 <td>OPEX</td>
-                <td>{{vm.money(vm.metrics.opexBudget)}}</td>
-                <td>{{vm.money(vm.metrics.opexUtilized)}}</td>
+                <td>{{vm.money(vm.reportMetrics.opexBudget)}}</td>
+                <td>{{vm.money(vm.reportMetrics.opexUtilized)}}</td>
                 <td>
-                  {{vm.money(vm.metrics.opexBudget-vm.metrics.opexUtilized)}}
+                  {{vm.money(vm.reportMetrics.opexBudget-vm.reportMetrics.opexUtilized)}}
                 </td>
               </tr>
             </table>
           </article>
           <article class="report-table source-utilization">
             <h3>CAPEX budget source utilization by project</h3>
-            <table><thead><tr><th>Budget source</th><th>Project</th><th>PET reference</th><th>Approved amount</th></tr></thead><tbody><tr ng-repeat="row in vm.budgetUsage track by $index"><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><button class="text-link truncate-cell" ng-click="vm.openBudgetUsageProject(row)">{{row.projectName}}</button></td><td>{{row.petCode}}</td><td>{{vm.money(row.amount||row.approvedAmount)}}</td></tr><tr ng-if="!vm.budgetUsage.length"><td colspan="4">No approved CAPEX utilization.</td></tr></tbody></table>
+            <table><thead><tr><th>Budget source</th><th>Project</th><th>PET reference</th><th>Approved amount</th></tr></thead><tbody><tr ng-repeat="row in vm.reportBudgetUsage track by $index"><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><button class="text-link truncate-cell" ng-click="vm.openBudgetUsageProject(row)">{{row.projectName}}</button></td><td>{{row.petCode}}</td><td>{{vm.money(row.amount||row.approvedAmount)}}</td></tr><tr ng-if="!vm.reportBudgetUsage.length"><td colspan="4">No approved CAPEX utilization.</td></tr></tbody></table>
           </article>
         </div>
       </section>

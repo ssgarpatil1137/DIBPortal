@@ -77,6 +77,9 @@
       vm.budgetPageCount = 1;
       vm.budgetFilteredCount = 0;
       vm.visibleBudgets = [];
+      vm.reportProjectId = "";
+      vm.reportMetrics = angular.copy(vm.metrics || {});
+      vm.reportBudgetUsage = [];
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
@@ -1198,6 +1201,63 @@
         if (!validateNumericInput(form && form.availableBudget, "Available budget", false)) return false;
         return true;
       }
+      function selectedReportProject() {
+        if (!vm.reportProjectId) return null;
+        return (vm.projects || []).filter(function (project) { return String(project.projectId) === String(vm.reportProjectId); })[0] || null;
+      }
+      function emptyReportMetrics() {
+        return { projectsRegistered: 0, activeProjects: 0, petsApproved: 0, petsOnTrack: 0, petsRejected: 0, invoicesRaised: 0, invoicesOutstanding: 0, invoicesSettled: 0, capexBudget: 0, capexUtilized: 0, opexBudget: 0, opexUtilized: 0 };
+      }
+      function projectIsActive(project) {
+        return project && ["PET Rejected", "Rejected", "Cancelled", "Closed"].indexOf(String(project.status || "")) < 0;
+      }
+      function addProjectReportMetrics(metrics, project) {
+        var pets = (project && project.petsLoaded && project.pets) || [];
+        var invoices = [];
+        metrics.projectsRegistered += project ? 1 : 0;
+        metrics.activeProjects += projectIsActive(project) ? 1 : 0;
+        if (pets.length) {
+          metrics.petsApproved += pets.filter(function (pet) { return sameStatus(pet.status, "Approved"); }).length;
+          metrics.petsOnTrack += pets.filter(function (pet) { return sameStatus(pet.status, "Pending Review") || sameStatus(pet.status, "Pending Approval"); }).length;
+          metrics.petsRejected += pets.filter(function (pet) { return sameStatus(pet.status, "Rejected"); }).length;
+          pets.forEach(function (pet) { (pet.budgetLines || []).forEach(function (line) { invoices = invoices.concat(line.invoices || []); }); });
+        } else {
+          metrics.petsApproved += Number(project && project.approvedPetCount) || 0;
+          metrics.petsOnTrack += (Number(project && project.pendingReviewPetCount) || 0) + (Number(project && project.pendingApprovalPetCount) || 0);
+          metrics.petsRejected += Number(project && project.rejectedPetCount) || 0;
+        }
+        metrics.invoicesRaised += invoices.length || Number(project && project.invoiceCount) || 0;
+        metrics.invoicesOutstanding += invoices.filter(function (invoice) { return ["raised", "outstanding", "received"].indexOf(String(invoice.invoiceStatus || "").toLowerCase()) >= 0; }).length;
+        metrics.invoicesSettled += invoices.filter(function (invoice) { return ["settled", "paid"].indexOf(String(invoice.invoiceStatus || "").toLowerCase()) >= 0; }).length;
+        var budget = projectBudgetAmount(project);
+        var approvedAmount = pets.filter(function (pet) { return sameStatus(pet.status, "Approved"); }).reduce(function (total, pet) { return total + parseNumericInput(pet.requestedAmount); }, 0);
+        if (String(project && project.budgetType || "").toUpperCase() === "OPEX") {
+          metrics.opexBudget += budget;
+          metrics.opexUtilized += approvedAmount;
+        } else {
+          metrics.capexBudget += budget;
+          metrics.capexUtilized += approvedAmount;
+        }
+      }
+      vm.updateReportView = function () {
+        var project = selectedReportProject();
+        if (!project) {
+          vm.reportMetrics = angular.copy(vm.metrics || emptyReportMetrics());
+          if (!vm.reportMetrics.activeProjects) vm.reportMetrics.activeProjects = (vm.projects || []).filter(projectIsActive).length;
+          vm.reportBudgetUsage = vm.budgetUsage || [];
+          return;
+        }
+        var metrics = emptyReportMetrics();
+        addProjectReportMetrics(metrics, project);
+        vm.reportMetrics = metrics;
+        vm.reportBudgetUsage = (vm.budgetUsage || []).filter(function (row) { return String(row.projectId) === String(project.projectId); });
+      };
+      vm.onReportProjectChange = function () {
+        var project = selectedReportProject();
+        if (project && !vm.demo && !project.petsLoaded) return refreshProjectPets(project.projectId, true, true).then(function () { vm.updateReportView(); redraw(); });
+        vm.updateReportView();
+        redraw();
+      };
       function projectHasStatus(project, pets, status) {
         if (!status) return true;
         if (sameStatus(project && project.status, status)) return true;
@@ -1249,6 +1309,7 @@
         vm.approvalItems = buildApprovalItems();
         vm.updateApprovalView(keepPage);
         vm.updateBudgetView(keepPage);
+        vm.updateReportView();
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); };
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); };
@@ -2321,6 +2382,7 @@
           vm.budgetUsage = data.budgetUsage || [];
           prepareProjects();
           vm.updateView(true);
+          vm.updateReportView();
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();

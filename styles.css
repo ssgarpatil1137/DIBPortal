@@ -714,6 +714,14 @@ dd {
   top: 9px;
   right: 9px;
 }
+.report-filter-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+.report-filter-bar label {
+  min-width: 320px;
+}
 .report-band {
   background: var(--green);
   color: #fff;
