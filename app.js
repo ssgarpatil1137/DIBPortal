@@ -1619,6 +1619,10 @@
         vm.decisionLinePet = item && item.pet;
         redraw();
       };
+      vm.closeDecisionPetLines = function () {
+        vm.decisionLinePet = null;
+        redraw();
+      };
       vm.openHistory = function (project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
