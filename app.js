@@ -405,7 +405,7 @@
             rememberSession(response.data);
             updateNavigation();
             loadDashboard();
-            loadRoles();
+            loadRoles(false);
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
           else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
           redraw();
@@ -449,13 +449,13 @@
         var loadedFromCache = false;
         try {
           var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
-          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadRoles(); }
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadRoles(false); }
         } catch (ignore) { }
         $http.get("api/auth/session").then(function (response) {
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
-          if (!loadedFromCache) { loadDashboard(); loadRoles(); }
+          if (!loadedFromCache) { loadDashboard(); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -479,7 +479,7 @@
       }
       vm.setTab = function (tabId) {
         vm.tab = tabId;
-        if (tabId === "roles") loadRoles();
+        if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
         redraw();
       };
@@ -2416,7 +2416,7 @@
           else project.pets.push(pet);
         });
       }
-      function loadRoles() {
+      function loadRoles(showError) {
         if (!vm.hasRole("Admin") || vm.demo) return $q.when();
         return $http.get("api/portfolio/roles").then(function (response) {
           var data = response.data || {};
@@ -2424,7 +2424,9 @@
           vm.roleUsers = normalizeRoleUsers(data.users || []);
           vm.updateRoleView();
           redraw();
-        }, function () { noticeError("Unable to load role management."); });
+        }, function (response) {
+          if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load role management."));
+        });
       }
       function normalizeRoleUsers(users) {
         return users.map(function (user) {
@@ -2467,7 +2469,7 @@
         loadDashboard().then(function () {
           return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
         }).then(function () {
-          return loadRoles();
+          return loadRoles(vm.tab === "roles");
         }).then(function () {
           notice("Transactions refreshed");
           vm.refreshing = false;
