@@ -80,6 +80,7 @@
       vm.reportProjectId = "";
       vm.reportMetrics = angular.copy(vm.metrics || {});
       vm.reportBudgetUsage = [];
+      vm.reportSummary = {};
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
@@ -1239,18 +1240,56 @@
           metrics.capexUtilized += approvedAmount;
         }
       }
+      function buildReportSummary(project, metrics, rows) {
+        var summary = {
+          projectName: project ? project.projectName : "All Projects",
+          demandId: project ? vm.projectDisplayId(project) : "All",
+          approvedBudget: metrics.capexBudget,
+          capexId: project ? project.budgetSource || "Not supplied" : "All CAPEX",
+          totalCommitted: 0,
+          totalInvoiced: 0,
+          remainingBudget: 0,
+          utilization: 0,
+          lpoIssued: 0,
+          pendingCamLpo: 0,
+        };
+        var lineMap = {};
+        var invoiceMap = {};
+        (rows || []).forEach(function (row, index) {
+          var lineKey = row.budgetLineId || row.BudgetLineId || "row-" + index;
+          if ((row.budgetLineId || row.BudgetLineId) && !lineMap[lineKey]) {
+            lineMap[lineKey] = row;
+            summary.totalCommitted += parseNumericInput(row.cost || row.Cost);
+            if (sameStatus(row.lpoStatus || row.LpoStatus, "Issued")) summary.lpoIssued++;
+            if (!sameStatus(row.camStatus || row.CamStatus, "Approved") || !sameStatus(row.lpoStatus || row.LpoStatus, "Issued")) summary.pendingCamLpo++;
+          } else if (!(row.budgetLineId || row.BudgetLineId) && row.cost != null) {
+            summary.totalCommitted += parseNumericInput(row.cost || row.Cost);
+          }
+          var invoiceId = row.invoiceId || row.InvoiceId;
+          var invoiceKey = invoiceId || ((row.invoiceNo || row.InvoiceNo) ? "invoice-" + index : "");
+          if (invoiceKey && !invoiceMap[invoiceKey]) {
+            invoiceMap[invoiceKey] = true;
+            summary.totalInvoiced += parseNumericInput(row.invoiceAmount || row.InvoiceAmount);
+          }
+        });
+        summary.remainingBudget = summary.approvedBudget - summary.totalCommitted;
+        summary.utilization = vm.percent(summary.totalCommitted, summary.approvedBudget);
+        return summary;
+      }
       vm.updateReportView = function () {
         var project = selectedReportProject();
         if (!project) {
           vm.reportMetrics = angular.copy(vm.metrics || emptyReportMetrics());
           if (!vm.reportMetrics.activeProjects) vm.reportMetrics.activeProjects = (vm.projects || []).filter(projectIsActive).length;
           vm.reportBudgetUsage = vm.budgetUsage || [];
+          vm.reportSummary = buildReportSummary(null, vm.reportMetrics, vm.reportBudgetUsage);
           return;
         }
         var metrics = emptyReportMetrics();
         addProjectReportMetrics(metrics, project);
         vm.reportMetrics = metrics;
         vm.reportBudgetUsage = (vm.budgetUsage || []).filter(function (row) { return String(row.projectId) === String(project.projectId); });
+        vm.reportSummary = buildReportSummary(project, vm.reportMetrics, vm.reportBudgetUsage);
       };
       vm.onReportProjectChange = function () {
         var project = selectedReportProject();

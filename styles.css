@@ -476,6 +476,14 @@ caption {
 .source-utilization .capex-utilization-report {
   min-width: 2380px;
 }
+.source-utilization .capex-utilization-report th {
+  text-align: center;
+  vertical-align: middle;
+}
+.source-utilization .capex-utilization-report td {
+  text-align: left;
+  vertical-align: middle;
+}
 .icon-btn {
   border: 0;
   background: transparent;
@@ -770,6 +778,35 @@ dd {
   border-radius: 7px;
   padding: 18px;
   min-height: 270px;
+}
+.project-budget-tracker {
+  grid-column: 1/-1;
+}
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(170px, 1fr));
+  gap: 10px;
+}
+.report-summary-grid > div {
+  min-height: 66px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #f9fbfa;
+}
+.report-summary-grid small {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.report-summary-grid strong {
+  display: block;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1.2;
 }
 .report-grid h3 {
   font:

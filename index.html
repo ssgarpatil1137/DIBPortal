@@ -656,6 +656,21 @@
               </tr>
             </table>
           </article>
+          <article class="report-table project-budget-tracker">
+            <h3>Project Budget Tracker</h3>
+            <div class="report-summary-grid">
+              <div><small>Project name</small><strong>{{vm.reportSummary.projectName}}</strong></div>
+              <div><small>Demand ID</small><strong>{{vm.reportSummary.demandId}}</strong></div>
+              <div><small>Approved Budget</small><strong>{{vm.money(vm.reportSummary.approvedBudget)}}</strong></div>
+              <div><small>CAPEX ID</small><strong>{{vm.reportSummary.capexId}}</strong></div>
+              <div><small>Total Committed</small><strong>{{vm.money(vm.reportSummary.totalCommitted)}}</strong></div>
+              <div><small>Total Invoiced</small><strong>{{vm.money(vm.reportSummary.totalInvoiced)}}</strong></div>
+              <div><small>Remaining Budget</small><strong>{{vm.money(vm.reportSummary.remainingBudget)}}</strong></div>
+              <div><small>Utilization</small><strong>{{vm.reportSummary.utilization}}%</strong></div>
+              <div><small>LPO Issued</small><strong>{{vm.reportSummary.lpoIssued}}</strong></div>
+              <div><small>Pending CAM/LPO</small><strong>{{vm.reportSummary.pendingCamLpo}}</strong></div>
+            </div>
+          </article>
           <article class="report-table source-utilization">
             <h3>CAPEX budget source utilization by project</h3>
             <div class="table-scroll">
