@@ -110,7 +110,7 @@
           id: "reports",
           label: "Management report",
           icon: "chart-no-axes-combined",
-          roles: ["Admin", "Master"],
+          roles: ["Requestor", "Reviewer", "Approver", "Admin", "Master"],
         },
       ];
       vm.navTabs = [];
