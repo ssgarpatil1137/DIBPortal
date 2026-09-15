@@ -862,27 +862,24 @@
         row.currency = (row.currency || "AED").toUpperCase();
         var units = parseNumericInput(row.units);
         var unitPrice = parseNumericInput(row.unitPrice);
+        var lineAmount = Math.round(units * unitPrice * 100) / 100;
         var foreignAmount = blankNumericInput(row.foreignAmount) ? 0 : parseNumericInput(row.foreignAmount);
         var aedAmount = blankNumericInput(row.aedAmount) ? 0 : parseNumericInput(row.aedAmount);
         var foreignBlank = blankNumericInput(row.foreignAmount);
         var aedBlank = blankNumericInput(row.aedAmount);
-        if (deriveForeignAmount || !(foreignAmount > 0 || aedAmount > 0 || foreignBlank || aedBlank)) {
-          if (row.currency === "AED") {
-            row.aedAmount = unitPrice || "";
-            aedAmount = unitPrice;
-          } else {
-            row.foreignAmount = unitPrice || "";
-            foreignAmount = unitPrice;
-          }
-        }
         if (row.currency === "AED") {
           row.exchangeRate = 1;
-          if (!aedAmount && !aedBlank) aedAmount = unitPrice;
-          row.finalAed = units * (aedAmount || 0);
-        } else {
-          if (!foreignAmount && !foreignBlank) foreignAmount = unitPrice;
-          row.finalAed = units * (foreignAmount || 0);
+          row.foreignAmount = lineAmount || "";
+          row.aedAmount = lineAmount || "";
+          row.finalAed = lineAmount;
+          return;
         }
+        if (deriveForeignAmount || !(foreignAmount > 0 || aedAmount > 0 || foreignBlank || aedBlank)) {
+          row.foreignAmount = unitPrice || "";
+          foreignAmount = unitPrice;
+        }
+        if (!foreignAmount && !foreignBlank) foreignAmount = unitPrice;
+        row.finalAed = units * (foreignAmount || 0);
         row.finalAed = Math.round(row.finalAed * 100) / 100;
       }
       function recalculatePetUploadTotal() {
