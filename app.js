@@ -33,7 +33,8 @@
       var vm = this;
       vm.session = null;
       var rememberedEmail = rememberedLoginEmail();
-      vm.auth = { mode: "login", email: rememberedEmail, rememberMe: !!rememberedEmail };
+      var rememberedPassword = rememberedLoginPassword();
+      vm.auth = { mode: "login", email: rememberedEmail, password: rememberedPassword, rememberMe: !!rememberedEmail || !!rememberedPassword };
       vm.questions = [
         { securityQuestionId: 1, question: "What was the name of your first school?" },
         { securityQuestionId: 2, question: "In which city were you born?" },
@@ -414,15 +415,25 @@
         try { return localStorage.getItem("dfmRememberedEmail") || ""; }
         catch (ignore) { return ""; }
       }
+      function rememberedLoginPassword() {
+        try { return localStorage.getItem("dfmRememberedPassword") || ""; }
+        catch (ignore) { return ""; }
+      }
       function saveRememberedLogin() {
         try {
-          if (vm.auth.rememberMe && vm.auth.email) localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
-          else localStorage.removeItem("dfmRememberedEmail");
+          if (vm.auth.rememberMe && vm.auth.email) {
+            localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
+            localStorage.setItem("dfmRememberedPassword", vm.auth.password || "");
+          } else {
+            localStorage.removeItem("dfmRememberedEmail");
+            localStorage.removeItem("dfmRememberedPassword");
+          }
         } catch (ignore) { }
       }
       function resetLoginAuth() {
         var email = rememberedLoginEmail();
-        vm.auth = { mode: "login", email: email, rememberMe: !!email };
+        var password = rememberedLoginPassword();
+        vm.auth = { mode: "login", email: email, password: password, rememberMe: !!email || !!password };
       }
       function applySession(session, token) {
         vm.session = session || {};
@@ -601,6 +612,13 @@
       function selectedBudgetLineSpendItem() {
         return selectedBudgetLineSpendItems()[0] || null;
       }
+      vm.selectedPetLineBudgetLines = function () {
+        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+        if (!selectedId) return [];
+        return ((vm.selectedPet && vm.selectedPet.budgetLines) || []).filter(function (line) {
+          return normalizeBudgetLineSourceIds(line.sourceSpendItemIds || line.SourceSpendItemIds || line.spendItemIds).indexOf(selectedId) >= 0;
+        });
+      };
       function applySelectedBudgetLineVendor() {
         var item = selectedBudgetLineSpendItem();
         vm.form.vendor = item ? String(item.budgetLineVendor || "").trim() : "";
