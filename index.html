@@ -60,10 +60,10 @@
           </p>
         </div>
         <div class="head-actions" ng-if="vm.tab==='portfolio'">
-          <button class="btn secondary" ng-click="vm.download('pet')">
-            <i data-lucide="download"></i>PET template</button
-          ><button class="btn secondary" type="button" ng-click="vm.refreshTransactions()" ng-disabled="vm.refreshing">
+          <button class="btn secondary" type="button" ng-click="vm.refreshTransactions()" ng-disabled="vm.refreshing">
             <i data-lucide="refresh-cw"></i>{{vm.refreshing ? 'Refreshing' : 'Refresh'}}</button
+          ><button class="btn secondary" ng-click="vm.download('pet')">
+            <i data-lucide="download"></i>PET template</button
           ><button
             class="btn primary"
             ng-if="vm.can('request')"
