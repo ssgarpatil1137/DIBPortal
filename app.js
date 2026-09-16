@@ -80,6 +80,9 @@
       vm.reportMetrics = angular.copy(vm.metrics || {});
       vm.reportBudgetUsage = [];
       vm.reportSummary = {};
+      vm.reportDetailProject = null;
+      vm.reportDetailBudgetUsage = [];
+      vm.reportDetailSummary = {};
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
@@ -1675,6 +1678,21 @@
       vm.openBudgetUsageProject = function (row) {
         var project = (vm.projects || []).filter(function (item) { return item.projectId === row.projectId || item.projectCode === row.projectCode || item.projectName === row.projectName; })[0];
         vm.openJira(project || row);
+      };
+      vm.openReportProjectDetails = function (project) {
+        if (!project) return;
+        function showReportDetails() {
+          var metrics = emptyReportMetrics();
+          var rows = (vm.budgetUsage || []).filter(function (row) { return String(row.projectId) === String(project.projectId); });
+          addProjectReportMetrics(metrics, project);
+          vm.reportDetailProject = project;
+          vm.reportDetailBudgetUsage = rows;
+          vm.reportDetailSummary = buildReportSummary(project, metrics, rows);
+          vm.modal = { type: "reportDetail", kicker: "MANAGEMENT REPORT", title: vm.projectDisplayId(project) + " · " + project.projectName };
+          redraw();
+        }
+        if (!vm.demo && !project.petsLoaded) return refreshProjectPets(project.projectId, true, true).then(showReportDetails);
+        showReportDetails();
       };
       vm.openPet = function (project, pet) {
         if (!vm.demo && project) {

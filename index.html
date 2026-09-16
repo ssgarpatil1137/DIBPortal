@@ -590,14 +590,6 @@
       </section>
 
       <section ng-if="vm.tab==='reports'" class="reports">
-        <div class="report-filter-bar">
-          <label
-            >Project<select ng-model="vm.reportProjectId" ng-change="vm.onReportProjectChange()">
-              <option value="">All Projects</option>
-              <option ng-repeat="project in vm.projects track by project.projectId" value="{{project.projectId}}">{{vm.projectDisplayId(project)}} · {{project.projectName}}</option>
-            </select></label
-          >
-        </div>
         <div class="report-band">
           <div>
             <p class="eyebrow">MANAGEMENT SNAPSHOT</p>
@@ -679,33 +671,21 @@
               </tr>
             </table>
           </article>
-          <article class="report-table project-budget-tracker">
-            <h3>Project Budget Tracker</h3>
-            <div class="report-summary-grid">
-              <div><small>Project name</small><strong>{{vm.reportSummary.projectName}}</strong></div>
-              <div><small>Demand ID</small><strong>{{vm.reportSummary.demandId}}</strong></div>
-              <div><small>Approved Budget</small><strong>{{vm.money(vm.reportSummary.approvedBudget)}}</strong></div>
-              <div><small>CAPEX ID</small><strong>{{vm.reportSummary.capexId}}</strong></div>
-              <div><small>Total Committed</small><strong>{{vm.money(vm.reportSummary.totalCommitted)}}</strong></div>
-              <div><small>Total Invoiced</small><strong>{{vm.money(vm.reportSummary.totalInvoiced)}}</strong></div>
-              <div><small>Remaining Budget</small><strong>{{vm.money(vm.reportSummary.remainingBudget)}}</strong></div>
-              <div><small>Utilization</small><strong>{{vm.reportSummary.utilization}}%</strong></div>
-              <div><small>LPO Issued</small><strong>{{vm.reportSummary.lpoIssued}}</strong></div>
-              <div><small>Pending CAM/LPO</small><strong>{{vm.reportSummary.pendingCamLpo}}</strong></div>
-            </div>
-          </article>
-          <article class="report-table source-utilization">
-            <h3>CAPEX budget source utilization by project</h3>
-            <div class="table-scroll">
-              <table class="capex-utilization-report">
-                <thead><tr><th>Budget source</th><th>Project</th><th>PET reference</th><th>Approved amount</th><th>Vendor</th><th>Justification</th><th>Cost</th><th>Currency</th><th>GL ID</th><th>CAM ID</th><th>CAM Status</th><th>CAM Comment</th><th>LPO Request ID</th><th>LPO Status</th><th>Invoice No</th><th>Invoice Amount</th><th>Invoice Status</th></tr></thead>
-                <tbody>
-                  <tr ng-repeat="row in vm.reportBudgetUsage track by $index"><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><button class="text-link truncate-cell" ng-click="vm.openBudgetUsageProject(row)">{{row.projectName}}</button></td><td>{{row.petCode}}</td><td>{{vm.money(row.amount||row.approvedAmount)}}</td><td>{{row.vendor||''}}</td><td title="{{row.justification}}"><span class="truncate-cell wide-cell">{{row.justification||''}}</span></td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.currency||''}}</td><td>{{row.glId||''}}</td><td>{{row.camId||''}}</td><td>{{row.camStatus||''}}</td><td title="{{row.camComment}}"><span class="truncate-cell wide-cell">{{row.camComment||''}}</span></td><td>{{row.lpoRequestId||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td>{{row.invoiceStatus||''}}</td></tr>
-                  <tr ng-if="!vm.reportBudgetUsage.length"><td colspan="17">No approved CAPEX utilization.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </article>
+        </div>
+        <div class="section-bar">
+          <div>
+            <h2>Project details</h2>
+            <span>Select a project row to view budget tracker and CAPEX utilization.</span>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table projects">
+            <thead><tr><th>Project ID</th><th>Project name</th><th>Type</th><th>Accountable Exec Lead</th><th>SME Lead</th><th>Project Manager</th><th>Budget source</th><th>Total budget</th><th>PET items</th><th>Budget lines</th><th>Invoices</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="project in vm.projects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}</td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+              <tr ng-if="!vm.projects.length"><td colspan="13"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects available.</strong></div></td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </main>
@@ -716,7 +696,7 @@
     >
       <section
         class="modal"
-        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'}"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'}"
         role="dialog"
         aria-modal="true"
       >
@@ -1245,6 +1225,35 @@
                 <strong>No invoices available.</strong>
               </div>
             </div>
+            <div ng-if="vm.modal.type==='reportDetail'" class="report-grid">
+              <article class="report-table project-budget-tracker">
+                <h3>Project Budget Tracker</h3>
+                <div class="report-summary-grid">
+                  <div><small>Project name</small><strong>{{vm.reportDetailSummary.projectName}}</strong></div>
+                  <div><small>Demand ID</small><strong>{{vm.reportDetailSummary.demandId}}</strong></div>
+                  <div><small>Approved Budget</small><strong>{{vm.money(vm.reportDetailSummary.approvedBudget)}}</strong></div>
+                  <div><small>CAPEX ID</small><strong>{{vm.reportDetailSummary.capexId}}</strong></div>
+                  <div><small>Total Committed</small><strong>{{vm.money(vm.reportDetailSummary.totalCommitted)}}</strong></div>
+                  <div><small>Total Invoiced</small><strong>{{vm.money(vm.reportDetailSummary.totalInvoiced)}}</strong></div>
+                  <div><small>Remaining Budget</small><strong>{{vm.money(vm.reportDetailSummary.remainingBudget)}}</strong></div>
+                  <div><small>Utilization</small><strong>{{vm.reportDetailSummary.utilization}}%</strong></div>
+                  <div><small>LPO Issued</small><strong>{{vm.reportDetailSummary.lpoIssued}}</strong></div>
+                  <div><small>Pending CAM/LPO</small><strong>{{vm.reportDetailSummary.pendingCamLpo}}</strong></div>
+                </div>
+              </article>
+              <article class="report-table source-utilization">
+                <h3>CAPEX budget source utilization by Project</h3>
+                <div class="table-scroll">
+                  <table class="capex-utilization-report">
+                    <thead><tr><th>Budget source</th><th>Project</th><th>PET reference</th><th>Approved amount</th><th>Vendor</th><th>Justification</th><th>Cost</th><th>Currency</th><th>GL ID</th><th>CAM ID</th><th>CAM Status</th><th>CAM Comment</th><th>LPO Request ID</th><th>LPO Status</th><th>Invoice No</th><th>Invoice Amount</th><th>Invoice Status</th></tr></thead>
+                    <tbody>
+                      <tr ng-repeat="row in vm.reportDetailBudgetUsage track by $index"><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><span class="truncate-cell">{{row.projectName}}</span></td><td>{{row.petCode}}</td><td>{{vm.money(row.amount||row.approvedAmount)}}</td><td>{{row.vendor||''}}</td><td title="{{row.justification}}"><span class="truncate-cell wide-cell">{{row.justification||''}}</span></td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.currency||''}}</td><td>{{row.glId||''}}</td><td>{{row.camId||''}}</td><td>{{row.camStatus||''}}</td><td title="{{row.camComment}}"><span class="truncate-cell wide-cell">{{row.camComment||''}}</span></td><td>{{row.lpoRequestId||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td>{{row.invoiceStatus||''}}</td></tr>
+                      <tr ng-if="!vm.reportDetailBudgetUsage.length"><td colspan="17">No approved CAPEX utilization for this project.</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </article>
+            </div>
             <div ng-if="vm.modal.type==='budget'" class="form-grid">
               <label class="full"
                 >Description<input
@@ -1370,7 +1379,7 @@
               </div>
             </div>
           </div>
-          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'">
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">
