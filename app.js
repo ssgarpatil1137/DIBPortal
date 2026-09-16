@@ -579,12 +579,14 @@
       }
       function refreshBudgetLineSpendDetails() {
         var selectedIds = normalizeBudgetLineSourceIds(vm.form && (vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds));
+        if (selectedIds.length > 1) selectedIds = selectedIds.slice(0, 1);
         var items = ((vm.selectedPet && vm.selectedPet.spendItems) || []).map(normalizeSpendItem);
         if (!selectedIds.length && !vm.form.budgetLineId && items.length === 1) selectedIds.push(budgetLineSpendItemId(items[0]));
         vm.budgetLineSelectedSpendItems = {};
         items.forEach(function (item) {
           var id = budgetLineSpendItemId(item);
           item.budgetLineSelected = selectedIds.indexOf(id) >= 0;
+          item.budgetLineVendor = item.budgetLineSelected && vm.form.vendor ? vm.form.vendor : item.budgetLineVendor || item.vendor || item.Vendor || "";
           if (item.budgetLineSelected) vm.budgetLineSelectedSpendItems[id] = true;
         });
         vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds(items);
@@ -595,6 +597,13 @@
       }
       function selectedBudgetLineSpendItems() {
         return (vm.budgetLineSpendDetails || []).filter(function (item) { return item.budgetLineSelected; });
+      }
+      function selectedBudgetLineSpendItem() {
+        return selectedBudgetLineSpendItems()[0] || null;
+      }
+      function applySelectedBudgetLineVendor() {
+        var item = selectedBudgetLineSpendItem();
+        vm.form.vendor = item ? String(item.budgetLineVendor || "").trim() : "";
       }
       function budgetLineDocumentType(key) {
         return vm.budgetLineDocumentTypes.filter(function (type) { return type.key === key; })[0];
@@ -650,8 +659,7 @@
         vm.form.lpoIssueDate = null;
         var amount = items.reduce(function (total, item) { return total + budgetLineSpendAmount(item); }, 0);
         if (amount > 0) { vm.form.cost = Math.round(amount * 100) / 100; vm.form.currency = "AED"; }
-        var vendors = uniqueSpendValues(items, ["vendor", "Vendor"]);
-        if (!String(vm.form.vendor || "").trim() && vendors.length) vm.form.vendor = vendors.join(" | ");
+        applySelectedBudgetLineVendor();
         var currencies = uniqueSpendValues(items, ["currency", "Currency"]);
         if (!amount && currencies.length === 1) vm.form.currency = currencies[0];
         var descriptions = uniqueSpendValues(items, ["description", "Description"]);
@@ -672,14 +680,22 @@
         setBudgetLineDate("camApprovedDate", items, ["camApprovedDate", "CamApprovedDate"]);
         setBudgetLineDate("lpoIssueDate", items, ["lpoIssueDate", "LpoIssueDate"]);
       }
-      vm.onBudgetLineSpendSelectionChange = function () {
+      vm.onBudgetLineSpendSelectionChange = function (selectedItem) {
+        (vm.budgetLineSpendDetails || []).forEach(function (item) {
+          if (item !== selectedItem) item.budgetLineSelected = false;
+        });
         vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds();
+        applySelectedBudgetLineVendor();
         applyBudgetLinePetValues();
       };
+      vm.onBudgetLineGridVendorChange = function (item) {
+        if (item && item.budgetLineSelected) applySelectedBudgetLineVendor();
+      };
       function validateBudgetLineVendorSelection() {
-        vm.form.vendor = String(vm.form && vm.form.vendor || "").trim();
-        if (!vm.form.vendor) { noticeError("Vendor Name is required."); return false; }
-        if (vm.budgetLineSpendDetails.length && !selectedBudgetLineSpendItems().length) { noticeError("Select at least one PET line for this Budget Line."); return false; }
+        var items = selectedBudgetLineSpendItems();
+        if (vm.budgetLineSpendDetails.length && items.length !== 1) { noticeError("Select one PET line for this Budget Line."); return false; }
+        applySelectedBudgetLineVendor();
+        if (!vm.form.vendor) { noticeError("Vendor Name is required on the selected PET line."); return false; }
         return true;
       }
       vm.petSpendField = function (pet, field) {

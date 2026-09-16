@@ -473,7 +473,9 @@ namespace DFM.Web.Controllers
 
         private static List<int> BudgetLineSourceSpendItemIds(BudgetLineRequest value)
         {
-            return (value.SourceSpendItemIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+            var ids = (value.SourceSpendItemIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+            if (ids.Count > 1) throw new ArgumentException("Select only one PET line for this Budget Line.");
+            return ids;
         }
 
         private static decimal SelectedBudgetLineSpendAmount(int petId, List<int> sourceSpendItemIds)
