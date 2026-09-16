@@ -295,7 +295,7 @@ namespace DFM.Web.Controllers
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
                 var sourceSpendItemIds = BudgetLineSourceSpendItemIds(value);
-                if (sourceSpendItemIds.Count > 0) value.Cost = SelectedBudgetLineSpendAmount(value.PetId, sourceSpendItemIds);
+                if (sourceSpendItemIds.Count > 0) ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
                 var saved = Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
@@ -478,14 +478,13 @@ namespace DFM.Web.Controllers
             return ids;
         }
 
-        private static decimal SelectedBudgetLineSpendAmount(int petId, List<int> sourceSpendItemIds)
+        private static void ValidateBudgetLineSourceSpendItems(int petId, List<int> sourceSpendItemIds)
         {
             var parameters = new List<SqlParameter> { P("@PetId", petId) };
             var names = sourceSpendItemIds.Select((id, index) => "@SpendItem" + index).ToArray();
             for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
-            var row = Db.Query("SELECT COUNT(1) SelectedCount, ISNULL(SUM(AedAmount * (1 + ContingencyPercent / 100)),0) Amount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
+            var row = Db.Query("SELECT COUNT(1) SelectedCount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
             if (row == null || Convert.ToInt32(row["SelectedCount"]) != sourceSpendItemIds.Count) throw new ArgumentException("Selected PET line must belong to the selected PET Request.");
-            return Math.Round(Convert.ToDecimal(row["Amount"]), 2);
         }
 
         private static bool BudgetLineSpendItemSelectionAvailable()

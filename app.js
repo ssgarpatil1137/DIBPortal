@@ -630,23 +630,21 @@
         vm.invoiceDocumentFile = file || null;
         redraw();
       };
-      function budgetLineSpendAmount(item) {
-        return parseNumericInput(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
-      }
       function setBudgetLineDate(field, items, names) {
         var value = spendItemValue((items || []).filter(function (item) { return spendItemValue(item, names); })[0], names);
         vm.form[field] = value ? new Date(value) : null;
+      }
+      function defaultBudgetLineCost() {
+        return Math.round(vm.petBudgetLineAvailable(vm.selectedPet, vm.form && vm.form.budgetLineId) * 100) / 100;
       }
       function applyBudgetLinePetValues() {
         if (!vm.form) return;
         refreshBudgetLineSpendDetails();
         var items = selectedBudgetLineSpendItems();
         if (vm.form.budgetLineId) {
-          var selectedAmount = items.reduce(function (total, item) { return total + budgetLineSpendAmount(item); }, 0);
-          if (selectedAmount > 0) { vm.form.cost = Math.round(selectedAmount * 100) / 100; vm.form.currency = "AED"; }
           return;
         }
-        vm.form.cost = null;
+        if (!(parseNumericInput(vm.form.cost) > 0)) vm.form.cost = defaultBudgetLineCost();
         vm.form.justification = "";
         vm.form.glNumber = "";
         vm.form.camId = "";
@@ -657,11 +655,10 @@
         vm.form.camCreatedDate = null;
         vm.form.camApprovedDate = null;
         vm.form.lpoIssueDate = null;
-        var amount = items.reduce(function (total, item) { return total + budgetLineSpendAmount(item); }, 0);
-        if (amount > 0) { vm.form.cost = Math.round(amount * 100) / 100; vm.form.currency = "AED"; }
+        vm.form.currency = "AED";
         applySelectedBudgetLineVendor();
         var currencies = uniqueSpendValues(items, ["currency", "Currency"]);
-        if (!amount && currencies.length === 1) vm.form.currency = currencies[0];
+        if (currencies.length === 1) vm.form.currency = currencies[0];
         var descriptions = uniqueSpendValues(items, ["description", "Description"]);
         if (descriptions.length) vm.form.justification = descriptions.join(" | ");
         var glNumbers = uniqueSpendValues(items, ["glNumber", "GlNumber", "GLNumber"]);
@@ -1812,7 +1809,7 @@
         var petChanged = !vm.selectedPet || Number(vm.selectedPet.petId) !== Number(pet.petId);
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
-        if (petChanged && !vm.form.budgetLineId) { vm.form.vendor = ""; vm.form.sourceSpendItemIds = []; }
+        if (petChanged && !vm.form.budgetLineId) { vm.form.vendor = ""; vm.form.sourceSpendItemIds = []; vm.form.cost = null; }
         if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
         if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
