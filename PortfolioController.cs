@@ -44,10 +44,12 @@ namespace DFM.Web.Controllers
         public IHttpActionResult Project(int projectId)
         {
             var sets = Db.QueryMultiple("EXEC dbo.sp_GetProjectDetail @id", new SqlParameter("@id", projectId));
+            var budgetLines = sets[3];
+            AttachBudgetLineSourceSpendItems(budgetLines);
             var attachments = sets[5];
             attachments.AddRange(Db.Query(@"SELECT AttachmentId,EntityType,EntityId,OriginalName,ContentType,FileSize,UploadedUtc
                 FROM dbo.Attachments
-                                WHERE (EntityType IN ('BudgetLineCAM','BudgetLineMemo','BudgetLineLPO')
+                                WHERE (EntityType IN ('BudgetLineCAM','BudgetLineLPO')
                                     AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))
                                     OR (EntityType='InvoiceDocument'
                                     AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines b ON b.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))", P("@ProjectId", projectId)));
@@ -55,7 +57,7 @@ namespace DFM.Web.Controllers
                 project = sets[0].FirstOrDefault(),
                 pets = sets[1],
                 spendItems = sets[2],
-                budgetLines = sets[3],
+                budgetLines = budgetLines,
                 invoices = sets[4],
                 attachments = attachments
             });
@@ -291,9 +293,14 @@ namespace DFM.Web.Controllers
                         lpoStatus = existing["LpoStatus"];
                     }
                 }
-                value.Vendor = NormalizeBudgetLineVendors(value.PetId, value.Vendor);
+                value.Vendor = NormalizeEditableVendor(value.Vendor);
+                var sourceSpendItemIds = BudgetLineSourceSpendItemIds(value);
+                if (sourceSpendItemIds.Count > 0) value.Cost = SelectedBudgetLineSpendAmount(value.PetId, sourceSpendItemIds);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
-                return Ok(Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault());
+                var saved = Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
+                var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
+                if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
+                return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -457,43 +464,67 @@ namespace DFM.Web.Controllers
             value.CostType = costType;
         }
 
-        private static string NormalizeBudgetLineVendors(int petId, string vendor)
+        private static string NormalizeEditableVendor(string vendor)
         {
             var selected = (vendor ?? "").Trim();
             if (selected.Length == 0) throw new ArgumentException("Vendor Name is required.");
-            var allowed = AllowedPetVendors(petId);
-            if (allowed.Count == 0) throw new ArgumentException("Selected PET does not have an approved Vendor Name.");
-            var match = allowed.FirstOrDefault(item => string.Equals(item, selected, StringComparison.OrdinalIgnoreCase));
-            if (match == null) throw new ArgumentException("Vendor Name must be selected from SpendItems for the selected PET.");
-            return match;
+            return selected;
         }
 
-        private static List<string> AllowedPetVendors(int petId)
+        private static List<int> BudgetLineSourceSpendItemIds(BudgetLineRequest value)
         {
-            var values = new List<string>();
-            var rows = Db.Query("SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId", P("@PetId", petId));
+            return (value.SourceSpendItemIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+        }
+
+        private static decimal SelectedBudgetLineSpendAmount(int petId, List<int> sourceSpendItemIds)
+        {
+            var parameters = new List<SqlParameter> { P("@PetId", petId) };
+            var names = sourceSpendItemIds.Select((id, index) => "@SpendItem" + index).ToArray();
+            for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
+            var row = Db.Query("SELECT COUNT(1) SelectedCount, ISNULL(SUM(AedAmount * (1 + ContingencyPercent / 100)),0) Amount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
+            if (row == null || Convert.ToInt32(row["SelectedCount"]) != sourceSpendItemIds.Count) throw new ArgumentException("Selected PET line must belong to the selected PET Request.");
+            return Math.Round(Convert.ToDecimal(row["Amount"]), 2);
+        }
+
+        private static bool BudgetLineSpendItemSelectionAvailable()
+        {
+            var row = Db.Query("SELECT CASE WHEN OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NULL THEN 0 ELSE 1 END HasTable").FirstOrDefault();
+            return row != null && Convert.ToInt32(row["HasTable"]) == 1;
+        }
+
+        private static void SyncBudgetLineSourceSpendItems(int budgetLineId, List<int> sourceSpendItemIds)
+        {
+            if (!BudgetLineSpendItemSelectionAvailable()) return;
+            var parameters = new List<SqlParameter> { P("@BudgetLineId", budgetLineId) };
+            var names = sourceSpendItemIds.Select((id, index) => "@SpendItem" + index).ToArray();
+            for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
+            var sql = "DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId";
+            if (sourceSpendItemIds.Count > 0) sql += "; INSERT dbo.BudgetLineSpendItems(BudgetLineId,SpendItemId) SELECT @BudgetLineId,s.SpendItemId FROM dbo.SpendItems s JOIN dbo.BudgetLines b ON b.BudgetLineId=@BudgetLineId AND b.PetId=s.PetId WHERE s.SpendItemId IN (" + string.Join(",", names) + ")";
+            Db.Execute(sql, parameters.ToArray());
+        }
+
+        private static void AttachBudgetLineSourceSpendItems(List<Dictionary<string, object>> budgetLines)
+        {
+            if (budgetLines == null || budgetLines.Count == 0 || !BudgetLineSpendItemSelectionAvailable()) return;
+            var budgetLineIds = budgetLines.Select(row => Convert.ToInt32(row["BudgetLineId"])).Distinct().ToList();
+            var parameters = new List<SqlParameter>();
+            var names = budgetLineIds.Select((id, index) => "@BudgetLine" + index).ToArray();
+            for (var index = 0; index < budgetLineIds.Count; index++) parameters.Add(P(names[index], budgetLineIds[index]));
+            var rows = Db.Query(@"SELECT bsi.BudgetLineId,
+                STUFF((SELECT ',' + CONVERT(nvarchar(20), innerBsi.SpendItemId)
+                    FROM dbo.BudgetLineSpendItems innerBsi
+                    WHERE innerBsi.BudgetLineId=bsi.BudgetLineId
+                    ORDER BY innerBsi.SpendItemId
+                    FOR XML PATH(''), TYPE).value('.','nvarchar(max)'),1,1,'') SourceSpendItemIds
+                FROM dbo.BudgetLineSpendItems bsi
+                WHERE bsi.BudgetLineId IN (" + string.Join(",", names) + @")
+                GROUP BY bsi.BudgetLineId", parameters.ToArray());
             foreach (var row in rows)
             {
-                foreach (var vendor in SplitVendorNames(Convert.ToString(row["Vendor"])))
-                {
-                    if (!values.Any(item => string.Equals(item, vendor, StringComparison.OrdinalIgnoreCase))) values.Add(vendor);
-                }
+                var budgetLineId = Convert.ToInt32(row["BudgetLineId"]);
+                var line = budgetLines.FirstOrDefault(item => Convert.ToInt32(item["BudgetLineId"]) == budgetLineId);
+                if (line != null) line["SourceSpendItemIds"] = row["SourceSpendItemIds"];
             }
-            return values;
-        }
-
-        private static List<string> SplitVendorNames(string vendor)
-        {
-            var values = new List<string>();
-            var value = (vendor ?? "").Trim();
-            Action<string> addVendor = part =>
-            {
-                var item = (part ?? "").Trim();
-                if (item.Length > 0 && !values.Any(existing => string.Equals(existing, item, StringComparison.OrdinalIgnoreCase))) values.Add(item);
-            };
-            addVendor(value);
-            if (value.Contains(",")) foreach (var part in value.Split(',')) addVendor(part);
-            return values;
         }
 
         private static void ExecutePetDecision(int petId, string stage, DecisionRequest value, string user)

@@ -61,12 +61,10 @@
       vm.bulkDecisionItems = [];
       vm.decisionPetRows = [];
       vm.decisionSelection = {};
-      vm.budgetLineVendorOptions = [];
-      vm.budgetLineVendorPlaceholder = "Select Vendor";
       vm.budgetLineSpendDetails = [];
+      vm.budgetLineSelectedSpendItems = {};
       vm.budgetLineDocumentTypes = [
         { key: "cam", label: "CAM", entityType: "BudgetLineCAM" },
-        { key: "memo", label: "Memo", entityType: "BudgetLineMemo" },
         { key: "lpo", label: "LPO", entityType: "BudgetLineLPO" },
       ];
       vm.budgetLineDocumentFiles = {};
@@ -565,19 +563,38 @@
         });
         return values;
       }
-      function budgetLineSpendItemsForVendor(pet, vendor) {
-        var vendorKeys = splitVendorNames(vendor).map(function (value) { return value.toLowerCase(); });
-        var items = (pet && pet.spendItems) || [];
-        if (!vendorKeys.length) return vm.budgetLineVendorOptions.length ? [] : items;
-        return items.filter(function (item) {
-          return splitVendorNames(item.vendor || item.Vendor).some(function (itemVendor) { return vendorKeys.indexOf(itemVendor.toLowerCase()) >= 0; });
-        });
+      function normalizeBudgetLineSourceIds(value) {
+        var values = [];
+        function add(value) {
+          var id = parseInt(value, 10);
+          if (id > 0 && values.indexOf(id) < 0) values.push(id);
+        }
+        if (angular.isArray(value)) value.forEach(add);
+        else if (typeof value === "string") value.split(",").forEach(add);
+        else add(value);
+        return values;
+      }
+      function budgetLineSpendItemId(item) {
+        return parseInt(item && (item.spendItemId || item.SpendItemId), 10) || 0;
       }
       function refreshBudgetLineSpendDetails() {
-        vm.budgetLineSpendDetails = budgetLineSpendItemsForVendor(vm.selectedPet, vm.form && vm.form.vendor).map(normalizeSpendItem);
+        var selectedIds = normalizeBudgetLineSourceIds(vm.form && (vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds));
+        var items = ((vm.selectedPet && vm.selectedPet.spendItems) || []).map(normalizeSpendItem);
+        if (!selectedIds.length && !vm.form.budgetLineId && items.length === 1) selectedIds.push(budgetLineSpendItemId(items[0]));
+        vm.budgetLineSelectedSpendItems = {};
+        items.forEach(function (item) {
+          var id = budgetLineSpendItemId(item);
+          item.budgetLineSelected = selectedIds.indexOf(id) >= 0;
+          if (item.budgetLineSelected) vm.budgetLineSelectedSpendItems[id] = true;
+        });
+        vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds(items);
+        vm.budgetLineSpendDetails = items;
       }
-      function setBudgetLineVendorOptions(vendors) {
-        vm.budgetLineVendorOptions = [vm.budgetLineVendorPlaceholder].concat(vendors || []);
+      function collectSelectedBudgetLineSpendItemIds(items) {
+        return (items || vm.budgetLineSpendDetails || []).filter(function (item) { return item.budgetLineSelected; }).map(budgetLineSpendItemId).filter(function (id) { return id > 0; });
+      }
+      function selectedBudgetLineSpendItems() {
+        return (vm.budgetLineSpendDetails || []).filter(function (item) { return item.budgetLineSelected; });
       }
       function budgetLineDocumentType(key) {
         return vm.budgetLineDocumentTypes.filter(function (type) { return type.key === key; })[0];
@@ -604,9 +621,6 @@
         vm.invoiceDocumentFile = file || null;
         redraw();
       };
-      function shouldAutoSelectBudgetLineVendor(pet, vendors) {
-        return ((pet && pet.spendItems) || []).length <= 1 && (vendors || []).length === 1;
-      }
       function budgetLineSpendAmount(item) {
         return parseNumericInput(item && (item.finalAedAmount || item.FinalAedAmount || item.finalAed || item.FinalAed)) || spendItemFinalAed(item || {});
       }
@@ -617,8 +631,12 @@
       function applyBudgetLinePetValues() {
         if (!vm.form) return;
         refreshBudgetLineSpendDetails();
-        if (vm.form.budgetLineId) return;
-        var items = vm.budgetLineSpendDetails;
+        var items = selectedBudgetLineSpendItems();
+        if (vm.form.budgetLineId) {
+          var selectedAmount = items.reduce(function (total, item) { return total + budgetLineSpendAmount(item); }, 0);
+          if (selectedAmount > 0) { vm.form.cost = Math.round(selectedAmount * 100) / 100; vm.form.currency = "AED"; }
+          return;
+        }
         vm.form.cost = null;
         vm.form.justification = "";
         vm.form.glNumber = "";
@@ -632,6 +650,8 @@
         vm.form.lpoIssueDate = null;
         var amount = items.reduce(function (total, item) { return total + budgetLineSpendAmount(item); }, 0);
         if (amount > 0) { vm.form.cost = Math.round(amount * 100) / 100; vm.form.currency = "AED"; }
+        var vendors = uniqueSpendValues(items, ["vendor", "Vendor"]);
+        if (!String(vm.form.vendor || "").trim() && vendors.length) vm.form.vendor = vendors.join(" | ");
         var currencies = uniqueSpendValues(items, ["currency", "Currency"]);
         if (!amount && currencies.length === 1) vm.form.currency = currencies[0];
         var descriptions = uniqueSpendValues(items, ["description", "Description"]);
@@ -652,15 +672,14 @@
         setBudgetLineDate("camApprovedDate", items, ["camApprovedDate", "CamApprovedDate"]);
         setBudgetLineDate("lpoIssueDate", items, ["lpoIssueDate", "LpoIssueDate"]);
       }
-      vm.onBudgetLineVendorChange = applyBudgetLinePetValues;
+      vm.onBudgetLineSpendSelectionChange = function () {
+        vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds();
+        applyBudgetLinePetValues();
+      };
       function validateBudgetLineVendorSelection() {
-        var selected = splitVendorNames(vm.form && vm.form.vendor);
-        if (!selected.length || selected[0] === vm.budgetLineVendorPlaceholder) { noticeError("Vendor Name is required."); return false; }
-        var allowed = (vm.budgetLineVendorOptions || []).filter(function (vendor) { return vendor !== vm.budgetLineVendorPlaceholder; });
-        if (!allowed.length) { noticeError("Selected PET does not have an approved Vendor Name."); return false; }
-        var match = allowed.filter(function (vendor) { return vendor.toLowerCase() === selected[0].toLowerCase(); })[0];
-        if (!match) { noticeError("Vendor Name must be selected from the selected PET."); return false; }
-        vm.form.vendor = match;
+        vm.form.vendor = String(vm.form && vm.form.vendor || "").trim();
+        if (!vm.form.vendor) { noticeError("Vendor Name is required."); return false; }
+        if (vm.budgetLineSpendDetails.length && !selectedBudgetLineSpendItems().length) { noticeError("Select at least one PET line for this Budget Line."); return false; }
         return true;
       }
       vm.petSpendField = function (pet, field) {
@@ -1757,9 +1776,8 @@
         vm.form.petId = vm.form.petId || pet.petId;
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
-        var petVendors = vm.petVendorOptions(vm.selectedPet);
-        setBudgetLineVendorOptions(petVendors);
-        if (!line) vm.form.vendor = shouldAutoSelectBudgetLineVendor(vm.selectedPet, petVendors) ? petVendors[0] : vm.budgetLineVendorPlaceholder;
+        vm.form.sourceSpendItemIds = normalizeBudgetLineSourceIds(vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds);
+        if (!line) vm.form.vendor = "";
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
@@ -1774,17 +1792,12 @@
       };
       vm.onBudgetLinePetChange = function (skipAutoFill) {
         var pet = projectPetById(vm.selectedProject, vm.form && vm.form.petId);
-        if (!pet) { vm.selectedPet = null; vm.budgetLineVendorOptions = []; vm.budgetLineSpendDetails = []; if (vm.form) vm.form.petReference = null; return; }
+        if (!pet) { vm.selectedPet = null; vm.budgetLineSpendDetails = []; vm.budgetLineSelectedSpendItems = {}; if (vm.form) vm.form.petReference = null; return; }
         var petChanged = !vm.selectedPet || Number(vm.selectedPet.petId) !== Number(pet.petId);
         vm.selectedPet = pet;
         vm.form.petReference = pet.code;
-        var petVendors = vm.petVendorOptions(pet);
-        setBudgetLineVendorOptions(petVendors);
+        if (petChanged && !vm.form.budgetLineId) { vm.form.vendor = ""; vm.form.sourceSpendItemIds = []; }
         if (vm.form.budgetLineId) { refreshBudgetLineSpendDetails(); return; }
-        var selectedVendors = splitVendorNames(vm.form.vendor);
-        var hasInvalidVendor = selectedVendors.some(function (vendor) { return !petVendors.some(function (allowed) { return allowed.toLowerCase() === vendor.toLowerCase(); }); });
-        if (petVendors.length && (!selectedVendors.length || selectedVendors[0] === vm.budgetLineVendorPlaceholder || hasInvalidVendor)) vm.form.vendor = shouldAutoSelectBudgetLineVendor(pet, petVendors) ? petVendors[0] : vm.budgetLineVendorPlaceholder;
-        if (!petVendors.length && petChanged) vm.form.vendor = "";
         if (skipAutoFill) { refreshBudgetLineSpendDetails(); return; }
         applyBudgetLinePetValues();
       };
@@ -1906,8 +1919,8 @@
         vm.bulkDecisionItems = [];
         vm.decisionPetRows = [];
         vm.decisionSelection = {};
-        vm.budgetLineVendorOptions = [];
         vm.budgetLineSpendDetails = [];
+        vm.budgetLineSelectedSpendItems = {};
         vm.budgetLineDocumentFiles = {};
         vm.invoiceDocumentFile = null;
         redraw();
@@ -2274,7 +2287,7 @@
           if (!vm.selectedPet) { noticeError("Select a PET reference before saving the budget line."); return; }
           if (!validateBudgetLineVendorSelection()) return;
           if (!validateBudgetLineAmount()) return;
-          var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId, petReference: vm.form.petReference || vm.selectedPet.code });
+          var budgetLinePayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId, petReference: vm.form.petReference || vm.selectedPet.code, sourceSpendItemIds: collectSelectedBudgetLineSpendItemIds() });
           var budgetLineProjectId = vm.selectedProject && vm.selectedProject.projectId;
           $http.post("api/portfolio/budget-lines", budgetLinePayload).then(function (response) {
             var saved = response.data || {};
@@ -2297,6 +2310,7 @@
           if (!validateBudgetLineVendorSelection()) return;
           if (!validateBudgetLineAmount()) return;
           vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
+          vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds();
           var old =
             vm.form.budgetLineId &&
             vm.selectedPet.budgetLines.filter(function (x) {
