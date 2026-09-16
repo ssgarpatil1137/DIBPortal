@@ -2086,7 +2086,8 @@
       vm.downloadAttachment = function (attachment, viewInline) {
         if (!attachment || !attachment.attachmentId) return;
         var viewer = viewInline ? window.open("", "_blank") : null;
-        $http.get("api/portfolio/attachments/" + attachment.attachmentId, { responseType: "blob" }).then(function (response) {
+        var urlPath = "api/portfolio/attachments/" + attachment.attachmentId + (viewInline ? "?inline=true" : "");
+        $http.get(urlPath, { responseType: "blob" }).then(function (response) {
           var type = response.headers("Content-Type") || attachment.contentType || "application/octet-stream";
           var blob = new Blob([response.data], { type: type });
           var url = window.URL.createObjectURL(blob);

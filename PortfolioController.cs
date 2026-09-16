@@ -401,18 +401,26 @@ namespace DFM.Web.Controllers
         }
 
         [HttpGet, Route("attachments/{attachmentId:long}")]
-        public IHttpActionResult DownloadAttachment(long attachmentId)
+        public IHttpActionResult DownloadAttachment(long attachmentId, bool inline = false)
         {
             var row = Db.Query("SELECT OriginalName,StoredName,ContentType FROM dbo.Attachments WHERE AttachmentId=@AttachmentId", P("@AttachmentId", attachmentId)).FirstOrDefault();
             if (row == null) return NotFound();
             var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments");
             var path = Path.Combine(root, Convert.ToString(row["StoredName"]));
             if (!File.Exists(path)) return NotFound();
+            var originalName = Convert.ToString(row["OriginalName"]);
             var response = Request.CreateResponse(HttpStatusCode.OK);
             response.Content = new StreamContent(File.OpenRead(path));
-            response.Content.Headers.ContentType = new MediaTypeHeaderValue(Convert.ToString(row["ContentType"] ?? "application/octet-stream"));
-            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = Convert.ToString(row["OriginalName"]) };
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue(AttachmentContentType(row["ContentType"], originalName));
+            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue(inline ? "inline" : "attachment") { FileName = originalName };
             return ResponseMessage(response);
+        }
+
+        private static string AttachmentContentType(object storedContentType, string originalName)
+        {
+            var contentType = Convert.ToString(storedContentType);
+            if (!string.IsNullOrWhiteSpace(contentType) && !contentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)) return contentType;
+            return MimeMapping.GetMimeMapping(originalName ?? "attachment");
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/preview")]
