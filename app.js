@@ -79,6 +79,7 @@
       vm.reportProjectId = "";
       vm.reportProjectSearch = "";
       vm.reportProjectStatusFilter = "";
+      vm.reportProjectBudgetTypeFilter = "";
       vm.reportProjectPage = 1;
       vm.reportProjectPageSize = 10;
       vm.reportProjectPageCount = 1;
@@ -1318,11 +1319,14 @@
         }
       }
       function buildReportSummary(project, metrics, rows) {
+        var budgetType = petProjectExpenseHead(project);
+        var approvedBudget = project ? (budgetType === "OPEX" ? metrics.opexBudget : metrics.capexBudget) : metrics.capexBudget + metrics.opexBudget;
         var summary = {
           projectName: project ? project.projectName : "All Projects",
           demandId: project ? vm.projectDisplayId(project) : "All",
-          approvedBudget: metrics.capexBudget,
-          capexId: project ? project.budgetSource || "Not supplied" : "All CAPEX",
+          budgetType: budgetType || "All",
+          approvedBudget: approvedBudget,
+          capexId: project ? project.budgetSource || "Not supplied" : "All budget sources",
           totalCommitted: 0,
           totalInvoiced: 0,
           remainingBudget: 0,
@@ -1333,18 +1337,19 @@
         var lineMap = {};
         var invoiceMap = {};
         (rows || []).forEach(function (row, index) {
+          var countInTotals = sameStatus(row.petStatus || row.PetStatus, "Approved");
           var lineKey = row.budgetLineId || row.BudgetLineId || "row-" + index;
-          if ((row.budgetLineId || row.BudgetLineId) && !lineMap[lineKey]) {
+          if (countInTotals && (row.budgetLineId || row.BudgetLineId) && !lineMap[lineKey]) {
             lineMap[lineKey] = row;
             summary.totalCommitted += parseNumericInput(row.cost || row.Cost);
             if (sameStatus(row.lpoStatus || row.LpoStatus, "Issued")) summary.lpoIssued++;
             if (!sameStatus(row.camStatus || row.CamStatus, "Approved") || !sameStatus(row.lpoStatus || row.LpoStatus, "Issued")) summary.pendingCamLpo++;
-          } else if (!(row.budgetLineId || row.BudgetLineId) && row.cost != null) {
+          } else if (countInTotals && !(row.budgetLineId || row.BudgetLineId) && row.cost != null) {
             summary.totalCommitted += parseNumericInput(row.cost || row.Cost);
           }
           var invoiceId = row.invoiceId || row.InvoiceId;
           var invoiceKey = invoiceId || ((row.invoiceNo || row.InvoiceNo) ? "invoice-" + index : "");
-          if (invoiceKey && !invoiceMap[invoiceKey]) {
+          if (countInTotals && invoiceKey && !invoiceMap[invoiceKey]) {
             invoiceMap[invoiceKey] = true;
             summary.totalInvoiced += parseNumericInput(row.invoiceAmount || row.InvoiceAmount);
           }
@@ -1378,8 +1383,9 @@
         var query = (vm.reportProjectSearch || "").toLowerCase();
         var filtered = (vm.projects || []).filter(function (project) {
           var statusMatch = projectHasStatus(project, project.pets || [], vm.reportProjectStatusFilter);
-          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
-          return statusMatch && queryMatch;
+          var budgetTypeMatch = !vm.reportProjectBudgetTypeFilter || String(project.budgetType || "").toUpperCase() === vm.reportProjectBudgetTypeFilter;
+          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && budgetTypeMatch && queryMatch;
         });
         vm.reportProjectFilteredCount = filtered.length;
         vm.reportProjectPageCount = Math.max(1, Math.ceil(filtered.length / vm.reportProjectPageSize));
@@ -1593,6 +1599,10 @@
           project.budgetLines = project.budgetLines || [];
           project.petCount = project.petsLoaded ? project.pets.length : Number(project.petCount) || 0;
           project.approvedPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Approved"; }).length : Number(project.approvedPetCount) || 0;
+          project.pendingReviewPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Pending Review"; }).length : Number(project.pendingReviewPetCount) || 0;
+          project.pendingApprovalPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Pending Approval"; }).length : Number(project.pendingApprovalPetCount) || 0;
+          project.rejectedPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Rejected"; }).length : Number(project.rejectedPetCount) || 0;
+          project.sentBackPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Sent Back"; }).length : Number(project.sentBackPetCount) || 0;
           project.spendRequestCount = Number(project.spendRequestCount) || 0;
           project.budgetLineCount = Number(project.budgetLineCount) || 0;
           project.invoiceCount = Number(project.invoiceCount) || 0;
@@ -1608,7 +1618,7 @@
             project.spendRequestCount += pet.spendItems.length;
             project.budgetLineCount += pet.budgetLines.length;
             pet.budgetLines.forEach(function (line) { line.invoices = line.invoices || []; line.petCode = pet.code; project.budgetLines.push(line); project.invoiceCount += line.invoices.length; });
-            if (vm.demo && project.budgetType === "CAPEX" && pet.status === "Approved") vm.budgetUsage.push({ budgetSource: project.budgetSource, projectName: project.projectName, petCode: pet.code, amount: pet.requestedAmount });
+            if (vm.demo && pet.status === "Approved") vm.budgetUsage.push({ budgetType: project.budgetType, budgetSource: project.budgetSource, projectId: project.projectId, projectName: project.projectName, petCode: pet.code, petStatus: pet.status, amount: pet.requestedAmount });
           });
         });
       }

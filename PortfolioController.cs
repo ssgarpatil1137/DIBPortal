@@ -32,7 +32,21 @@ namespace DFM.Web.Controllers
         {
             return Ok(new {
                 metrics = Db.Query("SELECT * FROM vw_ManagementDashboard"),
-                projects = Db.Query("SELECT * FROM vw_ProjectPortfolio ORDER BY CreatedUtc DESC"),
+                projects = Db.Query(@"SELECT p.*,
+                    ISNULL(petCounts.ApprovedPetCount,0) ApprovedPetCount,
+                    ISNULL(petCounts.PendingReviewPetCount,0) PendingReviewPetCount,
+                    ISNULL(petCounts.PendingApprovalPetCount,0) PendingApprovalPetCount,
+                    ISNULL(petCounts.RejectedPetCount,0) RejectedPetCount,
+                    ISNULL(petCounts.SentBackPetCount,0) SentBackPetCount
+                    FROM dbo.vw_ProjectPortfolio p
+                    OUTER APPLY (SELECT
+                        SUM(CASE WHEN x.Status='Approved' THEN 1 ELSE 0 END) ApprovedPetCount,
+                        SUM(CASE WHEN x.Status='Pending Review' THEN 1 ELSE 0 END) PendingReviewPetCount,
+                        SUM(CASE WHEN x.Status='Pending Approval' THEN 1 ELSE 0 END) PendingApprovalPetCount,
+                        SUM(CASE WHEN x.Status='Rejected' THEN 1 ELSE 0 END) RejectedPetCount,
+                        SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
+                        FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
+                    ORDER BY p.CreatedUtc DESC"),
                 approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),

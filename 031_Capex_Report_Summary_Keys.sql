@@ -7,6 +7,7 @@ GO
 CREATE OR ALTER VIEW dbo.vw_CapexProjectUtilization AS
 SELECT
  b.BudgetSourceId,
+ b.BudgetType,
  b.ExternalId BudgetSource,
  b.Description BudgetDescription,
  p.ProjectId,
@@ -15,7 +16,7 @@ SELECT
  pet.PetId,
  pet.Code PetCode,
  pet.Status PetStatus,
- pet.RequestedAmount ApprovedAmount,
+ pet.RequestedAmount PetAmount,
  pet.ApprovedUtc,
  bl.BudgetLineId,
  bl.Vendor,
@@ -34,8 +35,7 @@ SELECT
  i.InvoiceStatus
 FROM dbo.BudgetSources b
 JOIN dbo.Projects p ON p.BudgetSourceId=b.BudgetSourceId
-JOIN dbo.PETRequests pet ON pet.ProjectId=p.ProjectId AND pet.Status='Approved'
+JOIN dbo.PETRequests pet ON pet.ProjectId=p.ProjectId
 LEFT JOIN dbo.BudgetLines bl ON bl.PetId=pet.PetId
-LEFT JOIN dbo.Invoices i ON i.BudgetLineId=bl.BudgetLineId
-WHERE b.BudgetType='CAPEX';
+LEFT JOIN dbo.Invoices i ON i.BudgetLineId=bl.BudgetLineId;
 GO
