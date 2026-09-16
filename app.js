@@ -1389,7 +1389,8 @@
       };
       function projectHasStatus(project, pets, status) {
         if (!status) return true;
-        if (sameStatus(project && project.status, status)) return true;
+        if (sameStatus(status, "Active")) return projectIsActive(project);
+        if (sameStatus(status, "Registered")) return sameStatus(project && project.status, status);
         if ((pets || []).some(function (pet) { return sameStatus(pet.status, status); })) return true;
         if (sameStatus(status, "Approved")) return Number(project && project.approvedPetCount) > 0;
         if (sameStatus(status, "Pending Review")) return Number(project && project.pendingReviewPetCount) > 0;
