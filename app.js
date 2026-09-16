@@ -421,6 +421,7 @@
             rememberSession(response.data);
             updateNavigation();
             loadDashboard();
+            loadCurrencies(false);
             loadRoles(false);
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
           else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
@@ -475,13 +476,13 @@
         var loadedFromCache = false;
         try {
           var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
-          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadRoles(false); }
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadRoles(false); }
         } catch (ignore) { }
         $http.get("api/auth/session").then(function (response) {
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
-          if (!loadedFromCache) { loadDashboard(); loadRoles(false); }
+          if (!loadedFromCache) { loadDashboard(); loadCurrencies(false); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -930,24 +931,12 @@
         var units = parseNumericInput(row.units);
         var unitPrice = parseNumericInput(row.unitPrice);
         var lineAmount = Math.round(units * unitPrice * 100) / 100;
-        var foreignAmount = blankNumericInput(row.foreignAmount) ? 0 : parseNumericInput(row.foreignAmount);
-        var aedAmount = blankNumericInput(row.aedAmount) ? 0 : parseNumericInput(row.aedAmount);
-        var foreignBlank = blankNumericInput(row.foreignAmount);
-        var aedBlank = blankNumericInput(row.aedAmount);
-        if (row.currency === "AED") {
-          row.exchangeRate = 1;
-          row.foreignAmount = lineAmount || "";
-          row.aedAmount = lineAmount || "";
-          row.finalAed = lineAmount;
-          return;
-        }
-        if (deriveForeignAmount || !(foreignAmount > 0 || aedAmount > 0 || foreignBlank || aedBlank)) {
-          row.foreignAmount = unitPrice || "";
-          foreignAmount = unitPrice;
-        }
-        if (!foreignAmount && !foreignBlank) foreignAmount = unitPrice;
-        row.finalAed = units * (foreignAmount || 0);
-        row.finalAed = Math.round(row.finalAed * 100) / 100;
+        var rate = currencyRateToLocal(row.currency, row.exchangeRate);
+        var localAmount = Math.round(lineAmount * rate * 100) / 100;
+        row.exchangeRate = rate;
+        row.foreignAmount = lineAmount || "";
+        row.aedAmount = localAmount || "";
+        row.finalAed = Math.round(localAmount * (1 + parseNumericInput(row.contingencyPercent) / 100) * 100) / 100;
       }
       function recalculatePetUploadTotal() {
         var total = 0;
@@ -983,8 +972,6 @@
         return (vm.uploadPreview || []).map(function (row) {
           applyPetProjectDefaults(row);
           calculatePetUploadRow(row, false);
-          var divisor = 1 + (parseNumericInput(row.contingencyPercent) / 100);
-          var persistedAmount = divisor ? parseNumericInput(row.finalAed) / divisor : parseNumericInput(row.finalAed);
           return {
             spendItemId: row.spendItemId || null,
             petId: petId || row.petId || 0,
@@ -1001,9 +988,9 @@
             units: parseNumericInput(row.units),
             unitPrice: parseNumericInput(row.unitPrice),
             currency: row.currency,
-            foreignAmount: persistedAmount,
-            exchangeRate: parseNumericInput(row.exchangeRate) || 1,
-            aedAmount: persistedAmount,
+            foreignAmount: parseNumericInput(row.foreignAmount),
+            exchangeRate: currencyRateToLocal(row.currency, row.exchangeRate),
+            aedAmount: parseNumericInput(row.aedAmount),
             contingencyPercent: parseNumericInput(row.contingencyPercent),
             finalAed: parseNumericInput(row.finalAed),
             yearlyRecurrence: blankNumericInput(row.yearlyRecurrence) ? null : parseNumericInput(row.yearlyRecurrence),
@@ -1151,6 +1138,23 @@
         if (blankNumericInput(value)) return 0;
         return Number(String(value).replace(/,/g, "")) || 0;
       }
+      function currencyRateToLocal(code, fallbackRate) {
+        var currencyCode = String(code || "AED").toUpperCase();
+        var match = (vm.currencies || []).filter(function (currency) { return String(currency.code || "").toUpperCase() === currencyCode; })[0];
+        var rate = parseNumericInput(match && match.rateToLocal);
+        if (rate > 0) return rate;
+        rate = parseNumericInput(fallbackRate);
+        return rate > 0 ? rate : 1;
+      }
+      vm.currencyOptions = function () {
+        var options = [];
+        (vm.currencies || []).forEach(function (currency) {
+          var code = String(currency.code || "").toUpperCase();
+          if (code && currency.isActive !== false && options.indexOf(code) < 0) options.push(code);
+        });
+        if (options.indexOf("AED") < 0) options.unshift("AED");
+        return options;
+      };
       vm.statusClass = function (status) {
         var text = (status || "").toLowerCase();
         if (/approved|paid|settled|issued|active|live/.test(text))
@@ -1194,22 +1198,21 @@
       }
       vm.spendFinalAed = spendItemFinalAed;
       function spendForeignAmount(item) {
-        return parseNumericInput(item && item.foreignAmount) || parseNumericInput(item && item.units) * parseNumericInput(item && item.unitPrice);
+        if (!blankNumericInput(item && item.units) || !blankNumericInput(item && item.unitPrice)) return parseNumericInput(item && item.units) * parseNumericInput(item && item.unitPrice);
+        return parseNumericInput(item && item.foreignAmount);
       }
       function spendAedAmount(item) {
         var foreignAmount = spendForeignAmount(item);
-        var explicitAed = parseNumericInput(item && item.aedAmount);
-        if (explicitAed) return explicitAed;
-        var currency = String(item && item.currency || "AED").toUpperCase();
-        var rate = currency === "AED" ? 1 : parseNumericInput(item && item.exchangeRate) || 1;
+        var rate = currencyRateToLocal(item && item.currency, item && item.exchangeRate);
         return foreignAmount * rate;
       }
       vm.recalculateSpendForm = function () {
         if (!vm.form) return;
-        var currency = String(vm.form.currency || "AED").toUpperCase();
-        if (currency === "AED") vm.form.exchangeRate = 1;
-        var rate = currency === "AED" ? 1 : parseNumericInput(vm.form.exchangeRate) || 1;
+        vm.form.currency = String(vm.form.currency || "AED").toUpperCase();
+        var rate = currencyRateToLocal(vm.form.currency, vm.form.exchangeRate);
         var foreignAmount = spendForeignAmount(vm.form);
+        vm.form.exchangeRate = rate;
+        vm.form.foreignAmount = foreignAmount ? Math.round(foreignAmount * 100) / 100 : "";
         vm.form.aedAmount = foreignAmount ? Math.round(foreignAmount * rate * 100) / 100 : "";
       };
       function petFinalAedWithSpend(pet, item) {
@@ -2061,11 +2064,12 @@
           chain = chain.then(function () {
             var payload = angular.extend({}, row, { petId: petId });
             applyPetProjectDefaults(payload);
+            calculatePetUploadRow(payload, true);
             payload.units = parseNumericInput(payload.units);
             payload.unitPrice = parseNumericInput(payload.unitPrice);
-            payload.foreignAmount = parseNumericInput(payload.foreignAmount) || payload.units * payload.unitPrice;
-            payload.exchangeRate = parseNumericInput(payload.exchangeRate) || 1;
-            payload.aedAmount = parseNumericInput(payload.aedAmount) || payload.foreignAmount;
+            payload.foreignAmount = parseNumericInput(payload.foreignAmount);
+            payload.exchangeRate = currencyRateToLocal(payload.currency, payload.exchangeRate);
+            payload.aedAmount = parseNumericInput(payload.aedAmount);
             payload.contingencyPercent = parseNumericInput(payload.contingencyPercent);
             payload.yearlyRecurrence = blankNumericInput(payload.yearlyRecurrence) ? null : parseNumericInput(payload.yearlyRecurrence);
             return $http.post("api/portfolio/spend-items", payload);
@@ -2249,7 +2253,7 @@
           spendPayload.units = parseNumericInput(spendPayload.units);
           spendPayload.unitPrice = parseNumericInput(spendPayload.unitPrice);
           spendPayload.foreignAmount = spendForeignAmount(spendPayload);
-          spendPayload.exchangeRate = String(spendPayload.currency || "AED").toUpperCase() === "AED" ? 1 : parseNumericInput(spendPayload.exchangeRate) || 1;
+          spendPayload.exchangeRate = currencyRateToLocal(spendPayload.currency, spendPayload.exchangeRate);
           spendPayload.aedAmount = spendAedAmount(spendPayload);
           spendPayload.contingencyPercent = parseNumericInput(spendPayload.contingencyPercent);
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, petFinalAedWithSpend(vm.selectedPet, spendPayload))) return;
@@ -2280,7 +2284,7 @@
           demoSpendPayload.units = parseNumericInput(demoSpendPayload.units);
           demoSpendPayload.unitPrice = parseNumericInput(demoSpendPayload.unitPrice);
           demoSpendPayload.foreignAmount = spendForeignAmount(demoSpendPayload);
-          demoSpendPayload.exchangeRate = String(demoSpendPayload.currency || "AED").toUpperCase() === "AED" ? 1 : parseNumericInput(demoSpendPayload.exchangeRate) || 1;
+          demoSpendPayload.exchangeRate = currencyRateToLocal(demoSpendPayload.currency, demoSpendPayload.exchangeRate);
           demoSpendPayload.aedAmount = spendAedAmount(demoSpendPayload);
           demoSpendPayload.contingencyPercent = parseNumericInput(demoSpendPayload.contingencyPercent);
           var oldSpend = demoSpendPayload.spendItemId && vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === demoSpendPayload.spendItemId; })[0];
@@ -2576,7 +2580,7 @@
         });
       }
       function loadCurrencies(showError) {
-        if (!vm.hasRole("Admin") || vm.demo) { vm.updateCurrencyView(true); return $q.when(); }
+        if (vm.demo) { vm.updateCurrencyView(true); return $q.when(); }
         return $http.get("api/portfolio/currencies").then(function (response) {
           vm.currencies = response.data || [];
           vm.updateCurrencyView(true);

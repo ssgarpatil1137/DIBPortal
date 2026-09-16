@@ -92,7 +92,7 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
-        [ApiAuthorize("Admin", "Master"), HttpGet, Route("currencies")]
+        [HttpGet, Route("currencies")]
         public IHttpActionResult Currencies()
         {
             try { return Ok(Db.Query("SELECT CurrencyID CurrencyId,Code,Name,RateToLocal,IsActive FROM dbo.Currencies ORDER BY Code")); }
@@ -210,6 +210,18 @@ namespace DFM.Web.Controllers
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
+        private static decimal CurrencyRateToLocal(string code, decimal fallbackRate)
+        {
+            var currencyCode = string.IsNullOrWhiteSpace(code) ? "AED" : code.Trim().ToUpperInvariant();
+            var row = Db.Query("SELECT RateToLocal FROM dbo.Currencies WHERE UPPER(Code)=@Code", P("@Code", currencyCode)).FirstOrDefault();
+            if (row != null && row["RateToLocal"] != null)
+            {
+                var rate = Convert.ToDecimal(row["RateToLocal"]);
+                if (rate > 0) return rate;
+            }
+            return fallbackRate > 0 ? fallbackRate : 1;
+        }
+
         private static void UpdateApprovedPetVendors(int petId, List<SpendItemRequest> items, string vendorName)
         {
             if (items != null && items.Count > 0)
@@ -250,10 +262,10 @@ namespace DFM.Web.Controllers
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
             try { ValidatePetRequiredDropdowns(value); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
-            var foreignAmount = value.ForeignAmount == 0 ? value.Units * value.UnitPrice : value.ForeignAmount;
-            if (!string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) && value.AedAmount == 0 && value.ExchangeRate == 0) return BadRequest("Exchange Rate or AED Amount is required for non-AED PET line items.");
-            var rate = value.ExchangeRate == 0 ? 1 : value.ExchangeRate;
-            var aedAmount = value.AedAmount == 0 ? (string.Equals(value.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? foreignAmount : foreignAmount * rate) : value.AedAmount;
+            var foreignAmount = value.Units * value.UnitPrice;
+            var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
+            value.ExchangeRate = rate;
+            var aedAmount = foreignAmount * rate;
             try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount)); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -274,10 +286,11 @@ namespace DFM.Web.Controllers
             foreach (var item in items)
             {
                 item.PetId = petId;
-                var amount = item.FinalAed > 0 ? item.FinalAed : item.AedAmount;
-                var divisor = 1 + (item.ContingencyPercent / 100);
-                var persistedAmount = divisor == 0 ? amount : amount / divisor;
-                SaveSpendItemRow(item, persistedAmount, persistedAmount);
+                var foreignAmount = item.Units * item.UnitPrice;
+                var exchangeRate = CurrencyRateToLocal(item.Currency, item.ExchangeRate);
+                item.ExchangeRate = exchangeRate;
+                var aedAmount = foreignAmount * exchangeRate;
+                SaveSpendItemRow(item, foreignAmount, aedAmount);
             }
         }
 
