@@ -92,6 +92,34 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("currencies")]
+        public IHttpActionResult Currencies()
+        {
+            try { return Ok(Db.Query("SELECT CurrencyID CurrencyId,Code,Name,RateToLocal,IsActive FROM dbo.Currencies ORDER BY Code")); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("currencies")]
+        public IHttpActionResult SaveCurrency(CurrencyRequest value)
+        {
+            if (value == null) return BadRequest("Currency details are required.");
+            value.Code = (value.Code ?? "").Trim().ToUpperInvariant();
+            value.Name = (value.Name ?? "").Trim();
+            if (value.Code.Length == 0) return BadRequest("Currency code is required.");
+            if (value.Name.Length == 0) return BadRequest("Currency name is required.");
+            if (value.RateToLocal <= 0) return BadRequest("Rate to local must be greater than zero.");
+            try
+            {
+                return Ok(Db.Query(@"DECLARE @SavedCurrencyId INT = NULLIF(@CurrencyId,0);
+                    IF @SavedCurrencyId IS NULL
+                    BEGIN INSERT dbo.Currencies(Code,Name,RateToLocal,IsActive) VALUES(@Code,@Name,@RateToLocal,@IsActive); SET @SavedCurrencyId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Currencies SET Code=@Code,Name=@Name,RateToLocal=@RateToLocal,IsActive=@IsActive WHERE CurrencyID=@SavedCurrencyId;
+                    SELECT CurrencyID CurrencyId,Code,Name,RateToLocal,IsActive FROM dbo.Currencies WHERE CurrencyID=@SavedCurrencyId",
+                    P("@CurrencyId", value.CurrencyId ?? 0), P("@Code", value.Code), P("@Name", value.Name), P("@RateToLocal", value.RateToLocal), P("@IsActive", value.IsActive)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet, Route("pets/{petId:int}/history")]
         public IHttpActionResult History(int petId)
         {

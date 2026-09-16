@@ -545,6 +545,29 @@
         <div class="pagination" ng-if="vm.budgetPageCount>1"><button class="icon-btn" ng-disabled="vm.budgetPage===1" ng-click="vm.changeBudgetPage(vm.budgetPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.budgetPage}} of {{vm.budgetPageCount}}</span><button class="icon-btn" ng-disabled="vm.budgetPage===vm.budgetPageCount" ng-click="vm.changeBudgetPage(vm.budgetPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
+      <section ng-if="vm.tab==='currencies'" class="workspace">
+        <div class="section-bar">
+          <div>
+            <h2>Currency maintenance</h2>
+            <span>Add and modify exchange rates used in PET and spend entry.</span>
+          </div>
+          <button class="btn secondary" ng-click="vm.openCurrency()"><i data-lucide="plus"></i>Add Currency</button>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.currencySearch" ng-change="vm.updateCurrencyView()" placeholder="Search code, name, status" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead><tr><th>Code</th><th>Name</th><th>Rate to local</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="currency in vm.visibleCurrencies track by currency.currencyId"><td>{{currency.code}}</td><td>{{currency.name}}</td><td>{{vm.amount(currency.rateToLocal)}}</td><td><span class="status" ng-class="currency.isActive?'approved':'rejected'">{{currency.isActive?'Active':'Inactive'}}</span></td><td><button class="icon-btn" title="Edit currency" ng-click="vm.openCurrency(currency)"><i data-lucide="pencil"></i></button></td></tr>
+              <tr ng-if="!vm.visibleCurrencies.length"><td colspan="5"><div class="empty inline-empty"><i data-lucide="coins"></i><strong>No currencies match the search.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.currencyPageCount>1"><button class="icon-btn" ng-disabled="vm.currencyPage===1" ng-click="vm.changeCurrencyPage(vm.currencyPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.currencyPage}} of {{vm.currencyPageCount}}</span><button class="icon-btn" ng-disabled="vm.currencyPage===vm.currencyPageCount" ng-click="vm.changeCurrencyPage(vm.currencyPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
       <section ng-if="vm.tab==='roles'" class="workspace">
         <div class="section-bar">
           <div><h2>Role management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
@@ -1246,6 +1269,24 @@
                   ng-model="vm.form.availableBudget"
                   required
               /></label>
+            </div>
+            <div ng-if="vm.modal.type==='currency'" class="form-grid">
+              <label
+                >Code<input
+                  ng-model="vm.form.code"
+                  maxlength="10"
+                  required /></label
+              ><label
+                >Name<input
+                  ng-model="vm.form.name"
+                  required /></label
+              ><label
+                >Rate to local<input
+                  type="text"
+                  inputmode="decimal"
+                  ng-model="vm.form.rateToLocal"
+                  required /></label
+              ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>
             <div ng-if="vm.modal.type==='upload'" class="upload-zone">
               <i data-lucide="cloud-upload"></i>

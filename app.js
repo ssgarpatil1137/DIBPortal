@@ -90,6 +90,12 @@
       vm.visibleRoleUsers = [];
       vm.roleSummary = { reviewer: 0, approver: 0, admin: 0 };
       vm.availableManagedRoles = ["Reviewer", "Approver", "Admin"];
+      vm.currencySearch = "";
+      vm.currencyPage = 1;
+      vm.currencyPageSize = 20;
+      vm.currencyPageCount = 1;
+      vm.currencyFilteredCount = 0;
+      vm.visibleCurrencies = [];
       vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
       vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
       vm.costTypeOptions = [
@@ -104,6 +110,7 @@
         { id: "portfolio", label: "Portfolio", icon: "layout-dashboard", roles: ["Requestor", "Reviewer", "Approver", "Admin", "Master"] },
         { id: "approvals", label: "Approvals", icon: "stamp", roles: ["Reviewer", "Approver"] },
         { id: "budgets", label: "CAPEX / OPEX", icon: "landmark", roles: ["Admin", "Master"] },
+        { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
         { id: "roles", label: "Role management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
@@ -168,6 +175,14 @@
           utilization: 0,
           availableBudget: 950000,
         },
+      ];
+      vm.currencies = [
+        { currencyId: 1, code: "AED", name: "UAE Dirham", rateToLocal: 1, isActive: true },
+        { currencyId: 2, code: "USD", name: "US Dollar", rateToLocal: 3.6725, isActive: true },
+        { currencyId: 3, code: "EUR", name: "Euro", rateToLocal: 4.05, isActive: true },
+        { currencyId: 4, code: "GBP", name: "British Pound", rateToLocal: 4.65, isActive: true },
+        { currencyId: 5, code: "INR", name: "Indian Rupee", rateToLocal: 0.044, isActive: true },
+        { currencyId: 6, code: "SAR", name: "Saudi Riyal", rateToLocal: 0.979, isActive: true },
       ];
       vm.jira = [
         {
@@ -380,6 +395,7 @@
           portfolio: "Projects & financial workflow",
           approvals: "PET review & approval queue",
           budgets: "Budget source control",
+          currencies: "Currency maintenance",
           roles: "Role management",
           reports: "Management reporting",
         }[vm.tab];
@@ -489,6 +505,7 @@
       }
       vm.setTab = function (tabId) {
         vm.tab = tabId;
+        if (tabId === "currencies") loadCurrencies(true);
         if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
         redraw();
@@ -1395,11 +1412,13 @@
         vm.approvalItems = buildApprovalItems();
         vm.updateApprovalView(keepPage);
         vm.updateBudgetView(keepPage);
+        vm.updateCurrencyView(keepPage);
         vm.updateReportView();
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); };
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); };
       vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); };
+      vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); };
       vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); };
       function buildApprovalItems() {
         var result = [];
@@ -1506,6 +1525,17 @@
         if (!keepPage || vm.budgetPage > vm.budgetPageCount) vm.budgetPage = 1;
         var start = (vm.budgetPage - 1) * vm.budgetPageSize;
         vm.visibleBudgets = filtered.slice(start, start + vm.budgetPageSize);
+      };
+      vm.updateCurrencyView = function (keepPage) {
+        var query = (vm.currencySearch || "").toLowerCase();
+        var filtered = (vm.currencies || []).filter(function (currency) {
+          return !query || [currency.code, currency.name, currency.rateToLocal, currency.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
+        });
+        vm.currencyFilteredCount = filtered.length;
+        vm.currencyPageCount = Math.max(1, Math.ceil(filtered.length / vm.currencyPageSize));
+        if (!keepPage || vm.currencyPage > vm.currencyPageCount) vm.currencyPage = 1;
+        var start = (vm.currencyPage - 1) * vm.currencyPageSize;
+        vm.visibleCurrencies = filtered.slice(start, start + vm.currencyPageSize);
       };
       vm.updateRoleView = function (keepPage) {
         var query = (vm.roleSearch || "").toLowerCase();
@@ -1907,6 +1937,17 @@
           kicker: "MASTER CONTROL",
           title: "Edit " + budget.externalId,
           submit: "Update budget",
+        };
+        redraw();
+      };
+      vm.openCurrency = function (currency) {
+        vm.selectedCurrency = currency || null;
+        vm.form = angular.copy(currency || { code: "", name: "", rateToLocal: 1, isActive: true });
+        vm.modal = {
+          type: "currency",
+          kicker: "MASTER CONTROL",
+          title: currency ? "Edit " + currency.code : "Add currency",
+          submit: currency ? "Update currency" : "Add currency",
         };
         redraw();
       };
@@ -2404,6 +2445,31 @@
           angular.extend(vm.selectedBudget, vm.form);
           notice("Budget source updated");
         }
+        if (type === "currency") {
+          if (!vm.form || !String(vm.form.code || "").trim()) { noticeError("Currency code is required."); return; }
+          if (!String(vm.form.name || "").trim()) { noticeError("Currency name is required."); return; }
+          if (!validateNumericInput(vm.form.rateToLocal, "Rate to local", false)) return;
+          vm.form.code = String(vm.form.code || "").trim().toUpperCase();
+          vm.form.name = String(vm.form.name || "").trim();
+          vm.form.rateToLocal = parseNumericInput(vm.form.rateToLocal);
+          if (vm.demo) {
+            if (vm.selectedCurrency) angular.extend(vm.selectedCurrency, vm.form);
+            else { vm.form.currencyId = Date.now(); vm.currencies.push(vm.form); }
+            vm.updateCurrencyView(true);
+            notice("Currency saved");
+          } else {
+            $http.post("api/portfolio/currencies", vm.form).then(function (response) {
+              var saved = response.data || vm.form;
+              if (vm.selectedCurrency) angular.extend(vm.selectedCurrency, saved);
+              else vm.currencies.push(saved);
+              vm.updateCurrencyView(true);
+              notice("Currency saved");
+              vm.close();
+              redraw();
+            }, function (response) { noticeError(responseMessage(response, "Unable to save currency.")); });
+            return;
+          }
+        }
         if (type === "upload" && vm.modal.kind !== "attachment" && vm.modal.kind !== "sources" && !vm.demo) {
           var item = vm.form.item;
           var kind = vm.modal.kind;
@@ -2509,6 +2575,16 @@
           if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load role management."));
         });
       }
+      function loadCurrencies(showError) {
+        if (!vm.hasRole("Admin") || vm.demo) { vm.updateCurrencyView(true); return $q.when(); }
+        return $http.get("api/portfolio/currencies").then(function (response) {
+          vm.currencies = response.data || [];
+          vm.updateCurrencyView(true);
+          redraw();
+        }, function (response) {
+          if (showError || vm.tab === "currencies") noticeError(responseMessage(response, "Unable to load currencies."));
+        });
+      }
       function normalizeRoleUsers(users) {
         return users.map(function (user) {
           var roles = String(user.roles || "").split(",").filter(Boolean);
@@ -2550,7 +2626,7 @@
         loadDashboard().then(function () {
           return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
         }).then(function () {
-          return loadRoles(vm.tab === "roles");
+          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies")]);
         }).then(function () {
           notice("Transactions refreshed");
           vm.refreshing = false;
