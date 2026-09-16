@@ -675,18 +675,23 @@
         <div class="section-bar">
           <div>
             <h2>Project details</h2>
-            <span>Select a project row to view budget tracker and CAPEX utilization.</span>
+            <span>{{vm.reportProjectFilteredCount}} projects in view</span>
+          </div>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.reportProjectSearch" ng-change="vm.updateReportProjectView()" placeholder="Search ID, project, owner" /></label>
+            <select ng-model="vm.reportProjectStatusFilter" ng-change="vm.updateReportProjectView()"><option value="">All statuses</option><option>Active</option><option>Registered</option><option>Pending Review</option><option>Pending Approval</option><option>Approved</option><option>Rejected</option><option>Sent Back</option></select>
           </div>
         </div>
         <div class="table-scroll">
           <table class="data-table projects">
             <thead><tr><th>Project ID</th><th>Project name</th><th>Type</th><th>Accountable Exec Lead</th><th>SME Lead</th><th>Project Manager</th><th>Budget source</th><th>Total budget</th><th>PET items</th><th>Budget lines</th><th>Invoices</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="project in vm.projects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}</td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
-              <tr ng-if="!vm.projects.length"><td colspan="13"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects available.</strong></div></td></tr>
+              <tr ng-repeat="project in vm.visibleReportProjects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}</td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+              <tr ng-if="!vm.visibleReportProjects.length"><td colspan="13"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects match the selected filter.</strong></div></td></tr>
             </tbody>
           </table>
         </div>
+        <div class="pagination" ng-if="vm.reportProjectPageCount>1"><button class="icon-btn" ng-disabled="vm.reportProjectPage===1" ng-click="vm.changeReportProjectPage(vm.reportProjectPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.reportProjectPage}} of {{vm.reportProjectPageCount}}</span><button class="icon-btn" ng-disabled="vm.reportProjectPage===vm.reportProjectPageCount" ng-click="vm.changeReportProjectPage(vm.reportProjectPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
     </main>
 

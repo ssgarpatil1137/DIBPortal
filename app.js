@@ -77,6 +77,13 @@
       vm.budgetFilteredCount = 0;
       vm.visibleBudgets = [];
       vm.reportProjectId = "";
+      vm.reportProjectSearch = "";
+      vm.reportProjectStatusFilter = "";
+      vm.reportProjectPage = 1;
+      vm.reportProjectPageSize = 10;
+      vm.reportProjectPageCount = 1;
+      vm.reportProjectFilteredCount = 0;
+      vm.visibleReportProjects = [];
       vm.reportMetrics = angular.copy(vm.metrics || {});
       vm.reportBudgetUsage = [];
       vm.reportSummary = {};
@@ -1367,6 +1374,19 @@
         vm.updateReportView();
         redraw();
       };
+      vm.updateReportProjectView = function (keepPage) {
+        var query = (vm.reportProjectSearch || "").toLowerCase();
+        var filtered = (vm.projects || []).filter(function (project) {
+          var statusMatch = projectHasStatus(project, project.pets || [], vm.reportProjectStatusFilter);
+          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && queryMatch;
+        });
+        vm.reportProjectFilteredCount = filtered.length;
+        vm.reportProjectPageCount = Math.max(1, Math.ceil(filtered.length / vm.reportProjectPageSize));
+        if (!keepPage || vm.reportProjectPage > vm.reportProjectPageCount) vm.reportProjectPage = 1;
+        var start = (vm.reportProjectPage - 1) * vm.reportProjectPageSize;
+        vm.visibleReportProjects = filtered.slice(start, start + vm.reportProjectPageSize);
+      };
       function projectHasStatus(project, pets, status) {
         if (!status) return true;
         if (sameStatus(project && project.status, status)) return true;
@@ -1420,11 +1440,13 @@
         vm.updateBudgetView(keepPage);
         vm.updateCurrencyView(keepPage);
         vm.updateReportView();
+        vm.updateReportProjectView(keepPage);
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); };
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); };
       vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); };
       vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); };
+      vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); };
       vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); };
       function buildApprovalItems() {
         var result = [];
