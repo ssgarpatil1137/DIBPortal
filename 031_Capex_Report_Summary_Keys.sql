@@ -14,6 +14,7 @@ SELECT
  p.ProjectName,
  pet.PetId,
  pet.Code PetCode,
+ pet.Status PetStatus,
  pet.RequestedAmount ApprovedAmount,
  pet.ApprovedUtc,
  bl.BudgetLineId,
