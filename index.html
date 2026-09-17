@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=10" />
+    <link rel="stylesheet" href="app/styles.css?v=11" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -719,6 +719,7 @@
         <form ng-submit="vm.saveModal()">
           <div class="modal-body">
             <div ng-if="vm.modal.type==='project'" class="form-grid">
+              <h3 class="form-section-title full">Project source</h3>
               <label class="full"
                 >Project source
                 <div class="segmented">
@@ -749,7 +750,8 @@
                     {{jira.jiraKey}} · {{jira.summary}}
                   </option>
                 </select></label
-              ><label
+              ><h3 class="form-section-title full">Project details</h3>
+              <label
                 >Project name<input
                   ng-model="vm.form.projectName"
                   ng-readonly="vm.form.isJira"
@@ -779,9 +781,10 @@
                 </select></label
               ><label
                 >Project manager<input
-                  ng-readonly="vm.form.isJira"
-                  ng-model="vm.form.projectManager" /></label
-              ><label
+                    ng-readonly="vm.form.isJira"
+                    ng-model="vm.form.projectManager" /></label
+                  ><h3 class="form-section-title full">Budget allocation</h3>
+                  <label
                 >Budget type<select ng-model="vm.form.budgetType" required>
                   <option>CAPEX</option>
                   <option>OPEX</option>
@@ -887,12 +890,14 @@
               </div>
             </div>
             <div ng-if="vm.modal.type==='pet'" class="form-grid">
+              <h3 class="form-section-title full">Project context</h3>
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
                 <div><small>Budget type</small><strong>{{vm.petProjectExpenseHead(vm.selectedProject)}}</strong></div>
                 <div><small>Budget source</small><strong>{{vm.selectedProject.budgetSource||'Not supplied'}}</strong></div>
               </div>
+              <h3 class="form-section-title full" ng-if="!vm.petVendorOnly()">PET lines</h3>
               <div class="full pet-upload-workspace" ng-if="!vm.petVendorOnly()">
                 <div class="head-actions" style="justify-content:space-between">
                   <label class="file-field pet-excel-field"
@@ -915,6 +920,7 @@
                   <div><small>Final Request AED Amount</small><strong>{{vm.money(vm.petUploadTotal)}}</strong></div>
                 </div>
               </div>
+              <h3 class="form-section-title full">Submission details</h3>
               <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
               <div class="full pet-upload-workspace" ng-if="vm.petVendorOnly()">
                 <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -969,6 +975,7 @@
               </div>
             </div>
             <div ng-if="vm.modal.type==='decision'" class="decision">
+              <h3 class="form-section-title">Decision summary</h3>
               <div class="decision-amount" ng-if="!vm.modal.bulk">
                 <span>{{vm.form.code}}</span
                 ><strong>{{vm.money(vm.form.requestedAmount)}}</strong
@@ -1024,6 +1031,7 @@
                   <div class="empty" ng-if="!vm.decisionLinePet.spendItems.length"><i data-lucide="list-tree"></i><strong>No PET lines available.</strong></div>
                 </div>
               </div>
+              <h3 class="form-section-title">Decision outcome</h3>
               <label class="full"
                 >Decision<select ng-model="vm.form.decision" required>
                   <option value="Approve">Approve</option>
@@ -1063,10 +1071,12 @@
               </label>
             </div>
             <div ng-if="vm.modal.type==='budgetLine'" class="form-grid">
+              <h3 class="form-section-title full">Project context</h3>
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
               </div>
+              <h3 class="form-section-title full">Source PET</h3>
               <label
                 >PET reference<select falcon-select2 data-placeholder="Select PET request"
                   ng-model="vm.form.petId"
@@ -1095,7 +1105,8 @@
                 <div><small>Reviewer</small><strong>{{vm.selectedPet.reviewerEmail||vm.selectedProject.accountableExecLead}}</strong></div>
                 <div><small>Approver</small><strong>{{vm.selectedPet.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
               </div
-              ><label
+              ><h3 class="form-section-title full">Budget line details</h3>
+              <label
                 >Cost<input
                   type="text"
                   inputmode="decimal"
@@ -1139,7 +1150,8 @@
               ><label class="full"
                 >LPO comments<input ng-model="vm.form.lpoComments"
               /></label
-              ><div class="full detail-grid" style="grid-template-columns:repeat(3,1fr)">
+              ><h3 class="form-section-title full">Documents</h3>
+              <div class="full detail-grid" style="grid-template-columns:repeat(3,1fr)">
                 <div ng-repeat="type in vm.budgetLineDocumentTypes">
                   <small>{{type.label}} Document</small>
                   <label class="file-field"><input type="file" file-change="vm.setBudgetLineDocumentFile(type.key,$file)" /><span><i data-lucide="paperclip"></i>{{vm.budgetLineDocumentFiles[type.key].name || 'Upload ' + type.label}}</span></label>
@@ -1150,10 +1162,12 @@
               </div>
             </div>
             <div ng-if="vm.modal.type==='invoice'" class="form-grid">
+              <h3 class="form-section-title full">Project context</h3>
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
               </div>
+              <h3 class="form-section-title full">Invoice details</h3>
               <label
                 >Vendor name<input
                   ng-model="vm.form.vendorName"
@@ -1182,7 +1196,8 @@
               ><label
                 >Payment date<input type="date" ng-model="vm.form.paymentDate"
               /></label
-              ><label class="full file-field"
+              ><h3 class="form-section-title full">Documents</h3>
+              <label class="full file-field"
                 >Invoice Document<input type="file" file-change="vm.setInvoiceDocumentFile($file)" /><span><i data-lucide="paperclip"></i>{{vm.invoiceDocumentFile.name || 'Upload Invoice'}}</span></label
               ><div class="full" ng-if="vm.invoiceDocuments(vm.form).length">
                 <p ng-repeat="doc in vm.invoiceDocuments(vm.form) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p>
@@ -1361,6 +1376,7 @@
                   <button type="button" class="icon-btn" ng-click="vm.closePetUploadRow()" title="Close"><i data-lucide="x"></i></button>
                 </header>
                 <div class="form-grid pet-row-form">
+                  <h3 class="form-section-title full">PET line details</h3>
                   <label>Sr No<input ng-model="vm.petRowEditor.row.serialNo" /></label>
                   <label>Date<input type="date" ng-model="vm.petRowEditor.row.lineDate" /></label>
                   <label>Department<select ng-model="vm.petRowEditor.row.department" ng-options="option for option in vm.departmentOptions" required><option value="">Select</option></select></label>
