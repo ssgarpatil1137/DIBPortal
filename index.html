@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=11" />
+    <link rel="stylesheet" href="app/styles.css?v=14" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -163,7 +163,7 @@
           </div>
         </div>
         <div class="table-scroll">
-          <table class="data-table projects">
+          <table class="data-table projects project-register-table">
             <thead>
               <tr>
                 <th class="expander"></th>
@@ -208,11 +208,11 @@
                   </span>
                 </td>
                 <td>{{project.projectType}}</td>
-                <td>{{project.accountableExecLead}}</td>
-                <td>{{project.smeLead}}</td>
+                <td title="{{project.accountableExecLead}}">{{project.accountableExecLead}}</td>
+                <td title="{{project.smeLead}}">{{project.smeLead}}</td>
                 <td>{{project.projectSize}}</td>
-                <td>{{project.projectManager}}</td>
-                <td title="{{project.requestorEmail}}">{{project.requestorName||project.requestorEmail}}</td>
+                <td title="{{project.projectManager}}">{{project.projectManager}}</td>
+                <td title="{{project.requestorName||project.requestorEmail}}">{{project.requestorName||project.requestorEmail}}</td>
                 <td><span class="count-chip">{{project.spendRequestCount}}</span></td>
                 <td><span class="count-chip">{{project.budgetLineCount}}</span></td>
                 <td><span class="count-chip">{{project.invoiceCount}}</span></td>
