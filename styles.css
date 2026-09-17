@@ -1635,8 +1635,11 @@ main {
 .project-register-workspace .section-bar .search input {
   width: 100%;
 }
+.project-register-workspace .table-scroll {
+  overflow-x: hidden;
+}
 .project-register-table {
-  width: max(100%, 1540px);
+  width: 100%;
   min-width: 0;
   table-layout: fixed;
 }
@@ -1692,9 +1695,6 @@ main {
 .project-register-table td:nth-child(15) {
   width: 186px;
   overflow: visible;
-  position: sticky;
-  right: 0;
-  box-shadow: -1px 0 0 var(--line);
 }
 .project-register-table td:nth-child(15) {
   z-index: 5;
@@ -1724,6 +1724,20 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+@media (max-width: 1500px) {
+  .project-register-workspace .table-scroll {
+    overflow-x: auto;
+  }
+  .project-register-table {
+    width: 1540px;
+  }
+  .project-register-table th:nth-child(15),
+  .project-register-table td:nth-child(15) {
+    position: sticky;
+    right: 0;
+    box-shadow: -1px 0 0 var(--line);
+  }
 }
 .workspace .section-bar .filters {
   margin-left: auto;
