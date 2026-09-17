@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=17" />
+    <link rel="stylesheet" href="app/styles.css?v=19" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -293,7 +293,7 @@
                       <strong>No PET requests yet for this project.</strong>
                     </div>
                     <div class="child-grid-scroll" ng-if="project.pets.length">
-                      <table class="nested">
+                      <table class="nested pet-request-table">
                         <thead>
                           <tr>
                             <th>Code</th>
@@ -396,7 +396,7 @@
                       </div>
                     </div>
                     <div class="budget-wrap" ng-if="project.budgetLines.length">
-                      <table class="nested budget">
+                      <table class="nested budget budget-line-request-table">
                         <thead>
                           <tr>
                             <th>#</th>
