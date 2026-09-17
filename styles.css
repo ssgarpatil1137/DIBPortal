@@ -2157,6 +2157,185 @@ textarea {
   background: #f7faf8;
   font-weight: 800;
 }
+.reports .report-project-bar {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(640px, 760px);
+  align-items: center;
+}
+.reports .report-project-bar .filters {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) minmax(150px, .75fr) minmax(150px, .75fr);
+  width: 100%;
+  margin-left: 0;
+}
+.reports .report-project-bar .search,
+.reports .report-project-bar .filters select {
+  width: 100%;
+  min-width: 0;
+}
+.reports .report-project-bar .search input {
+  width: 100%;
+  min-width: 0;
+}
+.approvals-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.approvals-table th:nth-child(1),
+.approvals-table td:nth-child(1) { width: 92px; }
+.approvals-table th:nth-child(2),
+.approvals-table td:nth-child(2) { width: 146px; }
+.approvals-table th:nth-child(3),
+.approvals-table td:nth-child(3),
+.approvals-table th:nth-child(4),
+.approvals-table td:nth-child(4) { width: 96px; }
+.approvals-table th:nth-child(5),
+.approvals-table td:nth-child(5) { width: 112px; }
+.approvals-table th:nth-child(6),
+.approvals-table td:nth-child(6),
+.approvals-table th:nth-child(8),
+.approvals-table td:nth-child(8) { width: 106px; }
+.approvals-table th:nth-child(7),
+.approvals-table td:nth-child(7) { width: 128px; }
+.approvals-table th:nth-child(9),
+.approvals-table td:nth-child(9),
+.approvals-table th:nth-child(10),
+.approvals-table td:nth-child(10),
+.approvals-table th:nth-child(11),
+.approvals-table td:nth-child(11) { width: 104px; }
+.approvals-table th:nth-child(12),
+.approvals-table td:nth-child(12) { width: 124px; }
+.approvals-table td:nth-child(12) .btn.compact {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 5px;
+  white-space: normal;
+  line-height: 1.15;
+}
+.modal .decision-pet-grid {
+  min-width: 0;
+  table-layout: fixed;
+}
+.modal .decision-pet-grid th,
+.modal .decision-pet-grid td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.modal .decision-pet-grid th:nth-child(1),
+.modal .decision-pet-grid td:nth-child(1) { width: 52px; }
+.modal .decision-pet-grid th:nth-child(2),
+.modal .decision-pet-grid td:nth-child(2) { width: 104px; }
+.modal .decision-pet-grid th:nth-child(3),
+.modal .decision-pet-grid td:nth-child(3) { width: 112px; }
+.modal .decision-pet-grid th:nth-child(4),
+.modal .decision-pet-grid td:nth-child(4) { width: 160px; }
+.modal .decision-pet-grid th:nth-child(5),
+.modal .decision-pet-grid td:nth-child(5) { width: 110px; }
+.modal .decision-pet-grid th:nth-child(6),
+.modal .decision-pet-grid td:nth-child(6) { width: 118px; }
+.modal .decision-pet-grid th:nth-child(7),
+.modal .decision-pet-grid td:nth-child(7),
+.modal .decision-pet-grid th:nth-child(8),
+.modal .decision-pet-grid td:nth-child(8) { width: 132px; }
+.modal .decision-pet-grid th:nth-child(9),
+.modal .decision-pet-grid td:nth-child(9) { width: 96px; }
+.modal .decision-pet-grid th:nth-child(10),
+.modal .decision-pet-grid td:nth-child(10) { width: 124px; }
+.modal .decision-pet-grid td:nth-child(1) input {
+  width: auto;
+  min-width: 0;
+  margin: 0;
+}
+.modal .decision-pet-grid td:nth-child(10) .btn.compact {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 5px;
+}
+.modal .pet-line-summary-grid {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+}
+.modal .pet-line-summary-grid thead {
+  display: none;
+}
+.modal .pet-line-summary-grid tbody,
+.modal .pet-line-summary-grid tr,
+.modal .pet-line-summary-grid td {
+  display: block;
+}
+.modal .pet-line-summary-grid tr {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green);
+  border-radius: 5px;
+  background: #fff;
+}
+.modal .pet-line-summary-grid td {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  white-space: normal;
+}
+.modal .pet-line-summary-grid td:before {
+  content: "";
+  display: block;
+  margin-bottom: 4px;
+  color: #53645c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.modal .spend-line-grid td:nth-child(1):before,
+.modal .decision-view-lines-grid td:nth-child(1):before { content: "Sr No"; }
+.modal .spend-line-grid td:nth-child(2):before,
+.modal .decision-view-lines-grid td:nth-child(2):before { content: "Date"; }
+.modal .spend-line-grid td:nth-child(3):before,
+.modal .decision-view-lines-grid td:nth-child(3):before { content: "ID"; }
+.modal .decision-view-lines-grid td:nth-child(4):before { content: "Department"; }
+.modal .spend-line-grid td:nth-child(4):before,
+.modal .decision-view-lines-grid td:nth-child(5):before { content: "Head"; }
+.modal .spend-line-grid td:nth-child(5):before,
+.modal .decision-view-lines-grid td:nth-child(6):before { content: "Topic"; }
+.modal .spend-line-grid td:nth-child(6):before,
+.modal .decision-view-lines-grid td:nth-child(7):before { content: "Vendor"; }
+.modal .decision-view-lines-grid td:nth-child(8):before { content: "Description"; }
+.modal .spend-line-grid td:nth-child(7):before,
+.modal .decision-view-lines-grid td:nth-child(9):before { content: "Cost Type"; }
+.modal .decision-view-lines-grid td:nth-child(10):before { content: "Unit Type"; }
+.modal .spend-line-grid td:nth-child(8):before,
+.modal .decision-view-lines-grid td:nth-child(11):before { content: "Unit(s)"; }
+.modal .spend-line-grid td:nth-child(9):before,
+.modal .decision-view-lines-grid td:nth-child(12):before { content: "Unit Price"; }
+.modal .spend-line-grid td:nth-child(10):before,
+.modal .decision-view-lines-grid td:nth-child(13):before { content: "CCY"; }
+.modal .spend-line-grid td:nth-child(11):before,
+.modal .decision-view-lines-grid td:nth-child(14):before { content: "FCY Amt"; }
+.modal .spend-line-grid td:nth-child(12):before,
+.modal .decision-view-lines-grid td:nth-child(15):before { content: "AED Amt"; }
+.modal .spend-line-grid td:nth-child(13):before,
+.modal .decision-view-lines-grid td:nth-child(16):before { content: "Cont. %"; }
+.modal .spend-line-grid td:nth-child(14):before,
+.modal .decision-view-lines-grid td:nth-child(17):before { content: "Final AED"; }
+.modal .spend-line-grid td:nth-child(15):before,
+.modal .decision-view-lines-grid td:nth-child(18):before { content: "GL#"; }
+.modal .spend-line-grid td:nth-child(16) {
+  display: flex;
+  grid-column: 1/-1;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.modal .spend-line-grid td:nth-child(16):before {
+  display: none;
+}
 .workspace > .table-scroll > .data-table:not(.project-register-table),
 .reports > .table-scroll > .data-table {
   width: 100%;
@@ -2176,6 +2355,9 @@ textarea {
 .reports > .table-scroll > .data-table th:last-child,
 .reports > .table-scroll > .data-table td:last-child {
   overflow: visible;
+}
+.workspace > .table-scroll > table.data-table.approvals-table {
+  width: calc(100% - 2px);
 }
 .reports > .table-scroll > .data-table.projects th:nth-child(1),
 .reports > .table-scroll > .data-table.projects td:nth-child(1) { width: 85px; }
@@ -2216,6 +2398,9 @@ textarea {
   .modal .pet-upload-grid tr {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  .modal .pet-line-summary-grid tr {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
   .workspace > .table-scroll > .data-table:not(.project-register-table),
   .reports > .table-scroll > .data-table {
     min-width: 980px;
@@ -2223,6 +2408,9 @@ textarea {
 }
 @media (max-width: 760px) {
   .modal .pet-upload-grid tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .modal .pet-line-summary-grid tr {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
