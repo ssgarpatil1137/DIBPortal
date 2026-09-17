@@ -1873,6 +1873,14 @@ main {
 .workspace.project-register-workspace .section-bar .filters {
   margin-left: 0;
 }
+.approval-workspace .section-bar {
+  position: relative;
+  top: auto;
+  z-index: 2;
+}
+.approval-workspace .table-scroll {
+  max-height: calc(100vh - 254px);
+}
 .data-table th,
 .nested th,
 .report-table table th {

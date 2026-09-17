@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=21" />
+    <link rel="stylesheet" href="app/styles.css?v=22" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -493,7 +493,7 @@
         <div class="pagination" ng-if="vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
-      <section ng-if="vm.tab==='approvals'" class="workspace">
+      <section ng-if="vm.tab==='approvals'" class="workspace approval-workspace">
         <div class="section-bar">
           <div>
             <h2>Approval queue</h2>
