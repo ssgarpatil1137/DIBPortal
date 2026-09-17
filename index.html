@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=19" />
+    <link rel="stylesheet" href="app/styles.css?v=20" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -703,7 +703,7 @@
     >
       <section
         class="modal"
-        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'}"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'}"
         role="dialog"
         aria-modal="true"
       >

@@ -1450,11 +1450,11 @@
         vm.updateReportProjectView(keepPage);
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); redraw(); };
-      vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); };
-      vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); };
-      vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); };
-      vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); };
-      vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); };
+      vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); redraw(); };
+      vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); redraw(); };
+      vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); redraw(); };
+      vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); redraw(); };
+      vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); redraw(); };
       function buildApprovalItems() {
         var result = [];
         var canReview = vm.hasRole("Reviewer");

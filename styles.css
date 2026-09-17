@@ -2069,6 +2069,163 @@ textarea {
 .pet-upload-workspace {
   margin-top: 12px;
 }
+.modal .pet-upload-workspace > .table-scroll {
+  overflow-x: hidden;
+  max-height: none;
+}
+.modal .pet-upload-grid {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  table-layout: auto;
+}
+.modal .pet-upload-grid thead {
+  display: none;
+}
+.modal .pet-upload-grid tbody,
+.modal .pet-upload-grid tr,
+.modal .pet-upload-grid td {
+  display: block;
+}
+.modal .pet-upload-grid tr {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px 10px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--green);
+  border-radius: 5px;
+  background: #fff;
+}
+.modal .pet-upload-grid td {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  white-space: normal;
+}
+.modal .pet-upload-grid td:before {
+  content: "";
+  display: block;
+  margin-bottom: 4px;
+  color: #53645c;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+.modal .pet-upload-grid td:nth-child(1):before { content: "Sr No"; }
+.modal .pet-upload-grid td:nth-child(2):before { content: "Date"; }
+.modal .pet-upload-grid td:nth-child(3):before { content: "Department"; }
+.modal .pet-upload-grid td:nth-child(4):before { content: "ID"; }
+.modal .pet-upload-grid td:nth-child(5):before { content: "Exp. Head"; }
+.modal .pet-upload-grid td:nth-child(6):before { content: "Topic"; }
+.modal .pet-upload-grid td:nth-child(7):before { content: "Vendor"; }
+.modal .pet-upload-grid td:nth-child(8):before { content: "Description"; }
+.modal .pet-upload-grid td:nth-child(9):before { content: "Cost Type"; }
+.modal .pet-upload-grid td:nth-child(10):before { content: "Unit Type"; }
+.modal .pet-upload-grid td:nth-child(11):before { content: "Unit(s)"; }
+.modal .pet-upload-grid td:nth-child(12):before { content: "Unit Price"; }
+.modal .pet-upload-grid td:nth-child(13):before { content: "Base CY"; }
+.modal .pet-upload-grid td:nth-child(14):before { content: "Amt. FCY"; }
+.modal .pet-upload-grid td:nth-child(15):before { content: "Amt. LCY"; }
+.modal .pet-upload-grid td:nth-child(16):before { content: "Cont. %"; }
+.modal .pet-upload-grid td:nth-child(17):before { content: "Final Amt LCY"; }
+.modal .pet-upload-grid td:nth-child(18):before { content: "Yearly Recurrence"; }
+.modal .pet-upload-grid td:nth-child(19) {
+  display: flex;
+  grid-column: 1/-1;
+  justify-content: flex-end;
+  gap: 4px;
+}
+.modal .pet-upload-grid td:nth-child(19):before {
+  display: none;
+}
+.modal .pet-upload-grid input,
+.modal .pet-upload-grid select {
+  width: 100%;
+  min-width: 0;
+  margin-top: 0;
+}
+.modal .pet-upload-grid td:nth-child(17) {
+  align-self: end;
+  min-height: 32px;
+  padding: 8px 9px;
+  border: 1px solid #bdcbc3;
+  border-radius: 4px;
+  background: #f7faf8;
+  font-weight: 800;
+}
+.workspace > .table-scroll > .data-table:not(.project-register-table),
+.reports > .table-scroll > .data-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.workspace > .table-scroll > .data-table:not(.project-register-table) th,
+.workspace > .table-scroll > .data-table:not(.project-register-table) td,
+.reports > .table-scroll > .data-table th,
+.reports > .table-scroll > .data-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.workspace > .table-scroll > .data-table:not(.project-register-table) th:last-child,
+.workspace > .table-scroll > .data-table:not(.project-register-table) td:last-child,
+.reports > .table-scroll > .data-table th:last-child,
+.reports > .table-scroll > .data-table td:last-child {
+  overflow: visible;
+}
+.reports > .table-scroll > .data-table.projects th:nth-child(1),
+.reports > .table-scroll > .data-table.projects td:nth-child(1) { width: 85px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(2),
+.reports > .table-scroll > .data-table.projects td:nth-child(2) { width: 160px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(3),
+.reports > .table-scroll > .data-table.projects td:nth-child(3) { width: 75px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(4),
+.reports > .table-scroll > .data-table.projects td:nth-child(4) { width: 70px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(5),
+.reports > .table-scroll > .data-table.projects td:nth-child(5) { width: 100px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(6),
+.reports > .table-scroll > .data-table.projects td:nth-child(6) { width: 90px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(7),
+.reports > .table-scroll > .data-table.projects td:nth-child(7) { width: 100px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(8),
+.reports > .table-scroll > .data-table.projects td:nth-child(8) { width: 120px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(9),
+.reports > .table-scroll > .data-table.projects td:nth-child(9) { width: 95px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(10),
+.reports > .table-scroll > .data-table.projects td:nth-child(10) { width: 48px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(11),
+.reports > .table-scroll > .data-table.projects td:nth-child(11),
+.reports > .table-scroll > .data-table.projects th:nth-child(12),
+.reports > .table-scroll > .data-table.projects td:nth-child(12) { width: 62px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(13),
+.reports > .table-scroll > .data-table.projects td:nth-child(13) { width: 48px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(14),
+.reports > .table-scroll > .data-table.projects td:nth-child(14) { width: 72px; }
+.reports > .table-scroll > .data-table.projects th:nth-child(15),
+.reports > .table-scroll > .data-table.projects td:nth-child(15) { width: 120px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(15) .btn.compact {
+  width: 100%;
+  min-width: 0;
+  padding-inline: 6px;
+}
+@media (max-width: 1200px) {
+  .modal .pet-upload-grid tr {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .workspace > .table-scroll > .data-table:not(.project-register-table),
+  .reports > .table-scroll > .data-table {
+    min-width: 980px;
+  }
+}
+@media (max-width: 760px) {
+  .modal .pet-upload-grid tr {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
 .pet-row-card > header,
 .pet-row-card > footer {
   padding: 12px 14px;
