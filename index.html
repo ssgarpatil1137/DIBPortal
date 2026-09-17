@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=22" />
+    <link rel="stylesheet" href="app/styles.css?v=23" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -1247,7 +1247,7 @@
                 <strong>No invoices available.</strong>
               </div>
             </div>
-            <div ng-if="vm.modal.type==='reportDetail'" class="report-grid">
+            <div ng-if="vm.modal.type==='reportDetail'" class="report-grid report-detail-view">
               <article class="report-table project-budget-tracker">
                 <h3>Project Budget Tracker</h3>
                 <div class="report-summary-grid">
@@ -1267,7 +1267,7 @@
               <article class="report-table source-utilization">
                 <h3>Budget source utilization by Project</h3>
                 <div class="table-scroll">
-                  <table class="capex-utilization-report">
+                  <table class="capex-utilization-report report-detail-utilization-grid">
                     <thead><tr><th>Budget type</th><th>Budget source</th><th>Project</th><th>PET reference</th><th>PET Status</th><th>PET amount</th><th>Vendor</th><th>Justification</th><th>Cost</th><th>Currency</th><th>GL ID</th><th>CAM ID</th><th>CAM Status</th><th>CAM Comment</th><th>LPO Request ID</th><th>LPO Status</th><th>Invoice No</th><th>Invoice Amount</th><th>Invoice Status</th></tr></thead>
                     <tbody>
                       <tr ng-repeat="row in vm.reportDetailBudgetUsage track by $index"><td><span class="budget-type">{{row.budgetType||row.BudgetType||''}}</span></td><td>{{row.budgetSource}}</td><td title="{{row.projectName}}"><span class="truncate-cell">{{row.projectName}}</span></td><td>{{row.petCode}}</td><td><span class="status" ng-class="vm.statusClass(row.petStatus)">{{row.petStatus||''}}</span></td><td>{{vm.money(row.amount||row.petAmount||row.approvedAmount)}}</td><td>{{row.vendor||''}}</td><td title="{{row.justification}}"><span class="truncate-cell wide-cell">{{row.justification||''}}</span></td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.currency||''}}</td><td>{{row.glId||''}}</td><td>{{row.camId||''}}</td><td>{{row.camStatus||''}}</td><td title="{{row.camComment}}"><span class="truncate-cell wide-cell">{{row.camComment||''}}</span></td><td>{{row.lpoRequestId||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td>{{row.invoiceStatus||''}}</td></tr>
