@@ -2626,9 +2626,12 @@
         iconTimer = $timeout(function () {
           angular.element(document.querySelectorAll('select[ng-model$="yearlyRecurrence"]')).removeAttr("required");
           Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="item.budgetLineVendor"]'), function (input) { input.readOnly = true; input.setAttribute("tabindex", "-1"); });
-          if (window.lucide)
-            window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
+          refreshIcons();
+          $timeout(refreshIcons, 60, false);
         }, 0, false);
+      }
+      function refreshIcons() {
+        if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
       }
       function loadDashboard() {
         return $http.get("api/portfolio/dashboard").then(function (response) {
