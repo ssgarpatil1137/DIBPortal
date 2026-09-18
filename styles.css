@@ -2351,7 +2351,7 @@ textarea {
 }
 .modal .pet-line-summary-grid {
   display: table;
-  width: 1780px;
+  width: 2120px;
   min-width: 100%;
   table-layout: fixed;
   border-collapse: separate;
@@ -2371,10 +2371,15 @@ textarea {
   min-width: 0;
   padding: 6px 7px;
   border-bottom: 1px solid #e1e9e4;
-  overflow: visible;
+  overflow: hidden;
+  text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
   background: #fff;
+}
+.modal .pet-line-summary-grid th {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .modal .pet-line-summary-grid td:before {
   content: "";
@@ -2457,13 +2462,13 @@ textarea {
 .modal .spend-line-grid th:nth-child(6),
 .modal .spend-line-grid td:nth-child(6),
 .modal .decision-view-lines-grid th:nth-child(7),
-.modal .decision-view-lines-grid td:nth-child(7) { width: 145px; }
+.modal .decision-view-lines-grid td:nth-child(7) { width: 220px; }
 .modal .decision-view-lines-grid th:nth-child(8),
-.modal .decision-view-lines-grid td:nth-child(8) { width: 190px; }
+.modal .decision-view-lines-grid td:nth-child(8) { width: 240px; }
 .modal .spend-line-grid th:nth-child(7),
 .modal .spend-line-grid td:nth-child(7),
 .modal .decision-view-lines-grid th:nth-child(9),
-.modal .decision-view-lines-grid td:nth-child(9) { width: 140px; }
+.modal .decision-view-lines-grid td:nth-child(9) { width: 230px; }
 .modal .decision-view-lines-grid th:nth-child(10),
 .modal .decision-view-lines-grid td:nth-child(10) { width: 118px; }
 .modal .spend-line-grid th:nth-child(8),
