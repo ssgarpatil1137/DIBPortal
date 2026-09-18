@@ -394,7 +394,7 @@ namespace DFM.Web.Controllers
                     ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
-                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
+                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds);
                 var saved = Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
                 if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
@@ -440,20 +440,31 @@ namespace DFM.Web.Controllers
                 if (provider.FileData.Count == 0) return BadRequest("Choose at least one supporting document first.");
                 foreach (var file in provider.FileData)
                 {
-                    var original = file.Headers.ContentDisposition.FileName.Trim('"');
-                    Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", AttachmentEntityType(entityType)), P("@id", entityId), P("@original", Path.GetFileName(original)), P("@stored", Path.GetFileName(file.LocalFileName)), P("@content", file.Headers.ContentType == null ? "application/octet-stream" : file.Headers.ContentType.MediaType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", User.Identity.Name));
+                    var original = file.Headers.ContentDisposition == null ? null : file.Headers.ContentDisposition.FileName;
+                    var originalName = AttachmentColumnValue(Path.GetFileName((original ?? "").Trim('"')), 260, "supporting-document");
+                    var storedName = AttachmentColumnValue(Path.GetFileName(file.LocalFileName), 260, Guid.NewGuid().ToString("N"));
+                    var contentType = AttachmentColumnValue(file.Headers.ContentType == null ? MimeMapping.GetMimeMapping(originalName) : file.Headers.ContentType.MediaType, 150, "application/octet-stream");
+                    Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET")), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", AttachmentColumnValue(User.Identity.Name, 254, "system")));
                 }
                 return Ok();
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (IOException ex) { return BadRequest(ex.Message); }
             catch (UnauthorizedAccessException ex) { return BadRequest(ex.Message); }
+            catch (HttpException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest("Unable to upload supporting document. " + ex.Message); }
         }
 
         private static string AttachmentEntityType(string entityType)
         {
             if (entityType != null && entityType.Equals("pet", StringComparison.OrdinalIgnoreCase)) return "PET";
             return entityType;
+        }
+
+        private static string AttachmentColumnValue(string value, int maxLength, string fallback)
+        {
+            var text = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+            return text.Length <= maxLength ? text : text.Substring(0, maxLength);
         }
 
         [HttpGet, Route("attachments/{attachmentId:long}")]

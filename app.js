@@ -71,6 +71,7 @@
       ];
       vm.budgetLineDocumentFiles = {};
       vm.invoiceDocumentFile = null;
+      var maxUploadBytes = 50 * 1024 * 1024;
       vm.budgetSearch = "";
       vm.budgetPage = 1;
       vm.budgetPageSize = 10;
@@ -644,6 +645,9 @@
       function selectedBudgetLineSpendItem() {
         return selectedBudgetLineSpendItems()[0] || null;
       }
+      function selectedBudgetLineSpendItemFinalAed() {
+        return spendItemApprovedAmount(selectedBudgetLineSpendItem());
+      }
       function budgetLinesForSpendItemId(selectedId) {
         if (!selectedId) return [];
         return ((vm.selectedPet && vm.selectedPet.budgetLines) || []).filter(function (line) {
@@ -687,8 +691,29 @@
         var value = spendItemValue((items || []).filter(function (item) { return spendItemValue(item, names); })[0], names);
         vm.form[field] = value ? new Date(value) : null;
       }
+      function budgetLineApprovedPetAmount(pet) {
+        var selectedLineAmount = selectedBudgetLineSpendItemFinalAed();
+        return selectedLineAmount > 0 ? selectedLineAmount : vm.petFinalAed(pet);
+      }
+      vm.budgetLineApprovedPetAmount = function () {
+        return budgetLineApprovedPetAmount(vm.selectedPet);
+      };
+      function budgetLineAllocatedAmount(pet, excludeBudgetLineId) {
+        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+        var lines = selectedId ? budgetLinesForSpendItemId(selectedId) : ((pet && pet.budgetLines) || []);
+        return lines.reduce(function (total, line) {
+          if (excludeBudgetLineId && String(line.budgetLineId) === String(excludeBudgetLineId)) return total;
+          return total + parseNumericInput(line.cost);
+        }, 0);
+      }
+      function budgetLineAvailablePetAmount(pet, excludeBudgetLineId) {
+        return Math.max(budgetLineApprovedPetAmount(pet) - budgetLineAllocatedAmount(pet, excludeBudgetLineId), 0);
+      }
+      vm.budgetLineAvailablePetAmount = function (excludeBudgetLineId) {
+        return budgetLineAvailablePetAmount(vm.selectedPet, excludeBudgetLineId);
+      };
       function defaultBudgetLineCost() {
-        return Math.round(vm.petBudgetLineAvailable(vm.selectedPet, vm.form && vm.form.budgetLineId) * 100) / 100;
+        return Math.round(budgetLineAvailablePetAmount(vm.selectedPet, vm.form && vm.form.budgetLineId) * 100) / 100;
       }
       function applyBudgetLinePetValues() {
         if (!vm.form) return;
@@ -763,6 +788,7 @@
       vm.isReviewerForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.reviewerEmail) || vm.isReviewerFor(project); };
       vm.isApproverForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.approverEmail) || vm.isApproverFor(project); };
       vm.setUploadFile = function (file) {
+        if (file && !validateUploadFileSize(file)) { vm.uploadFile = null; vm.uploadFiles = []; redraw(); return; }
         vm.uploadFile = file;
         vm.uploadFiles = file ? [file] : [];
         if (vm.modal && vm.modal.type === "pet") { redraw(); return; }
@@ -783,7 +809,9 @@
         });
       };
       vm.setUploadFiles = function (files) {
-        vm.uploadFiles = Array.prototype.slice.call(files || []);
+        var selectedFiles = Array.prototype.slice.call(files || []);
+        if (!validateUploadFiles(selectedFiles)) { vm.uploadFiles = []; vm.uploadFile = null; redraw(); return; }
+        vm.uploadFiles = selectedFiles;
         vm.uploadFile = vm.uploadFiles[0] || null;
         redraw();
       };
@@ -1244,7 +1272,7 @@
       };
       vm.petFinalAed = function (pet) {
         if (!pet.spendItems || !pet.spendItems.length) return parseNumericInput(pet.requestedAmount);
-        return pet.spendItems.reduce(function (total, item) { return total + parseNumericInput(item.aedAmount) * (1 + parseNumericInput(item.contingencyPercent) / 100); }, 0);
+        return pet.spendItems.reduce(function (total, item) { return total + spendItemApprovedAmount(item); }, 0);
       };
       vm.projectPetRequestTotal = function (project) {
         return ((project && project.pets) || []).reduce(function (total, pet) { return total + parseNumericInput(pet.requestedAmount); }, 0);
@@ -1256,8 +1284,16 @@
         }, 0);
       }
       vm.petBudgetLineAvailable = function (pet, excludeBudgetLineId) {
-        return Math.max(parseNumericInput(pet && pet.requestedAmount) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
+        return Math.max(vm.petFinalAed(pet) - petBudgetLineTotal(pet, excludeBudgetLineId), 0);
       };
+      function spendItemApprovedAmount(item) {
+        if (!item) return 0;
+        var finalAedAmount = !blankNumericInput(item.finalAedAmount) ? item.finalAedAmount : item.FinalAedAmount;
+        var finalAed = !blankNumericInput(item.finalAed) ? item.finalAed : item.FinalAed;
+        if (!blankNumericInput(finalAedAmount)) return parseNumericInput(finalAedAmount);
+        if (!blankNumericInput(finalAed)) return parseNumericInput(finalAed);
+        return spendItemFinalAed(item);
+      }
       function spendItemFinalAed(item) {
         var foreignAmount = spendForeignAmount(item);
         var aedAmount = spendAedAmount(item);
@@ -1313,7 +1349,7 @@
         var cost = parseNumericInput(vm.form && vm.form.cost);
         if (cost <= 0) { noticeError("A positive Budget Line amount is required."); return false; }
         vm.form.cost = cost;
-        var available = parseNumericInput(vm.selectedPet && vm.selectedPet.requestedAmount) - petBudgetLineTotal(vm.selectedPet, vm.form && vm.form.budgetLineId);
+        var available = budgetLineAvailablePetAmount(vm.selectedPet, vm.form && vm.form.budgetLineId);
         if (cost > available) {
           noticeError("Budget Line amount exceeds the Available PET Amount for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available PET Amount: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
           return false;
@@ -2127,9 +2163,22 @@
       }
       function uploadAttachment(entityType, entityId, file) {
         if (!file || !entityId || vm.demo) return $q.when();
+        if (!validateUploadFileSize(file)) return $q.reject({ data: { message: uploadFileSizeMessage(file) } });
         var formData = new FormData();
         formData.append("file", file);
         return $http.post("api/portfolio/attachments/" + entityType + "/" + entityId, formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } });
+      }
+      function validateUploadFiles(files) {
+        for (var index = 0; index < files.length; index++) if (!validateUploadFileSize(files[index])) return false;
+        return true;
+      }
+      function validateUploadFileSize(file) {
+        if (!file || !file.size || file.size <= maxUploadBytes) return true;
+        noticeError(uploadFileSizeMessage(file));
+        return false;
+      }
+      function uploadFileSizeMessage(file) {
+        return (file && file.name || "Selected file") + " is larger than 50 MB. Please upload a smaller file.";
       }
       function uploadAttachments(entityType, entityId, files) {
         var uploads = [];
@@ -2202,7 +2251,10 @@
         if (response.status === 401) { vm.signOut(); return "Your session has expired or is not authenticated. Please sign in again before saving."; }
         if (response.status === 403) return "Your account does not have permission to save this item. Ask an admin to assign the required role.";
         if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
-        return response.data.message || response.data.Message || fallback;
+        var message = response.data.message || response.data.Message;
+        var detail = response.data.exceptionMessage || response.data.ExceptionMessage;
+        if (message && !/^An error has occurred\.?$/i.test(message)) return message;
+        return detail || message || fallback;
       }
       function authResponseMessage(response, fallback) {
         if (!response || response.data == null) return fallback;

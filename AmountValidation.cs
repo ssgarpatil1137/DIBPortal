@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Linq;
 
@@ -34,16 +35,50 @@ namespace DFM.Web.Infrastructure
 
         public static void ValidateBudgetLineAmount(int petId, int? budgetLineId, decimal cost)
         {
+            ValidateBudgetLineAmount(petId, budgetLineId, cost, null);
+        }
+
+        public static void ValidateBudgetLineAmount(int petId, int? budgetLineId, decimal cost, IEnumerable<int> sourceSpendItemIds)
+        {
             if (cost <= 0) throw new ArgumentException("A positive Budget Line amount is required.");
 
             var pet = Db.Query("SELECT Code,RequestedAmount FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
             if (pet == null) throw new ArgumentException("PET request was not found.");
 
-            var requestedAmount = ToDecimal(pet["RequestedAmount"]);
-            var existingBudgetLines = ScalarDecimal("SELECT ISNULL(SUM(Cost),0) Amount FROM dbo.BudgetLines WHERE PetId=@PetId AND (@BudgetLineId IS NULL OR BudgetLineId<>@BudgetLineId)", P("@PetId", petId), P("@BudgetLineId", budgetLineId));
-            var available = requestedAmount - existingBudgetLines;
+            var spendItemId = (sourceSpendItemIds ?? Enumerable.Empty<int>()).FirstOrDefault(id => id > 0);
+            var approvedAmount = ApprovedBudgetLineBaseAmount(petId, pet, spendItemId);
+            var existingBudgetLines = ExistingBudgetLineAmount(petId, budgetLineId, spendItemId);
+            var available = approvedAmount - existingBudgetLines;
             if (cost > available)
                 throw new ArgumentException("Budget Line amount exceeds the available balance for PET Reference " + Convert.ToString(pet["Code"]) + ". Available balance: " + Money(Math.Max(available, 0)) + "; entered amount: " + Money(cost) + ".");
+        }
+
+        private static decimal ApprovedBudgetLineBaseAmount(int petId, Dictionary<string, object> pet, int spendItemId)
+        {
+            if (spendItemId > 0)
+            {
+                var spendItem = Db.Query("SELECT FinalAedAmount Amount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@PetId", petId), P("@SpendItemId", spendItemId)).FirstOrDefault();
+                if (spendItem == null) throw new ArgumentException("Selected PET line was not found.");
+                return ToDecimal(spendItem["Amount"]);
+            }
+            var spendTotal = ScalarDecimal("SELECT ISNULL(SUM(FinalAedAmount),0) Amount FROM dbo.SpendItems WHERE PetId=@PetId", P("@PetId", petId));
+            return spendTotal > 0 ? spendTotal : ToDecimal(pet["RequestedAmount"]);
+        }
+
+        private static decimal ExistingBudgetLineAmount(int petId, int? budgetLineId, int spendItemId)
+        {
+            if (spendItemId > 0 && BudgetLineSpendItemSelectionAvailable())
+                return ScalarDecimal(@"SELECT ISNULL(SUM(b.Cost),0) Amount
+                    FROM dbo.BudgetLines b
+                    JOIN dbo.BudgetLineSpendItems bsi ON bsi.BudgetLineId=b.BudgetLineId
+                    WHERE b.PetId=@PetId AND bsi.SpendItemId=@SpendItemId AND (@BudgetLineId IS NULL OR b.BudgetLineId<>@BudgetLineId)", P("@PetId", petId), P("@SpendItemId", spendItemId), P("@BudgetLineId", budgetLineId));
+            return ScalarDecimal("SELECT ISNULL(SUM(Cost),0) Amount FROM dbo.BudgetLines WHERE PetId=@PetId AND (@BudgetLineId IS NULL OR BudgetLineId<>@BudgetLineId)", P("@PetId", petId), P("@BudgetLineId", budgetLineId));
+        }
+
+        private static bool BudgetLineSpendItemSelectionAvailable()
+        {
+            var row = Db.Query("SELECT CASE WHEN OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NULL THEN 0 ELSE 1 END HasTable").FirstOrDefault();
+            return row != null && Convert.ToInt32(row["HasTable"]) == 1;
         }
 
         private static decimal ScalarDecimal(string sql, params SqlParameter[] parameters)

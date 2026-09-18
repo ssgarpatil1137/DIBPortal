@@ -1101,8 +1101,8 @@
               ><div class="full detail-grid" ng-if="vm.selectedPet" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>Selected PET</small><strong>{{vm.selectedPet.code}}</strong></div>
                 <div><small>Status</small><strong>{{vm.selectedPet.status}}</strong></div>
-                <div><small>Approved PET Amount</small><strong>{{vm.money(vm.selectedPet.requestedAmount)}}</strong></div>
-                <div><small>Available PET Amount</small><strong>{{vm.money(vm.petBudgetLineAvailable(vm.selectedPet,vm.form.budgetLineId))}}</strong></div>
+                <div><small>Approved PET Amount</small><strong>{{vm.money(vm.budgetLineApprovedPetAmount())}}</strong></div>
+                <div><small>Available PET Amount</small><strong>{{vm.money(vm.budgetLineAvailablePetAmount(vm.form.budgetLineId))}}</strong></div>
                 <div><small>Reviewer</small><strong>{{vm.selectedPet.reviewerEmail||vm.selectedProject.accountableExecLead}}</strong></div>
                 <div><small>Approver</small><strong>{{vm.selectedPet.approverEmail||vm.selectedProject.accountableExec}}</strong></div>
               </div
@@ -1426,6 +1426,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=15"></script>
+    <script src="app/app.js?v=18"></script>
   </body>
 </html>
