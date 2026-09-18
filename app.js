@@ -2198,13 +2198,23 @@
         return uploads.length ? $q.all(uploads) : $q.when();
       }
       function uploadBudgetLineDocuments(budgetLineId) {
-        if (!budgetLineId || vm.demo) return $q.when();
-        var uploads = [];
+        if (vm.demo) return $q.when();
+        var documents = [];
         vm.budgetLineDocumentTypes.forEach(function (type) {
           var file = vm.budgetLineDocumentFiles && vm.budgetLineDocumentFiles[type.key];
-          if (file) uploads.push(uploadAttachment(type.entityType, budgetLineId, file));
+          if (file) documents.push({ type: type, file: file });
         });
-        return uploads.length ? $q.all(uploads) : $q.when();
+        if (!documents.length) return $q.when();
+        if (!budgetLineId) return $q.reject({ data: { message: "Budget Line was saved but the saved Budget Line ID was not returned for document upload." } });
+        var chain = $q.when();
+        documents.forEach(function (document) {
+          chain = chain.then(function () {
+            return uploadAttachment(document.type.entityType, budgetLineId, document.file).then(null, function (response) {
+              return $q.reject({ data: { message: document.type.label + " document upload failed. " + responseMessage(response, "Unable to upload the document.") } });
+            });
+          });
+        });
+        return chain;
       }
       function uploadInvoiceDocument(invoiceId) {
         if (!invoiceId || !vm.invoiceDocumentFile || vm.demo) return $q.when();

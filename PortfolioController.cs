@@ -395,13 +395,26 @@ namespace DFM.Web.Controllers
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds);
-                var saved = Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
+                var saved = SaveBudgetLineRow(value, lpoStatus);
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
                 if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private Dictionary<string, object> SaveBudgetLineRow(BudgetLineRequest value, object lpoStatus)
+        {
+            try
+            {
+                return Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                return Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name)).FirstOrDefault();
+            }
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("budget-lines/{budgetLineId:int}")]
@@ -444,8 +457,7 @@ namespace DFM.Web.Controllers
                     var originalName = AttachmentColumnValue(Path.GetFileName((original ?? "").Trim('"')), 260, "supporting-document");
                     var storedName = AttachmentColumnValue(Path.GetFileName(file.LocalFileName), 260, Guid.NewGuid().ToString("N"));
                     var contentType = AttachmentColumnValue(file.Headers.ContentType == null ? MimeMapping.GetMimeMapping(originalName) : file.Headers.ContentType.MediaType, 150, "application/octet-stream");
-                    Db.Execute(@"INSERT dbo.Attachments(EntityType,EntityId,OriginalName,StoredName,ContentType,FileSize,UploadedBy)
-                        VALUES(@type,@id,@original,@stored,@content,@size,@user)", P("@type", AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET")), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", AttachmentColumnValue(User.Identity.Name, 254, "system")));
+                    SaveAttachmentRow(AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET"), entityId, originalName, storedName, contentType, new FileInfo(file.LocalFileName).Length, AttachmentColumnValue(User.Identity.Name, 254, "system"));
                 }
                 return Ok();
             }
@@ -460,6 +472,19 @@ namespace DFM.Web.Controllers
         {
             if (entityType != null && entityType.Equals("pet", StringComparison.OrdinalIgnoreCase)) return "PET";
             return entityType;
+        }
+
+        private static void SaveAttachmentRow(string entityType, int entityId, string originalName, string storedName, string contentType, long fileSize, string uploadedBy)
+        {
+            try
+            {
+                Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", entityType), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", fileSize), P("@user", uploadedBy));
+            }
+            catch (SqlException)
+            {
+                Db.Execute(@"INSERT dbo.Attachments(EntityType,EntityId,OriginalName,StoredName,ContentType,FileSize,UploadedBy)
+                    VALUES(@type,@id,@original,@stored,@content,@size,@user)", P("@type", entityType), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", fileSize), P("@user", uploadedBy));
+            }
         }
 
         private static string AttachmentColumnValue(string value, int maxLength, string fallback)
