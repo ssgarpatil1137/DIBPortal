@@ -1654,8 +1654,8 @@ main {
   scrollbar-gutter: stable;
 }
 .project-register-table {
-  width: 1580px;
-  min-width: 100%;
+  width: 100%;
+  min-width: 1720px;
   table-layout: fixed;
 }
 .project-register-table th,
@@ -1677,19 +1677,19 @@ main {
 .project-register-table th:nth-child(2),
 .project-register-table td:nth-child(2) { width: 96px; }
 .project-register-table th:nth-child(3),
-.project-register-table td:nth-child(3) { width: 230px; }
+.project-register-table td:nth-child(3) { width: 300px; }
 .project-register-table th:nth-child(4),
 .project-register-table td:nth-child(4) { width: 76px; }
 .project-register-table th:nth-child(5),
-.project-register-table td:nth-child(5) { width: 118px; }
+.project-register-table td:nth-child(5) { width: 150px; }
 .project-register-table th:nth-child(6),
-.project-register-table td:nth-child(6) { width: 112px; }
+.project-register-table td:nth-child(6) { width: 132px; }
 .project-register-table th:nth-child(7),
 .project-register-table td:nth-child(7) { width: 60px; }
 .project-register-table th:nth-child(8),
-.project-register-table td:nth-child(8) { width: 120px; }
+.project-register-table td:nth-child(8) { width: 150px; }
 .project-register-table th:nth-child(9),
-.project-register-table td:nth-child(9) { width: 116px; }
+.project-register-table td:nth-child(9) { width: 138px; }
 .project-register-table th:nth-child(10),
 .project-register-table td:nth-child(10),
 .project-register-table th:nth-child(11),
@@ -1708,7 +1708,7 @@ main {
 .project-register-table td:nth-child(14) { width: 88px; }
 .project-register-table th:nth-child(15),
 .project-register-table td:nth-child(15) {
-  width: 242px;
+  width: 190px;
   overflow: visible;
 }
 .project-register-table td:nth-child(15) {
@@ -1739,7 +1739,7 @@ main {
 .project-register-table .row-actions {
   justify-content: flex-start;
   gap: 3px;
-  width: max-content;
+  width: 100%;
 }
 .project-register-table .icon-btn {
   width: 24px;
@@ -1915,7 +1915,8 @@ main {
     overflow-x: auto;
   }
   .project-register-table {
-    width: 1580px;
+    width: 100%;
+    min-width: 1720px;
   }
 }
 .workspace .section-bar .filters {
@@ -2929,7 +2930,8 @@ textarea {
     width: 100%;
   }
   .project-register-table {
-    width: 1540px;
+    width: 100%;
+    min-width: 1720px;
   }
   .metrics {
     grid-template-columns: 1fr;
