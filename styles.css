@@ -218,6 +218,7 @@ main {
   display: flex;
   gap: 6px;
   align-items: center;
+  flex-wrap: nowrap;
 }
 .btn {
   border: 1px solid transparent;
@@ -425,6 +426,7 @@ caption {
   border-bottom: 1px solid #e8edea;
   vertical-align: middle;
   font-size: 12px;
+  white-space: nowrap;
 }
 .data-table tbody tr:nth-child(even) > td,
 .nested tbody tr:nth-child(even) > td {
@@ -886,6 +888,7 @@ dd {
   padding: 14px;
   text-align: right;
   border-bottom: 1px solid var(--line);
+  white-space: nowrap;
 }
 .report-table table th:first-child,
 .report-table table td:first-child {
@@ -1533,6 +1536,7 @@ main {
 .btn.compact {
   min-height: 26px;
   padding: 4px 7px;
+  white-space: nowrap;
 }
 .icon-btn {
   width: 26px;
@@ -1888,6 +1892,7 @@ main {
   font-size: 10px;
   line-height: 1.2;
 }
+  white-space: nowrap;
 .data-table td,
 .nested td {
   padding: 7px 8px;
@@ -2212,13 +2217,13 @@ textarea {
 .approvals-table th:nth-child(11),
 .approvals-table td:nth-child(11) { width: 104px; }
 .approvals-table th:nth-child(12),
-.approvals-table td:nth-child(12) { width: 124px; }
+.approvals-table td:nth-child(12) { width: 168px; }
 .approvals-table td:nth-child(12) .btn.compact {
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  min-width: max-content;
   padding-inline: 5px;
-  white-space: normal;
-  line-height: 1.15;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 .modal .decision-pet-grid {
   min-width: 0;
