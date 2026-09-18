@@ -1641,16 +1641,17 @@ main {
 }
 .project-register-workspace .table-scroll {
   overflow-x: auto;
+  scrollbar-gutter: stable;
 }
 .project-register-table {
-  width: max-content;
+  width: 1580px;
   min-width: 100%;
-  table-layout: auto;
+  table-layout: fixed;
 }
 .project-register-table th,
 .project-register-table td {
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .project-register-table th {
@@ -1659,7 +1660,7 @@ main {
   z-index: 8;
 }
 .project-register-table td {
-  height: 38px;
+  height: 34px;
 }
 .project-register-table th:nth-child(1),
 .project-register-table td:nth-child(1) { width: 30px; text-align: center; }
@@ -1701,12 +1702,18 @@ main {
   overflow: visible;
 }
 .project-register-table td:nth-child(15) {
-  z-index: 5;
+  z-index: 24;
   background: var(--paper);
-  white-space: normal;
+  white-space: nowrap;
 }
 .project-register-table th:nth-child(15) {
-  z-index: 10;
+  z-index: 32;
+}
+.project-register-table th:nth-child(15),
+.project-register-table td:nth-child(15) {
+  position: sticky;
+  right: 0;
+  box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
 }
 .project-register-table tbody tr:nth-child(even) > td:nth-child(15) {
   background: #fbfdfc;
@@ -1735,13 +1742,34 @@ main {
 }
 .project-register-table .project-name,
 .project-register-table .truncate-cell {
-  max-width: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .project-register-table .text-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-register-table .project-row > td:not(:last-child):hover,
+.project-register-table .project-row > td:not(:last-child):focus-within {
+  position: relative;
+  z-index: 12;
+  overflow: visible;
+  background: #fff;
+  box-shadow: 0 6px 18px rgba(14, 63, 43, 0.12);
+}
+.project-register-table .project-row > td:not(:last-child):hover .project-name,
+.project-register-table .project-row > td:not(:last-child):hover .truncate-cell,
+.project-register-table .project-row > td:not(:last-child):hover .text-link,
+.project-register-table .project-row > td:not(:last-child):focus-within .project-name,
+.project-register-table .project-row > td:not(:last-child):focus-within .truncate-cell,
+.project-register-table .project-row > td:not(:last-child):focus-within .text-link {
   max-width: none;
   overflow: visible;
   text-overflow: clip;
-  white-space: nowrap;
+  background: #fff;
 }
 .project-register-workspace .child-panel {
   width: 100%;
@@ -1756,16 +1784,16 @@ main {
 }
 .project-register-workspace .pet-request-table,
 .project-register-workspace .budget-line-request-table {
-  width: max-content;
+  width: 1350px;
   min-width: 100%;
-  table-layout: auto;
+  table-layout: fixed;
 }
 .project-register-workspace .pet-request-table th,
 .project-register-workspace .pet-request-table td,
 .project-register-workspace .budget-line-request-table th,
 .project-register-workspace .budget-line-request-table td {
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .project-register-workspace .pet-request-table th:nth-child(1),
@@ -1816,6 +1844,23 @@ main {
   width: 176px;
   overflow: visible;
 }
+.project-register-workspace .pet-request-table th:last-child,
+.project-register-workspace .pet-request-table td:last-child,
+.project-register-workspace .budget-line-request-table th:last-child,
+.project-register-workspace .budget-line-request-table td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 24;
+  box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
+}
+.project-register-workspace .pet-request-table th:last-child,
+.project-register-workspace .budget-line-request-table th:last-child {
+  z-index: 32;
+}
+.project-register-workspace .pet-request-table td:last-child,
+.project-register-workspace .budget-line-request-table td:last-child {
+  background: var(--paper);
+}
 .project-register-workspace .pet-request-table .row-actions,
 .project-register-workspace .budget-line-request-table .row-actions {
   width: max-content;
@@ -1843,12 +1888,12 @@ main {
   .project-register-workspace .budget-line-request-table td:last-child {
     position: sticky;
     right: 0;
-    z-index: 5;
-    box-shadow: -1px 0 0 var(--line);
+    z-index: 24;
+    box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
   }
   .project-register-workspace .pet-request-table th:last-child,
   .project-register-workspace .budget-line-request-table th:last-child {
-    z-index: 9;
+    z-index: 32;
   }
   .project-register-workspace .pet-request-table td:last-child,
   .project-register-workspace .budget-line-request-table td:last-child {
@@ -1860,13 +1905,7 @@ main {
     overflow-x: auto;
   }
   .project-register-table {
-    width: 1540px;
-  }
-  .project-register-table th:nth-child(15),
-  .project-register-table td:nth-child(15) {
-    position: sticky;
-    right: 0;
-    box-shadow: -1px 0 0 var(--line);
+    width: 1580px;
   }
 }
 .workspace .section-bar .filters {
