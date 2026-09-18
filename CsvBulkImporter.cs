@@ -10,7 +10,7 @@ namespace DFM.Web.Infrastructure
 {
     public static class CsvBulkImporter
     {
-        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
+        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
         private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
         private static readonly string[] CostTypeOptions = {
             "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
@@ -53,14 +53,17 @@ namespace DFM.Web.Infrastructure
             var petReference = sourceRows.Select(row => row.PetReference).FirstOrDefault(reference => !string.IsNullOrWhiteSpace(reference));
             if (string.IsNullOrWhiteSpace(petReference)) petReference = GeneratedPetReference();
             var uploadRows = sourceRows.Select(row => { row.PetReference = petReference; return CalculatePetRow(row, true); }).ToList();
+            EnsurePetLineIds(uploadRows, true);
             if (uploadRows.Count == 0) throw new ArgumentException("Add at least one PET row before saving.");
             var imported = 0;
             foreach (var group in uploadRows.GroupBy(row => row.PetReference, StringComparer.OrdinalIgnoreCase))
             {
-                var existing = Db.Query("SELECT PetId FROM dbo.PETRequests WHERE ProjectId=@project AND Code=@code AND Status IN ('Draft','Pending Review','Pending Approval','Sent Back')", P("@project", projectId), P("@code", group.Key));
+                var existing = Db.Query("SELECT PetId,Status FROM dbo.PETRequests WHERE ProjectId=@project AND Code=@code", P("@project", projectId), P("@code", group.Key));
                 var uploadedTotal = group.Sum(row => row.FinalAed); var petId = 0; var firstRow = group.First();
                 if (existing.Count > 0)
                 {
+                    var existingStatus = Convert.ToString(existing[0]["Status"]);
+                    if (!EditablePetStatus(existingStatus)) throw new ArgumentException("PET requests can be edited only while Pending Review or Sent Back.");
                     petId = Convert.ToInt32(existing[0]["PetId"]);
                     var existingSpend = Db.Query("SELECT ISNULL(SUM(FinalAedAmount),0) Amount FROM dbo.SpendItems WHERE PetId=@pet", P("@pet", petId)).FirstOrDefault();
                     uploadedTotal += existingSpend == null ? 0 : Convert.ToDecimal(existingSpend["Amount"], CultureInfo.InvariantCulture);
@@ -79,16 +82,14 @@ namespace DFM.Web.Infrastructure
                 if (petId == 0) petId = Convert.ToInt32(result[0]["PetId"]);
                 foreach (var item in group)
                 {
-                    var divisor = 1 + (item.ContingencyPercent / 100);
-                    var persistedAmount = divisor == 0 ? item.FinalAed : item.FinalAed / divisor;
                     try
                     {
-                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl,@department,@description,@yearlyRecurrence,@lineId,@srNo,@lineDate", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber), P("@department", item.Department), P("@description", item.Description), P("@yearlyRecurrence", item.YearlyRecurrence), P("@lineId", item.LineId), P("@srNo", item.SerialNo), P("@lineDate", item.LineDate)); imported++;
+                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl,@department,@description,@yearlyRecurrence,@lineId,@srNo,@lineDate", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", item.ForeignAmount), P("@aed", item.AedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber), P("@department", item.Department), P("@description", item.Description), P("@yearlyRecurrence", item.YearlyRecurrence), P("@lineId", item.LineId), P("@srNo", item.SerialNo), P("@lineDate", item.LineDate)); imported++;
                     }
                     catch (SqlException ex)
                     {
                         if (!ProcedureParameterError(ex)) throw;
-                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", persistedAmount), P("@aed", persistedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber)); imported++;
+                        Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", item.ForeignAmount), P("@aed", item.AedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber)); imported++;
                     }
                 }
             }
@@ -99,39 +100,46 @@ namespace DFM.Web.Infrastructure
         {
             RequireAny(headers, "vendor", new[] { "vendor", "vendorname", "supplier", "vendorsupplier" });
             RequireAny(headers, "unitprice", new[] { "unitprice", "price" });
-            return rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), SerialNo = GetAny(row, headers, "", "srno", "serialno", "serialnumber"), LineDate = DateNullable(row, headers, "date", "linedate"), LineId = GetAny(row, headers, "", "id", "lineid"), Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
+            var petRows = rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), SerialNo = GetAny(row, headers, "", "srno", "serialno", "serialnumber", "sr", "sno", "slno"), LineDate = DateNullable(row, headers, "date", "linedate"), LineId = "", Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
+            EnsurePetLineIds(petRows, true);
+            return petRows;
         }
 
         private static PetUploadRowRequest CalculatePetRow(PetUploadRowRequest row, bool strict)
         {
             if (strict && string.IsNullOrWhiteSpace(row.PetReference)) row.PetReference = GeneratedPetReference();
             if (strict && string.IsNullOrWhiteSpace(row.Vendor)) throw new ArgumentException("Vendor is required for every PET row.");
+            NormalizePetDropdowns(row);
             if (strict) ValidatePetRequiredDropdowns(row);
             if (strict && row.UnitPrice <= 0) throw new ArgumentException("Unit Price is required for every PET row.");
             row.Currency = string.IsNullOrWhiteSpace(row.Currency) ? "AED" : row.Currency.Trim().ToUpperInvariant();
             row.Units = row.Units == 0 ? 1 : row.Units;
-            if (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase))
-            {
-                row.ExchangeRate = 1;
-                row.AedAmount = row.UnitPrice;
-                row.ForeignAmount = row.UnitPrice;
-            }
-            else
-            {
-                row.ForeignAmount = row.UnitPrice;
-                if (row.AedAmount == 0) row.AedAmount = row.ForeignAmount;
-            }
-            row.FinalAed = row.Units * (string.Equals(row.Currency, "AED", StringComparison.OrdinalIgnoreCase) ? row.AedAmount : row.ForeignAmount);
+            var foreignAmount = row.Units * row.UnitPrice;
+            var rate = CurrencyRateToLocal(row.Currency, row.ExchangeRate);
+            row.ExchangeRate = rate;
+            row.ForeignAmount = decimal.Round(foreignAmount, 2, MidpointRounding.AwayFromZero);
+            row.AedAmount = decimal.Round(foreignAmount * rate, 2, MidpointRounding.AwayFromZero);
+            row.FinalAed = decimal.Round(row.AedAmount * (1 + row.ContingencyPercent / 100), 2, MidpointRounding.AwayFromZero);
             return row;
+        }
+
+        private static void NormalizePetDropdowns(PetUploadRowRequest row)
+        {
+            var department = MatchOption(row.Department, DepartmentOptions);
+            var unitType = MatchOption(row.UnitType, UnitTypeOptions);
+            var costType = MatchOption(row.CostType, CostTypeOptions);
+            if (department != null) row.Department = department;
+            if (unitType != null) row.UnitType = unitType;
+            if (costType != null) row.CostType = costType;
         }
 
         private static void ValidatePetRequiredDropdowns(PetUploadRowRequest row)
         {
-            var department = DepartmentOptions.FirstOrDefault(option => string.Equals(option, row.Department, StringComparison.OrdinalIgnoreCase));
+            var department = MatchOption(row.Department, DepartmentOptions);
             if (department == null) throw new ArgumentException("Department is required for every PET row.");
-            var unitType = UnitTypeOptions.FirstOrDefault(option => string.Equals(option, row.UnitType, StringComparison.OrdinalIgnoreCase));
+            var unitType = MatchOption(row.UnitType, UnitTypeOptions);
             if (unitType == null) throw new ArgumentException("Unit Type is required for every PET row.");
-            var costType = CostTypeOptions.FirstOrDefault(option => string.Equals(option, row.CostType, StringComparison.OrdinalIgnoreCase));
+            var costType = MatchOption(row.CostType, CostTypeOptions);
             if (costType == null) throw new ArgumentException("Cost Type is required for every PET row.");
             if (!row.YearlyRecurrence.HasValue || row.YearlyRecurrence.Value < 1 || row.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required for every PET row.");
             row.Department = department;
@@ -139,9 +147,60 @@ namespace DFM.Web.Infrastructure
             row.CostType = costType;
         }
 
+        private static decimal CurrencyRateToLocal(string code, decimal fallbackRate)
+        {
+            var currencyCode = string.IsNullOrWhiteSpace(code) ? "AED" : code.Trim().ToUpperInvariant();
+            var row = Db.Query("SELECT RateToLocal FROM dbo.Currencies WHERE UPPER(Code)=@Code", P("@Code", currencyCode)).FirstOrDefault();
+            if (row != null && row["RateToLocal"] != null)
+            {
+                var rate = Convert.ToDecimal(row["RateToLocal"], CultureInfo.InvariantCulture);
+                if (rate > 0) return rate;
+            }
+            return fallbackRate > 0 ? fallbackRate : 1;
+        }
+
+        private static string MatchOption(string value, IEnumerable<string> options)
+        {
+            var key = OptionKey(value);
+            return options.FirstOrDefault(option => OptionKey(option) == key);
+        }
+
+        private static string OptionKey(string value)
+        {
+            var key = new string((value ?? "").Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            return key == "eal" ? "eai" : key;
+        }
+
         private static string GeneratedPetReference()
         {
             return "PET-" + DateTime.UtcNow.Year + "-" + Guid.NewGuid().ToString("N").Substring(0, 8).ToUpperInvariant();
+        }
+
+        private static bool EditablePetStatus(string status)
+        {
+            return string.Equals(status, "Pending Review", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "Sent Back", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsurePetLineIds(IEnumerable<PetUploadRowRequest> rows, bool forceNew)
+        {
+            var usedLineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows.Where(row => row != null))
+            {
+                var lineId = (row.LineId ?? "").Trim();
+                if (forceNew || string.IsNullOrWhiteSpace(lineId) || usedLineIds.Contains(lineId)) lineId = GeneratedLineId(usedLineIds);
+                row.LineId = lineId;
+                usedLineIds.Add(lineId);
+            }
+        }
+
+        private static string GeneratedLineId(HashSet<string> usedLineIds)
+        {
+            string lineId;
+            do
+            {
+                lineId = "LINE-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N").Substring(0, 6).ToUpperInvariant();
+            } while (usedLineIds.Contains(lineId));
+            return lineId;
         }
 
         private static int ImportBudgetLines(int petId, List<List<string>> rows, Dictionary<string, int> headers, string user)

@@ -2198,6 +2198,18 @@ textarea {
 .modal .pet-upload-grid td:nth-child(19):before {
   display: none;
 }
+.modal .pet-upload-grid th:nth-child(4),
+.modal .pet-upload-grid td:nth-child(4),
+.modal .decision-lines-table th:nth-child(4),
+.modal .decision-lines-table td:nth-child(4),
+.modal .spend-line-grid th:nth-child(3),
+.modal .spend-line-grid td:nth-child(3),
+.modal .decision-view-lines-grid th:nth-child(3),
+.modal .decision-view-lines-grid td:nth-child(3),
+.modal label:has(> input[ng-model="vm.form.lineId"]),
+.modal label:has(> input[ng-model="vm.petRowEditor.row.lineId"]) {
+  display: none;
+}
 .modal .pet-upload-grid input,
 .modal .pet-upload-grid select {
   width: 100%;

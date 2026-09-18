@@ -107,7 +107,7 @@
       vm.currencyPageCount = 1;
       vm.currencyFilteredCount = 0;
       vm.visibleCurrencies = [];
-      vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
+      vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
       vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
       vm.costTypeOptions = [
         "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
@@ -493,7 +493,8 @@
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
-          if (!loadedFromCache) { loadDashboard(); loadCurrencies(false); loadRoles(false); }
+          if (loadedFromCache) vm.updateView(true);
+          else { loadDashboard(); loadCurrencies(false); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -817,6 +818,7 @@
         if (!vm.petRowEditor) return;
         var row = vm.petRowEditor.row;
         assignUniquePetReference(row, vm.petRowEditor.original);
+        assignUniqueLineId(row, vm.petRowEditor.original);
         if (!validatePetUploadRow(row, "popup", true, vm.petRowEditor.original)) return;
         if (vm.petRowEditor.original) angular.extend(vm.petRowEditor.original, row);
         else {
@@ -850,7 +852,7 @@
       }
       function normalizeSpendItem(item) {
         if (!item) return item;
-        item.serialNo = item.serialNo || item.srNo || item.SrNo || "";
+        item.serialNo = item.serialNo || item.srNo || item.SrNo || item.SerialNo || item.serialNumber || item.SerialNumber || "";
         if (item.lineDate && !angular.isDate(item.lineDate)) item.lineDate = new Date(item.lineDate);
         return item;
       }
@@ -862,6 +864,29 @@
           reference = "PET-" + year + "-" + String(Date.now()).slice(-5) + "-" + ("00" + vm.petReferenceSequence).slice(-3);
         } while (petReferenceExists(reference, excludeRow, extraRows));
         return reference;
+      }
+      function lineIdExists(lineId, excludeRow, extraRows) {
+        var normalized = String(lineId || "").trim().toLowerCase();
+        if (!normalized) return false;
+        var rows = (vm.uploadPreview || []).concat(vm.selectedPet && vm.selectedPet.spendItems || [], extraRows || []);
+        return rows.some(function (row) { return row !== excludeRow && String(row.lineId || row.LineId || "").trim().toLowerCase() === normalized; });
+      }
+      function generatedLineId(excludeRow, extraRows) {
+        var lineId;
+        do {
+          vm.petLineIdSequence = (vm.petLineIdSequence || 0) + 1;
+          lineId = "LINE-" + String(Date.now()).slice(-8) + "-" + ("000" + vm.petLineIdSequence).slice(-4);
+        } while (lineIdExists(lineId, excludeRow, extraRows));
+        return lineId;
+      }
+      function assignUniqueLineId(row, excludeRow, extraRows, forceNew) {
+        if (!row) return;
+        var current = String(row.lineId || row.LineId || "").trim();
+        if (!forceNew && current && !lineIdExists(current, excludeRow || row, extraRows)) {
+          row.lineId = current;
+          return;
+        }
+        row.lineId = generatedLineId(excludeRow || row, extraRows);
       }
       function ensurePetReferenceNo() {
         vm.form = vm.form || {};
@@ -891,6 +916,7 @@
         (rows || []).forEach(function (row) {
           var prepared = preparePetUploadRow(row, false);
           assignUniquePetReference(prepared);
+          assignUniqueLineId(prepared, null, preparedRows, true);
           preparedRows.push(prepared);
         });
         return preparedRows;
@@ -901,6 +927,10 @@
         prepared.petReference = ensurePetReferenceNo();
         if (prepared.lineDate && !angular.isDate(prepared.lineDate)) prepared.lineDate = new Date(prepared.lineDate);
         applyPetProjectDefaults(prepared, project);
+        prepared.department = normalizeOption(prepared.department, vm.departmentOptions);
+        prepared.unitType = normalizeOption(prepared.unitType, vm.unitTypeOptions);
+        prepared.costType = normalizeOption(prepared.costType, vm.costTypeOptions);
+        if (!prepared.lineId) assignUniqueLineId(prepared, row);
         if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
         if (prepared.spendItemId && prepared.unitPrice) {
           if ((prepared.currency || "AED").toUpperCase() === "AED") prepared.aedAmount = prepared.unitPrice;
@@ -921,10 +951,16 @@
         return false;
       }
       function validOption(value, options) {
-        return options.some(function (option) { return String(option).toLowerCase() === String(value || "").trim().toLowerCase(); });
+        var key = optionKey(value);
+        return options.some(function (option) { return optionKey(option) === key; });
       }
       function normalizeOption(value, options) {
-        return options.filter(function (option) { return String(option).toLowerCase() === String(value || "").trim().toLowerCase(); })[0] || value;
+        var key = optionKey(value);
+        return options.filter(function (option) { return optionKey(option) === key; })[0] || value;
+      }
+      function optionKey(value) {
+        var key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+        return key === "eal" ? "eai" : key;
       }
       function validatePetRequiredDropdowns(row, rowLabel) {
         if (!validOption(row && row.department, vm.departmentOptions)) { noticeError("Department is required on " + rowLabel + "."); return false; }
@@ -982,6 +1018,7 @@
       function petLinePayloads(petId) {
         return (vm.uploadPreview || []).map(function (row) {
           applyPetProjectDefaults(row);
+          assignUniqueLineId(row, row);
           calculatePetUploadRow(row, false);
           return {
             spendItemId: row.spendItemId || null,
@@ -1023,6 +1060,7 @@
       function savePetUploadRows(projectId, onDone, reviewRequired) {
         if (!validatePetUploadRows(true)) return;
         var rows = (vm.uploadPreview || []).map(function (row) {
+          assignUniqueLineId(row, row);
           var payload = angular.copy(row);
           payload.petReference = ensurePetReferenceNo();
           payload.serialNo = row.serialNo;
@@ -1739,6 +1777,10 @@
       function openPetModal(project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
+        if (pet && !sameStatus(pet.status || pet.Status, "Pending Review") && !sameStatus(pet.status || pet.Status, "Sent Back")) {
+          noticeError("PET requests can be edited only while Pending Review or Sent Back.");
+          return;
+        }
         vm.uploadFile = null;
         vm.petLineUploadFile = null;
         vm.uploadPreview = [];
@@ -1758,7 +1800,6 @@
           vm.form.status = vm.form.status || pet.status || pet.Status;
           if (vm.form.status === "Sent Back" && angular.isUndefined(vm.form.reviewRequired)) vm.form.reviewRequired = angular.isDefined(vm.form.ReviewRequired) ? !!vm.form.ReviewRequired : !project.skipReview;
           if (vm.form.status === "Sent Back") vm.form.comments = "";
-          if (sameStatus(vm.form.status, "Approved")) vm.form.vendorName = existingPetVendor(pet);
         }
         vm.uploadPreview = ((pet && pet.spendItems) || []).map(function (item) { return preparePetUploadRow(angular.extend({ petReference: vm.form.code, projectId: vm.projectDisplayId(project), finalAed: spendItemFinalAed(item) }, item)); });
         vm.recalculateUploadPreview();
@@ -1766,16 +1807,16 @@
           type: "pet",
           kicker: "PET REQUEST",
           title: pet ? "Edit " + vm.form.code : "Create PET for " + vm.projectDisplayId(project),
-          submit: pet && sameStatus(vm.form.status, "Approved") ? "Save vendor name" : pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
+          submit: pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
       }
-      vm.petVendorOnly = function () { return vm.selectedPet && sameStatus(vm.form && vm.form.status || vm.selectedPet.status, "Approved"); };
+      vm.petVendorOnly = function () { return false; };
       vm.openSpend = function (pet) {
         vm.selectedPet = pet;
         vm.selectedProject = vm.projects.filter(function (project) { return project.pets.indexOf(pet) >= 0; })[0];
         vm.selectedPet.spendItems = vm.selectedPet.spendItems || [];
-        vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back" || (pet.status === "Pending Approval" && vm.selectedProject && vm.selectedProject.skipReview));
+        vm.spendEditable = vm.can("request") && (pet.status === "Pending Review" || pet.status === "Sent Back");
         vm.spendFormVisible = false;
         vm.form = { petId: pet.petId, serialNo: "", lineDate: null, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
         vm.modal = { type: "spend", kicker: "PET COST DETAIL", title: "PET line items · " + pet.code, submit: "Save PET line item" };
@@ -1783,6 +1824,7 @@
       };
       vm.addSpend = function () {
         vm.form = { petId: vm.selectedPet.petId, serialNo: "", lineDate: null, lineId: "", department: "", head: petProjectExpenseHead(vm.selectedProject), units: 1, currency: "AED", foreignAmount: 0, exchangeRate: 1, aedAmount: 0, contingencyPercent: 0 };
+        assignUniqueLineId(vm.form);
         vm.spendFormVisible = true;
         redraw();
       };
@@ -2302,6 +2344,7 @@
           vm.recalculateSpendForm();
           var spendPayload = angular.extend({}, vm.form, { petId: vm.selectedPet.petId });
           spendPayload.head = petProjectExpenseHead(vm.selectedProject) || spendPayload.head;
+          assignUniqueLineId(spendPayload, vm.form);
           spendPayload.units = parseNumericInput(spendPayload.units);
           spendPayload.unitPrice = parseNumericInput(spendPayload.unitPrice);
           spendPayload.foreignAmount = spendForeignAmount(spendPayload);
@@ -2333,6 +2376,7 @@
           vm.recalculateSpendForm();
           var demoSpendPayload = angular.extend({}, vm.form);
           demoSpendPayload.head = petProjectExpenseHead(vm.selectedProject) || demoSpendPayload.head;
+          assignUniqueLineId(demoSpendPayload, vm.form);
           demoSpendPayload.units = parseNumericInput(demoSpendPayload.units);
           demoSpendPayload.unitPrice = parseNumericInput(demoSpendPayload.unitPrice);
           demoSpendPayload.foreignAmount = spendForeignAmount(demoSpendPayload);

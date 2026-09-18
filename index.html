@@ -343,8 +343,8 @@
                                   Approve</button
                                 ><button
                                   class="icon-btn"
-                                  title="{{pet.status==='Approved'?'Edit PET vendor name':pet.status==='Sent Back'?'Amend and resubmit PET':'Edit PET'}}"
-                                  ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back'||pet.status==='Approved')"
+                                  title="{{pet.status==='Sent Back'?'Amend and resubmit PET':'Edit PET'}}"
+                                  ng-if="vm.can('request')&&(pet.status==='Pending Review'||pet.status==='Sent Back')"
                                   ng-click="vm.openPet(project,pet)"
                                 >
                                   <i data-lucide="pencil"></i></button

@@ -17,7 +17,7 @@ namespace DFM.Web.Controllers
     [ApiAuthorize, RoutePrefix("api/portfolio")]
     public class PortfolioController : ApiController
     {
-        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&l", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
+        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
         private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
         private static readonly string[] CostTypeOptions = {
             "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
@@ -30,6 +30,8 @@ namespace DFM.Web.Controllers
         [HttpGet, Route("dashboard")]
         public IHttpActionResult Dashboard(string projectKey = "DMGT", string accountableExec = "Zahoor Ul Islam (IT Dept)")
         {
+            var canReview = User.IsInRole("Reviewer");
+            var canApprove = User.IsInRole("Approver");
             return Ok(new {
                 metrics = Db.Query("SELECT * FROM vw_ManagementDashboard"),
                 projects = Db.Query(@"SELECT p.*,
@@ -47,7 +49,7 @@ namespace DFM.Web.Controllers
                         SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
                         FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
                     ORDER BY p.CreatedUtc DESC"),
-                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name)),
+                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
                 budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC")
@@ -195,12 +197,7 @@ namespace DFM.Web.Controllers
                     var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
                     if (existing == null) return BadRequest("PET request was not found.");
                     var existingStatus = Convert.ToString(existing["Status"]).Trim();
-                    if (value.VendorNameOnly || string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (!string.Equals(existingStatus, "Approved", StringComparison.OrdinalIgnoreCase)) return BadRequest("Only approved PET requests allow vendor-name-only editing.");
-                        UpdateApprovedPetVendors(value.PetId.Value, value.SpendItems, value.VendorName);
-                        return Ok(new { PetId = value.PetId, Status = "Approved" });
-                    }
+                    if (!EditablePetStatus(existingStatus)) return BadRequest("PET requests can be edited only while Pending Review or Sent Back.");
                 }
                 if (value.SpendItems != null && value.SpendItems.Count > 0)
                 {
@@ -274,8 +271,11 @@ namespace DFM.Web.Controllers
         public IHttpActionResult SaveSpendItem(SpendItemRequest value)
         {
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
+            try { RequireEditablePetStatus(value.PetId); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
             try { ValidatePetRequiredDropdowns(value); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            EnsureSpendLineId(value);
             var foreignAmount = value.Units * value.UnitPrice;
             var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
             value.ExchangeRate = rate;
@@ -287,6 +287,7 @@ namespace DFM.Web.Controllers
 
         private static void SyncPetSpendItems(int petId, List<SpendItemRequest> items)
         {
+            EnsureSpendLineIds(items);
             var ids = items.Where(item => item.SpendItemId.HasValue).Select(item => item.SpendItemId.Value).Distinct().ToList();
             var parameters = new List<SqlParameter> { P("@PetId", petId) };
             var keepClause = "";
@@ -306,6 +307,45 @@ namespace DFM.Web.Controllers
                 var aedAmount = foreignAmount * exchangeRate;
                 SaveSpendItemRow(item, foreignAmount, aedAmount);
             }
+        }
+
+        private static void RequireEditablePetStatus(int petId)
+        {
+            var existing = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
+            if (existing == null) throw new ArgumentException("PET request was not found.");
+            if (!EditablePetStatus(Convert.ToString(existing["Status"]))) throw new ArgumentException("PET requests can be edited only while Pending Review or Sent Back.");
+        }
+
+        private static bool EditablePetStatus(string status)
+        {
+            return string.Equals(status, "Pending Review", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "Sent Back", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureSpendLineIds(IEnumerable<SpendItemRequest> items)
+        {
+            var usedLineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items.Where(item => item != null))
+            {
+                var lineId = (item.LineId ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(lineId) || usedLineIds.Contains(lineId)) lineId = GeneratedLineId(usedLineIds);
+                item.LineId = lineId;
+                usedLineIds.Add(lineId);
+            }
+        }
+
+        private static void EnsureSpendLineId(SpendItemRequest item)
+        {
+            if (item != null && string.IsNullOrWhiteSpace(item.LineId)) item.LineId = GeneratedLineId(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static string GeneratedLineId(HashSet<string> usedLineIds)
+        {
+            string lineId;
+            do
+            {
+                lineId = "LINE-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N").Substring(0, 6).ToUpperInvariant();
+            } while (usedLineIds.Contains(lineId));
+            return lineId;
         }
 
         private static Dictionary<string, object> SaveSpendItemRow(SpendItemRequest value, decimal foreignAmount, decimal aedAmount)
@@ -515,16 +555,28 @@ namespace DFM.Web.Controllers
         private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
         {
             if (value == null) throw new ArgumentException("PET line item details are required.");
-            var department = DepartmentOptions.FirstOrDefault(option => string.Equals(option, value.Department, StringComparison.OrdinalIgnoreCase));
+            var department = MatchOption(value.Department, DepartmentOptions);
             if (department == null) throw new ArgumentException("Department is required.");
-            var unitType = UnitTypeOptions.FirstOrDefault(option => string.Equals(option, value.UnitType, StringComparison.OrdinalIgnoreCase));
+            var unitType = MatchOption(value.UnitType, UnitTypeOptions);
             if (unitType == null) throw new ArgumentException("Unit Type is required.");
-            var costType = CostTypeOptions.FirstOrDefault(option => string.Equals(option, value.CostType, StringComparison.OrdinalIgnoreCase));
+            var costType = MatchOption(value.CostType, CostTypeOptions);
             if (costType == null) throw new ArgumentException("Cost Type is required.");
             if (!value.YearlyRecurrence.HasValue || value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required.");
             value.Department = department;
             value.UnitType = unitType;
             value.CostType = costType;
+        }
+
+        private static string MatchOption(string value, IEnumerable<string> options)
+        {
+            var key = OptionKey(value);
+            return options.FirstOrDefault(option => OptionKey(option) == key);
+        }
+
+        private static string OptionKey(string value)
+        {
+            var key = new string((value ?? "").Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            return key == "eal" ? "eai" : key;
         }
 
         private static string NormalizeEditableVendor(string vendor)
