@@ -23,8 +23,9 @@
         restrict: "A",
         link: function (scope, element, attrs) {
           element.on("change", function () {
-            var file = element[0].files && element[0].files[0];
-            scope.$apply(function () { scope.$eval(attrs.fileChange, { $file: file }); });
+            var files = element[0].files;
+            var file = files && files[0];
+            scope.$apply(function () { scope.$eval(attrs.fileChange, { $file: file, $files: files }); });
           });
         },
       };
@@ -763,6 +764,7 @@
       vm.isApproverForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.approverEmail) || vm.isApproverFor(project); };
       vm.setUploadFile = function (file) {
         vm.uploadFile = file;
+        vm.uploadFiles = file ? [file] : [];
         if (vm.modal && vm.modal.type === "pet") { redraw(); return; }
         vm.uploadPreview = [];
         vm.petUploadTotal = 0;
@@ -779,6 +781,11 @@
           noticeError(responseMessage(response, "Unable to read PET upload file."));
           redraw();
         });
+      };
+      vm.setUploadFiles = function (files) {
+        vm.uploadFiles = Array.prototype.slice.call(files || []);
+        vm.uploadFile = vm.uploadFiles[0] || null;
+        redraw();
       };
       vm.importPetLines = function (file) {
         vm.petLineUploadFile = file;
@@ -2082,6 +2089,7 @@
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
         };
         vm.uploadFile = null;
+        vm.uploadFiles = [];
         vm.uploadPreview = [];
         vm.form = { item: item };
         if (kind === "pet") ensurePetReferenceNo();
@@ -2122,6 +2130,13 @@
         var formData = new FormData();
         formData.append("file", file);
         return $http.post("api/portfolio/attachments/" + entityType + "/" + entityId, formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } });
+      }
+      function uploadAttachments(entityType, entityId, files) {
+        var uploads = [];
+        (files || []).forEach(function (file) {
+          if (file) uploads.push(uploadAttachment(entityType, entityId, file));
+        });
+        return uploads.length ? $q.all(uploads) : $q.when();
       }
       function uploadBudgetLineDocuments(budgetLineId) {
         if (!budgetLineId || vm.demo) return $q.when();
@@ -2302,7 +2317,7 @@
           if ((vm.uploadPreview || []).length) petPayload.spendItems = petLinePayloads(vm.form.petId || 0);
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
-            uploadAttachment("pet", savedPetId, supportingDocument).then(function () {
+            uploadAttachment("PET", savedPetId, supportingDocument).then(function () {
               notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
               vm.close();
               refreshProjectPets(petPayload.projectId, true);
@@ -2592,6 +2607,21 @@
           }
           runBulkImport(kind, parentId, function () {
             if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
+          });
+          return;
+        }
+        if (type === "upload" && vm.modal.kind === "attachment" && !vm.demo) {
+          var pet = vm.form.item;
+          var files = vm.uploadFiles || (vm.uploadFile ? [vm.uploadFile] : []);
+          if (!pet || !pet.petId) { noticeError("Unable to determine the PET request for this document."); return; }
+          if (!files.length) { noticeError("Choose at least one supporting document first."); return; }
+          uploadAttachments("PET", pet.petId, files).then(function () {
+            notice(files.length + " supporting document(s) uploaded.");
+            vm.close();
+            if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
+            else loadDashboard();
+          }, function (response) {
+            noticeError(responseMessage(response, "Unable to upload the supporting document."));
           });
           return;
         }

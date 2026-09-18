@@ -1330,8 +1330,8 @@
               <h3>Drop CSV, Excel, or attachments here</h3>
               <p>{{vm.modal.help}}</p>
               <input type="file" ng-if="vm.modal.kind!=='attachment'&&vm.modal.kind!=='sources'" accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFile($file)" />
-              <input type="file" ng-if="vm.modal.kind==='attachment'||vm.modal.kind==='sources'" multiple />
-              <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}</p>
+              <input type="file" ng-if="vm.modal.kind==='attachment'||vm.modal.kind==='sources'" multiple file-change="vm.setUploadFiles($files)" />
+              <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}<span ng-if="vm.uploadFiles.length>1"> + {{vm.uploadFiles.length-1}} more</span></p>
               <a
                 ng-if="vm.modal.template"
                 href="{{vm.modal.template}}"
@@ -1426,6 +1426,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=14"></script>
+    <script src="app/app.js?v=15"></script>
   </body>
 </html>

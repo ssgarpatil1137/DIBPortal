@@ -432,15 +432,28 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("attachments/{entityType}/{entityId:int}")]
         public async Task<IHttpActionResult> UploadAttachment(string entityType, int entityId)
         {
-            if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
-            var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments"); Directory.CreateDirectory(root);
-            var provider = await Request.Content.ReadAsMultipartAsync(new MultipartFormDataStreamProvider(root));
-            foreach (var file in provider.FileData)
+            try
             {
-                var original = file.Headers.ContentDisposition.FileName.Trim('"');
-                Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", entityType), P("@id", entityId), P("@original", Path.GetFileName(original)), P("@stored", Path.GetFileName(file.LocalFileName)), P("@content", file.Headers.ContentType == null ? "application/octet-stream" : file.Headers.ContentType.MediaType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", User.Identity.Name));
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments"); Directory.CreateDirectory(root);
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartFormDataStreamProvider(root));
+                if (provider.FileData.Count == 0) return BadRequest("Choose at least one supporting document first.");
+                foreach (var file in provider.FileData)
+                {
+                    var original = file.Headers.ContentDisposition.FileName.Trim('"');
+                    Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", AttachmentEntityType(entityType)), P("@id", entityId), P("@original", Path.GetFileName(original)), P("@stored", Path.GetFileName(file.LocalFileName)), P("@content", file.Headers.ContentType == null ? "application/octet-stream" : file.Headers.ContentType.MediaType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", User.Identity.Name));
+                }
+                return Ok();
             }
-            return Ok();
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (IOException ex) { return BadRequest(ex.Message); }
+            catch (UnauthorizedAccessException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static string AttachmentEntityType(string entityType)
+        {
+            if (entityType != null && entityType.Equals("pet", StringComparison.OrdinalIgnoreCase)) return "PET";
+            return entityType;
         }
 
         [HttpGet, Route("attachments/{attachmentId:long}")]
