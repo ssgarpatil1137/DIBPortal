@@ -790,6 +790,7 @@ dd {
   gap: 10px;
 }
 .report-summary-grid > div {
+  min-width: 0;
   min-height: 66px;
   padding: 12px 14px;
   border: 1px solid var(--line);
@@ -806,6 +807,10 @@ dd {
 }
 .report-summary-grid strong {
   display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--ink);
   font-size: 18px;
   line-height: 1.2;
@@ -2518,6 +2523,7 @@ textarea {
 }
 .modal .project-budget-tracker .report-summary-grid > div {
   flex: 1 1 176px;
+  min-width: 0;
   min-height: 58px;
   padding: 10px 12px;
 }
@@ -2533,10 +2539,12 @@ textarea {
 }
 .modal .project-budget-tracker .report-summary-grid strong {
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   line-height: 1.25;
-  overflow-wrap: anywhere;
-  word-break: normal;
 }
 .modal .source-utilization .table-scroll {
   overflow-x: auto;
@@ -2564,7 +2572,8 @@ textarea {
   min-width: 0;
   padding: 6px 7px;
   border-bottom: 1px solid #e1e9e4;
-  overflow: visible;
+  overflow: hidden;
+  text-overflow: ellipsis;
   vertical-align: middle;
   white-space: nowrap;
   background: #fff;
@@ -2601,17 +2610,17 @@ textarea {
 }
 .modal .report-detail-utilization-grid .truncate-cell,
 .modal .report-detail-utilization-grid .wide-cell {
-  max-width: none;
+  max-width: 100%;
   white-space: nowrap;
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .modal .report-detail-utilization-grid th:nth-child(1),
 .modal .report-detail-utilization-grid td:nth-child(1) { width: 90px; }
 .modal .report-detail-utilization-grid th:nth-child(2),
 .modal .report-detail-utilization-grid td:nth-child(2) { width: 140px; }
 .modal .report-detail-utilization-grid th:nth-child(3),
-.modal .report-detail-utilization-grid td:nth-child(3) { width: 180px; }
+.modal .report-detail-utilization-grid td:nth-child(3) { width: 220px; }
 .modal .report-detail-utilization-grid th:nth-child(4),
 .modal .report-detail-utilization-grid td:nth-child(4) { width: 135px; }
 .modal .report-detail-utilization-grid th:nth-child(5),
@@ -2621,7 +2630,7 @@ textarea {
 .modal .report-detail-utilization-grid th:nth-child(7),
 .modal .report-detail-utilization-grid td:nth-child(7) { width: 145px; }
 .modal .report-detail-utilization-grid th:nth-child(8),
-.modal .report-detail-utilization-grid td:nth-child(8) { width: 190px; }
+.modal .report-detail-utilization-grid td:nth-child(8) { width: 240px; }
 .modal .report-detail-utilization-grid th:nth-child(9),
 .modal .report-detail-utilization-grid td:nth-child(9) { width: 95px; }
 .modal .report-detail-utilization-grid th:nth-child(10),
@@ -2633,7 +2642,7 @@ textarea {
 .modal .report-detail-utilization-grid th:nth-child(13),
 .modal .report-detail-utilization-grid td:nth-child(13) { width: 115px; }
 .modal .report-detail-utilization-grid th:nth-child(14),
-.modal .report-detail-utilization-grid td:nth-child(14) { width: 170px; }
+.modal .report-detail-utilization-grid td:nth-child(14) { width: 220px; }
 .modal .report-detail-utilization-grid th:nth-child(15),
 .modal .report-detail-utilization-grid td:nth-child(15),
 .modal .report-detail-utilization-grid th:nth-child(16),
@@ -2661,11 +2670,27 @@ textarea {
   text-overflow: clip;
   white-space: nowrap;
 }
+.reports > .table-scroll > .data-table {
+  width: 1540px;
+  min-width: 100%;
+  table-layout: fixed;
+}
+.reports > .table-scroll > .data-table th,
+.reports > .table-scroll > .data-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.reports > .table-scroll > .data-table .truncate-cell,
+.reports > .table-scroll > .data-table .wide-cell {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .workspace > .table-scroll > .data-table:not(.project-register-table) th:last-child,
 .workspace > .table-scroll > .data-table:not(.project-register-table) td:last-child,
 .reports > .table-scroll > .data-table th:last-child,
 .reports > .table-scroll > .data-table td:last-child {
-  overflow: visible;
+  overflow: hidden;
 }
 .workspace > .table-scroll > table.data-table.approvals-table {
   width: max-content;
@@ -2674,31 +2699,31 @@ textarea {
 .reports > .table-scroll > .data-table.projects th:nth-child(1),
 .reports > .table-scroll > .data-table.projects td:nth-child(1) { width: 85px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(2),
-.reports > .table-scroll > .data-table.projects td:nth-child(2) { width: 160px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(2) { width: 220px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(3),
 .reports > .table-scroll > .data-table.projects td:nth-child(3) { width: 75px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(4),
-.reports > .table-scroll > .data-table.projects td:nth-child(4) { width: 70px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(4) { width: 82px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(5),
-.reports > .table-scroll > .data-table.projects td:nth-child(5) { width: 100px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(5) { width: 130px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(6),
-.reports > .table-scroll > .data-table.projects td:nth-child(6) { width: 90px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(6) { width: 105px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(7),
-.reports > .table-scroll > .data-table.projects td:nth-child(7) { width: 100px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(7) { width: 120px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(8),
-.reports > .table-scroll > .data-table.projects td:nth-child(8) { width: 120px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(8) { width: 150px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(9),
 .reports > .table-scroll > .data-table.projects td:nth-child(9) { width: 95px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(10),
-.reports > .table-scroll > .data-table.projects td:nth-child(10) { width: 48px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(10) { width: 54px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(11),
 .reports > .table-scroll > .data-table.projects td:nth-child(11),
 .reports > .table-scroll > .data-table.projects th:nth-child(12),
-.reports > .table-scroll > .data-table.projects td:nth-child(12) { width: 62px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(12) { width: 74px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(13),
-.reports > .table-scroll > .data-table.projects td:nth-child(13) { width: 48px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(13) { width: 54px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(14),
-.reports > .table-scroll > .data-table.projects td:nth-child(14) { width: 72px; }
+.reports > .table-scroll > .data-table.projects td:nth-child(14) { width: 84px; }
 .reports > .table-scroll > .data-table.projects th:nth-child(15),
 .reports > .table-scroll > .data-table.projects td:nth-child(15) { width: 120px; }
 .reports > .table-scroll > .data-table.projects td:nth-child(15) .btn.compact {
