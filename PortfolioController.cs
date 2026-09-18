@@ -392,9 +392,8 @@ namespace DFM.Web.Controllers
                 if (sourceSpendItemIds.Count > 0)
                 {
                     ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
-                    value.Vendor = BudgetLineVendorFromSpendItem(value.PetId, sourceSpendItemIds[0]);
                 }
-                else value.Vendor = NormalizeEditableVendor(value.Vendor);
+                value.Vendor = NormalizeEditableVendor(value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost);
                 var saved = Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
@@ -611,12 +610,6 @@ namespace DFM.Web.Controllers
             for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
             var row = Db.Query("SELECT COUNT(1) SelectedCount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
             if (row == null || Convert.ToInt32(row["SelectedCount"]) != sourceSpendItemIds.Count) throw new ArgumentException("Selected PET line must belong to the selected PET Request.");
-        }
-
-        private static string BudgetLineVendorFromSpendItem(int petId, int spendItemId)
-        {
-            var row = Db.Query("SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@PetId", petId), P("@SpendItemId", spendItemId)).FirstOrDefault();
-            return NormalizeEditableVendor(row == null ? null : Convert.ToString(row["Vendor"]));
         }
 
         private static bool BudgetLineSpendItemSelectionAvailable()

@@ -743,8 +743,8 @@
       function validateBudgetLineVendorSelection() {
         var items = selectedBudgetLineSpendItems();
         if (vm.budgetLineSpendDetails.length && items.length !== 1) { noticeError("Select one PET line for this Budget Line."); return false; }
-        applySelectedBudgetLineVendor();
-        if (!vm.form.vendor) { noticeError("Vendor Name is required on the selected PET line."); return false; }
+        vm.form.vendor = String(vm.form.vendor || "").trim();
+        if (!vm.form.vendor) { noticeError("Vendor Name is required."); return false; }
         return true;
       }
       vm.petSpendField = function (pet, field) {
