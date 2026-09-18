@@ -2210,7 +2210,7 @@
         documents.forEach(function (document) {
           chain = chain.then(function () {
             return uploadAttachment(document.type.entityType, budgetLineId, document.file).then(null, function (response) {
-              return $q.reject({ data: { message: document.type.label + " document upload failed. " + responseMessage(response, "Unable to upload the document.") } });
+              return $q.reject({ data: { message: document.type.label + " document upload failed. " + responseMessage(response, "The server returned a generic upload error. Apply Database/034_Attachment_Upload_Reliability.sql and rebuild/restart the web app.") } });
             });
           });
         });
@@ -2274,7 +2274,7 @@
         var message = response.data.message || response.data.Message;
         var detail = response.data.exceptionMessage || response.data.ExceptionMessage;
         if (message && !/^An error has occurred\.?$/i.test(message)) return message;
-        return detail || message || fallback;
+        return detail || fallback || message;
       }
       function authResponseMessage(response, fallback) {
         if (!response || response.data == null) return fallback;

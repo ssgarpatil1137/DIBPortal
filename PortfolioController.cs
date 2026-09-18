@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
@@ -448,16 +449,18 @@ namespace DFM.Web.Controllers
             try
             {
                 if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
-                var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments"); Directory.CreateDirectory(root);
-                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartFormDataStreamProvider(root));
-                if (provider.FileData.Count == 0) return BadRequest("Choose at least one supporting document first.");
-                foreach (var file in provider.FileData)
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                if (files.Count == 0) return BadRequest("Choose at least one supporting document first.");
+                foreach (var file in files)
                 {
                     var original = file.Headers.ContentDisposition == null ? null : file.Headers.ContentDisposition.FileName;
                     var originalName = AttachmentColumnValue(Path.GetFileName((original ?? "").Trim('"')), 260, "supporting-document");
-                    var storedName = AttachmentColumnValue(Path.GetFileName(file.LocalFileName), 260, Guid.NewGuid().ToString("N"));
+                    var storedName = AttachmentColumnValue(StoredAttachmentName(originalName), 260, Guid.NewGuid().ToString("N"));
                     var contentType = AttachmentColumnValue(file.Headers.ContentType == null ? MimeMapping.GetMimeMapping(originalName) : file.Headers.ContentType.MediaType, 150, "application/octet-stream");
-                    SaveAttachmentRow(AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET"), entityId, originalName, storedName, contentType, new FileInfo(file.LocalFileName).Length, AttachmentColumnValue(User.Identity.Name, 254, "system"));
+                    var bytes = await file.ReadAsByteArrayAsync();
+                    WriteAttachmentFile(storedName, bytes);
+                    SaveAttachmentRow(AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET"), entityId, originalName, storedName, contentType, bytes.LongLength, AttachmentColumnValue(User.Identity.Name, 254, "system"));
                 }
                 return Ok();
             }
@@ -472,6 +475,48 @@ namespace DFM.Web.Controllers
         {
             if (entityType != null && entityType.Equals("pet", StringComparison.OrdinalIgnoreCase)) return "PET";
             return entityType;
+        }
+
+        private static string PrimaryAttachmentRoot()
+        {
+            var configuredRoot = ConfigurationManager.AppSettings["AttachmentRoot"];
+            if (!string.IsNullOrWhiteSpace(configuredRoot))
+                return Path.IsPathRooted(configuredRoot) ? configuredRoot : HttpContext.Current.Server.MapPath(configuredRoot);
+            return HttpContext.Current.Server.MapPath("~/App_Data/Attachments");
+        }
+
+        private static string FallbackAttachmentRoot()
+        {
+            return Path.Combine(Path.GetTempPath(), "DFM", "Attachments");
+        }
+
+        private static string EnsureAttachmentRoot(string root)
+        {
+            Directory.CreateDirectory(root);
+            return root;
+        }
+
+        private static string StoredAttachmentName(string originalName)
+        {
+            var extension = Path.GetExtension(originalName ?? "");
+            if (extension.Length > 20) extension = extension.Substring(0, 20);
+            return Guid.NewGuid().ToString("N") + extension;
+        }
+
+        private static void WriteAttachmentFile(string storedName, byte[] bytes)
+        {
+            try { WriteAttachmentFileToRoot(PrimaryAttachmentRoot(), storedName, bytes); }
+            catch (Exception ex)
+            {
+                if (!(ex is IOException) && !(ex is UnauthorizedAccessException) && !(ex is HttpException)) throw;
+                WriteAttachmentFileToRoot(FallbackAttachmentRoot(), storedName, bytes);
+            }
+        }
+
+        private static void WriteAttachmentFileToRoot(string root, string storedName, byte[] bytes)
+        {
+            var path = Path.Combine(EnsureAttachmentRoot(root), storedName);
+            File.WriteAllBytes(path, bytes);
         }
 
         private static void SaveAttachmentRow(string entityType, int entityId, string originalName, string storedName, string contentType, long fileSize, string uploadedBy)
@@ -498,8 +543,7 @@ namespace DFM.Web.Controllers
         {
             var row = Db.Query("SELECT OriginalName,StoredName,ContentType FROM dbo.Attachments WHERE AttachmentId=@AttachmentId", P("@AttachmentId", attachmentId)).FirstOrDefault();
             if (row == null) return NotFound();
-            var root = HttpContext.Current.Server.MapPath("~/App_Data/Attachments");
-            var path = Path.Combine(root, Convert.ToString(row["StoredName"]));
+            var path = AttachmentPath(Convert.ToString(row["StoredName"]));
             if (!File.Exists(path)) return NotFound();
             var originalName = Convert.ToString(row["OriginalName"]);
             var response = Request.CreateResponse(HttpStatusCode.OK);
@@ -507,6 +551,17 @@ namespace DFM.Web.Controllers
             response.Content.Headers.ContentType = new MediaTypeHeaderValue(AttachmentContentType(row["ContentType"], originalName));
             response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue(inline ? "inline" : "attachment") { FileName = originalName };
             return ResponseMessage(response);
+        }
+
+        private static string AttachmentPath(string storedName)
+        {
+            var roots = new[] { PrimaryAttachmentRoot(), FallbackAttachmentRoot() };
+            foreach (var root in roots)
+            {
+                var path = Path.Combine(root, storedName);
+                if (File.Exists(path)) return path;
+            }
+            return Path.Combine(roots[0], storedName);
         }
 
         private static string AttachmentContentType(object storedContentType, string originalName)
