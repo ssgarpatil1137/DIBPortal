@@ -474,7 +474,7 @@ caption {
   width: auto;
   margin: 0;
 }
-.project-name,.truncate-cell{display:block;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.wide-cell{max-width:420px}.count-chip{display:inline-grid;place-items:center;min-width:25px;height:22px;padding:0 6px;border-radius:4px;background:#e8f0eb;color:var(--green);font-weight:800}.pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:11px}.pagination button:disabled{opacity:.35;cursor:not-allowed}.source-utilization{grid-column:1/-1}.source-utilization table{min-width:760px}.option-check{display:flex!important;align-items:center;gap:8px;padding:10px;background:#f3f7f4;border:1px solid var(--line);border-radius:4px}.option-check input{width:auto;margin:0}.select2-container{margin-top:5px;text-transform:none}.select2-container .select2-selection--single{height:38px;border-color:#bdcbc3}.select2-container--default .select2-selection--single .select2-selection__rendered{line-height:36px;padding-left:10px}.select2-container--default .select2-selection--single .select2-selection__arrow{height:36px}.spend-preview{max-height:260px;margin-bottom:16px}.approvals-table{min-width:1420px}.budget-register,.role-table{min-width:980px}.inline-empty{padding:34px}.role-summary{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:#f7faf8}.role-summary span{font-size:11px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:4px;padding:7px 9px}.role-summary b{color:var(--green);font-size:14px;margin-right:4px}
+.project-name,.truncate-cell{display:block;max-width:none;overflow:visible;text-overflow:clip;white-space:nowrap}.wide-cell{max-width:none}.count-chip{display:inline-grid;place-items:center;min-width:25px;height:22px;padding:0 6px;border-radius:4px;background:#e8f0eb;color:var(--green);font-weight:800}.pagination{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:9px 14px;border-top:1px solid var(--line);font-size:11px}.pagination button:disabled{opacity:.35;cursor:not-allowed}.source-utilization{grid-column:1/-1}.source-utilization table{min-width:760px}.option-check{display:flex!important;align-items:center;gap:8px;padding:10px;background:#f3f7f4;border:1px solid var(--line);border-radius:4px}.option-check input{width:auto;margin:0}.select2-container{margin-top:5px;text-transform:none}.select2-container .select2-selection--single{height:38px;border-color:#bdcbc3}.select2-container--default .select2-selection--single .select2-selection__rendered{line-height:36px;padding-left:10px}.select2-container--default .select2-selection--single .select2-selection__arrow{height:36px}.spend-preview{max-height:260px;margin-bottom:16px}.approvals-table{min-width:1420px}.budget-register,.role-table{min-width:980px}.inline-empty{padding:34px}.role-summary{display:flex;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line);background:#f7faf8}.role-summary span{font-size:11px;color:var(--muted);background:#fff;border:1px solid var(--line);border-radius:4px;padding:7px 9px}.role-summary b{color:var(--green);font-size:14px;margin-right:4px}
 .source-utilization .capex-utilization-report {
   min-width: 2380px;
 }
@@ -1640,17 +1640,17 @@ main {
   width: 100%;
 }
 .project-register-workspace .table-scroll {
-  overflow-x: hidden;
+  overflow-x: auto;
 }
 .project-register-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
 }
 .project-register-table th,
 .project-register-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .project-register-table th {
@@ -1723,7 +1723,6 @@ main {
   justify-content: flex-start;
   gap: 3px;
   width: max-content;
-  max-width: 100%;
 }
 .project-register-table .icon-btn {
   width: 24px;
@@ -1736,12 +1735,12 @@ main {
 }
 .project-register-table .project-name,
 .project-register-table .truncate-cell {
-  max-width: 100%;
+  max-width: none;
 }
 .project-register-table .text-link {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .project-register-workspace .child-panel {
@@ -1752,21 +1751,21 @@ main {
 .project-register-workspace .budget-wrap {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: auto;
   overflow-y: auto;
 }
 .project-register-workspace .pet-request-table,
 .project-register-workspace .budget-line-request-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
 }
 .project-register-workspace .pet-request-table th,
 .project-register-workspace .pet-request-table td,
 .project-register-workspace .budget-line-request-table th,
 .project-register-workspace .budget-line-request-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .project-register-workspace .pet-request-table th:nth-child(1),
@@ -1820,7 +1819,6 @@ main {
 .project-register-workspace .pet-request-table .row-actions,
 .project-register-workspace .budget-line-request-table .row-actions {
   width: max-content;
-  max-width: 100%;
   gap: 3px;
 }
 .project-register-workspace .pet-request-table .icon-btn,
@@ -1892,7 +1890,6 @@ main {
   font-size: 10px;
   line-height: 1.2;
 }
-  white-space: nowrap;
 .data-table td,
 .nested td {
   padding: 7px 8px;
@@ -1907,10 +1904,13 @@ main {
 }
 .project-name,
 .truncate-cell {
-  max-width: 220px;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 .wide-cell {
-  max-width: 360px;
+  max-width: none;
 }
 .count-chip {
   min-width: 22px;
@@ -2083,7 +2083,7 @@ textarea {
   margin-top: 12px;
 }
 .modal .pet-upload-workspace > .table-scroll {
-  overflow-x: hidden;
+  overflow-x: auto;
   max-height: none;
 }
 .modal .pet-upload-grid {
@@ -2191,8 +2191,8 @@ textarea {
   min-width: 0;
 }
 .approvals-table {
-  min-width: 0;
-  table-layout: fixed;
+  min-width: 100%;
+  table-layout: auto;
 }
 .approvals-table th:nth-child(1),
 .approvals-table td:nth-child(1) { width: 92px; }
@@ -2226,13 +2226,14 @@ textarea {
   line-height: 1.2;
 }
 .modal .decision-pet-grid {
-  min-width: 0;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
 }
 .modal .decision-pet-grid th,
 .modal .decision-pet-grid td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .modal .decision-pet-grid th:nth-child(1),
@@ -2261,8 +2262,8 @@ textarea {
   margin: 0;
 }
 .modal .decision-pet-grid td:nth-child(10) .btn.compact {
-  width: 100%;
-  min-width: 0;
+  width: max-content;
+  min-width: max-content;
   padding-inline: 5px;
 }
 .modal .pet-line-summary-grid {
@@ -2388,7 +2389,7 @@ textarea {
   word-break: normal;
 }
 .modal .source-utilization .table-scroll {
-  overflow-x: hidden;
+  overflow-x: auto;
   max-height: none;
 }
 .modal .report-detail-utilization-grid {
@@ -2472,16 +2473,16 @@ textarea {
 }
 .workspace > .table-scroll > .data-table:not(.project-register-table),
 .reports > .table-scroll > .data-table {
-  width: 100%;
-  min-width: 0;
-  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+  table-layout: auto;
 }
 .workspace > .table-scroll > .data-table:not(.project-register-table) th,
 .workspace > .table-scroll > .data-table:not(.project-register-table) td,
 .reports > .table-scroll > .data-table th,
 .reports > .table-scroll > .data-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 .workspace > .table-scroll > .data-table:not(.project-register-table) th:last-child,
@@ -2491,7 +2492,8 @@ textarea {
   overflow: visible;
 }
 .workspace > .table-scroll > table.data-table.approvals-table {
-  width: calc(100% - 2px);
+  width: max-content;
+  min-width: 100%;
 }
 .reports > .table-scroll > .data-table.projects th:nth-child(1),
 .reports > .table-scroll > .data-table.projects td:nth-child(1) { width: 85px; }
