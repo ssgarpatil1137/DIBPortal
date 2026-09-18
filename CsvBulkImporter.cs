@@ -125,7 +125,7 @@ namespace DFM.Web.Infrastructure
 
         private static void NormalizePetDropdowns(PetUploadRowRequest row)
         {
-            var department = MatchOption(row.Department, DepartmentOptions);
+            var department = NormalizeDepartment(row.Department);
             var unitType = MatchOption(row.UnitType, UnitTypeOptions);
             var costType = MatchOption(row.CostType, CostTypeOptions);
             if (department != null) row.Department = department;
@@ -135,16 +135,23 @@ namespace DFM.Web.Infrastructure
 
         private static void ValidatePetRequiredDropdowns(PetUploadRowRequest row)
         {
-            var department = MatchOption(row.Department, DepartmentOptions);
+            var department = NormalizeDepartment(row.Department);
             if (department == null) throw new ArgumentException("Department is required for every PET row.");
             var unitType = MatchOption(row.UnitType, UnitTypeOptions);
             if (unitType == null) throw new ArgumentException("Unit Type is required for every PET row.");
             var costType = MatchOption(row.CostType, CostTypeOptions);
             if (costType == null) throw new ArgumentException("Cost Type is required for every PET row.");
-            if (!row.YearlyRecurrence.HasValue || row.YearlyRecurrence.Value < 1 || row.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required for every PET row.");
+            if (row.YearlyRecurrence.HasValue && (row.YearlyRecurrence.Value < 1 || row.YearlyRecurrence.Value > 5)) row.YearlyRecurrence = null;
             row.Department = department;
             row.UnitType = unitType;
             row.CostType = costType;
+        }
+
+        private static string NormalizeDepartment(string value)
+        {
+            var department = MatchOption(value, DepartmentOptions);
+            var trimmed = (value ?? "").Trim();
+            return department ?? (string.IsNullOrWhiteSpace(trimmed) ? null : trimmed);
         }
 
         private static decimal CurrencyRateToLocal(string code, decimal fallbackRate)

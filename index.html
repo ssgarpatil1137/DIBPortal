@@ -17,7 +17,7 @@
         <label class="option-check" ng-if="vm.auth.mode==='login'"><input type="checkbox" ng-model="vm.auth.rememberMe" />Remember me</label>
         <label ng-if="vm.auth.mode!=='login'">Security question<select ng-model="vm.auth.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" required></select></label>
         <label ng-if="vm.auth.mode!=='login'">Security answer<input ng-model="vm.auth.securityAnswer" required /></label>
-        <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>
+          <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>
         <p class="form-error" ng-if="vm.auth.error">{{vm.auth.error}}</p><button class="btn primary auth-submit" type="submit">{{vm.authAction()}}</button>
         <div class="auth-links"><button type="button" ng-click="vm.auth.mode='setup'">First-time setup</button><button type="button" ng-click="vm.auth.mode='reset'">Reset password</button></div>
         <div class="preview-divider"><span>Design review</span></div><button type="button" class="btn secondary preview-button" ng-click="vm.enterPreview()">Preview workspace</button>
@@ -1394,7 +1394,7 @@
                   <label>Amt. LCY<input type="text" inputmode="decimal" ng-model="vm.petRowEditor.row.aedAmount" readonly /></label>
                   <label>Cont. %<input type="text" inputmode="decimal" ng-model="vm.petRowEditor.row.contingencyPercent" ng-change="vm.recalculatePetRowEditor(false)" /></label>
                   <label>Final Amt LCY<input type="text" value="{{vm.amount(vm.petRowEditor.row.finalAed)}}" readonly /></label>
-                  <label>Yearly Recurrence<select ng-model="vm.petRowEditor.row.yearlyRecurrence" ng-options="option as option for option in vm.yearlyRecurrenceOptions" required><option value="">Select</option></select></label>
+                  <label>Yearly Recurrence<select ng-model="vm.petRowEditor.row.yearlyRecurrence" ng-options="option as option for option in vm.yearlyRecurrenceOptions"><option value="">Select</option></select></label>
                 </div>
                 <footer>
                   <button type="button" class="btn secondary" ng-click="vm.closePetUploadRow()">Cancel</button>
@@ -1421,6 +1421,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=10"></script>
+    <script src="app/app.js?v=11"></script>
   </body>
 </html>

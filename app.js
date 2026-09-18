@@ -927,9 +927,10 @@
         prepared.petReference = ensurePetReferenceNo();
         if (prepared.lineDate && !angular.isDate(prepared.lineDate)) prepared.lineDate = new Date(prepared.lineDate);
         applyPetProjectDefaults(prepared, project);
-        prepared.department = normalizeOption(prepared.department, vm.departmentOptions);
+        prepared.department = normalizeDepartmentOption(prepared.department);
         prepared.unitType = normalizeOption(prepared.unitType, vm.unitTypeOptions);
         prepared.costType = normalizeOption(prepared.costType, vm.costTypeOptions);
+        if (!validOption(prepared.yearlyRecurrence, vm.yearlyRecurrenceOptions)) prepared.yearlyRecurrence = null;
         if (!prepared.lineId) assignUniqueLineId(prepared, row);
         if (!prepared.projectId) prepared.projectId = vm.projectDisplayId(project);
         if (prepared.spendItemId && prepared.unitPrice) {
@@ -958,6 +959,13 @@
         var key = optionKey(value);
         return options.filter(function (option) { return optionKey(option) === key; })[0] || value;
       }
+      function normalizeDepartmentOption(value) {
+        var department = normalizeOption(value, vm.departmentOptions);
+        var text = String(department || "").trim();
+        if (!text) return "";
+        if (!validOption(text, vm.departmentOptions)) vm.departmentOptions.push(text);
+        return normalizeOption(text, vm.departmentOptions);
+      }
       function optionKey(value) {
         var key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
         return key === "eal" ? "eai" : key;
@@ -966,11 +974,10 @@
         if (!validOption(row && row.department, vm.departmentOptions)) { noticeError("Department is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.unitType, vm.unitTypeOptions)) { noticeError("Unit Type is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.costType, vm.costTypeOptions)) { noticeError("Cost Type is required on " + rowLabel + "."); return false; }
-        if (!validOption(row && row.yearlyRecurrence, vm.yearlyRecurrenceOptions)) { noticeError("Yearly Recurrence is required on " + rowLabel + "."); return false; }
-        row.department = normalizeOption(row.department, vm.departmentOptions);
+        row.department = normalizeDepartmentOption(row.department);
         row.unitType = normalizeOption(row.unitType, vm.unitTypeOptions);
         row.costType = normalizeOption(row.costType, vm.costTypeOptions);
-        row.yearlyRecurrence = parseNumericInput(row.yearlyRecurrence);
+        row.yearlyRecurrence = validOption(row.yearlyRecurrence, vm.yearlyRecurrenceOptions) ? parseNumericInput(row.yearlyRecurrence) : null;
         return true;
       }
       function calculatePetUploadRow(row, deriveForeignAmount) {
@@ -2613,6 +2620,7 @@
       function redraw() {
         if (iconTimer) $timeout.cancel(iconTimer);
         iconTimer = $timeout(function () {
+          angular.element(document.querySelectorAll('select[ng-model$="yearlyRecurrence"]')).removeAttr("required");
           if (window.lucide)
             window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
         }, 0, false);

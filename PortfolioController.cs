@@ -555,16 +555,23 @@ namespace DFM.Web.Controllers
         private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
         {
             if (value == null) throw new ArgumentException("PET line item details are required.");
-            var department = MatchOption(value.Department, DepartmentOptions);
+            var department = NormalizeDepartment(value.Department);
             if (department == null) throw new ArgumentException("Department is required.");
             var unitType = MatchOption(value.UnitType, UnitTypeOptions);
             if (unitType == null) throw new ArgumentException("Unit Type is required.");
             var costType = MatchOption(value.CostType, CostTypeOptions);
             if (costType == null) throw new ArgumentException("Cost Type is required.");
-            if (!value.YearlyRecurrence.HasValue || value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5) throw new ArgumentException("Yearly Recurrence is required.");
+            if (value.YearlyRecurrence.HasValue && (value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5)) value.YearlyRecurrence = null;
             value.Department = department;
             value.UnitType = unitType;
             value.CostType = costType;
+        }
+
+        private static string NormalizeDepartment(string value)
+        {
+            var department = MatchOption(value, DepartmentOptions);
+            var trimmed = (value ?? "").Trim();
+            return department ?? (string.IsNullOrWhiteSpace(trimmed) ? null : trimmed);
         }
 
         private static string MatchOption(string value, IEnumerable<string> options)
