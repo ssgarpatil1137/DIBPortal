@@ -980,6 +980,11 @@ input[readonly] {
   background: #f1f5f2;
   color: #5f6f68;
 }
+.spend-preview input[ng-model="item.budgetLineVendor"] {
+  background: #f1f5f2;
+  color: #5f6f68;
+  cursor: default;
+}
 textarea {
   resize: vertical;
 }

@@ -619,7 +619,7 @@
         return parseInt(item && (item.spendItemId || item.SpendItemId), 10) || 0;
       }
       function refreshBudgetLineSpendDetails() {
-        var selectedIds = normalizeBudgetLineSourceIds(vm.form && (vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds));
+        var selectedIds = normalizeBudgetLineSourceIds(vm.form && (vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds || vm.form.SpendItemIds || vm.form.sourceSpendItemId || vm.form.SourceSpendItemId || vm.form.spendItemId || vm.form.SpendItemId));
         if (selectedIds.length > 1) selectedIds = selectedIds.slice(0, 1);
         var items = ((vm.selectedPet && vm.selectedPet.spendItems) || []).map(normalizeSpendItem);
         if (!selectedIds.length && !vm.form.budgetLineId && items.length === 1) selectedIds.push(budgetLineSpendItemId(items[0]));
@@ -627,7 +627,8 @@
         items.forEach(function (item) {
           var id = budgetLineSpendItemId(item);
           item.budgetLineSelected = selectedIds.indexOf(id) >= 0;
-          item.budgetLineVendor = item.budgetLineSelected && vm.form.vendor ? vm.form.vendor : item.budgetLineVendor || item.vendor || item.Vendor || "";
+          item.budgetLineVendor = item.vendor || item.Vendor || item.budgetLineVendor || "";
+          item.budgetLineMatches = budgetLinesForSpendItemId(id);
           if (item.budgetLineSelected) vm.budgetLineSelectedSpendItems[id] = true;
         });
         vm.form.sourceSpendItemIds = collectSelectedBudgetLineSpendItemIds(items);
@@ -642,16 +643,19 @@
       function selectedBudgetLineSpendItem() {
         return selectedBudgetLineSpendItems()[0] || null;
       }
-      vm.selectedPetLineBudgetLines = function () {
-        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+      function budgetLinesForSpendItemId(selectedId) {
         if (!selectedId) return [];
         return ((vm.selectedPet && vm.selectedPet.budgetLines) || []).filter(function (line) {
-          return normalizeBudgetLineSourceIds(line.sourceSpendItemIds || line.SourceSpendItemIds || line.spendItemIds).indexOf(selectedId) >= 0;
+          return normalizeBudgetLineSourceIds(line.sourceSpendItemIds || line.SourceSpendItemIds || line.spendItemIds || line.SpendItemIds || line.sourceSpendItemId || line.SourceSpendItemId || line.spendItemId || line.SpendItemId).indexOf(selectedId) >= 0;
         });
+      }
+      vm.selectedPetLineBudgetLines = function () {
+        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+        return budgetLinesForSpendItemId(selectedId);
       };
       function applySelectedBudgetLineVendor() {
         var item = selectedBudgetLineSpendItem();
-        vm.form.vendor = item ? String(item.budgetLineVendor || "").trim() : "";
+        vm.form.vendor = item ? String(item.vendor || item.Vendor || item.budgetLineVendor || "").trim() : "";
       }
       function budgetLineDocumentType(key) {
         return vm.budgetLineDocumentTypes.filter(function (type) { return type.key === key; })[0];
@@ -1940,7 +1944,7 @@
         vm.form.petId = vm.form.petId || pet.petId;
         vm.selectedPet = projectPetById(vm.selectedProject, vm.form.petId) || pet;
         vm.form.petReference = vm.form.petReference || vm.selectedPet.code;
-        vm.form.sourceSpendItemIds = normalizeBudgetLineSourceIds(vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds);
+        vm.form.sourceSpendItemIds = normalizeBudgetLineSourceIds(vm.form.sourceSpendItemIds || vm.form.SourceSpendItemIds || vm.form.spendItemIds || vm.form.SpendItemIds || vm.form.sourceSpendItemId || vm.form.SourceSpendItemId || vm.form.spendItemId || vm.form.SpendItemId);
         if (!line) vm.form.vendor = "";
         applyBudgetLinePetValues();
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
@@ -2621,6 +2625,7 @@
         if (iconTimer) $timeout.cancel(iconTimer);
         iconTimer = $timeout(function () {
           angular.element(document.querySelectorAll('select[ng-model$="yearlyRecurrence"]')).removeAttr("required");
+          Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="item.budgetLineVendor"]'), function (input) { input.readOnly = true; input.setAttribute("tabindex", "-1"); });
           if (window.lucide)
             window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
         }, 0, false);
