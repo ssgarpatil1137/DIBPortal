@@ -444,7 +444,8 @@ namespace DFM.Web.Controllers
                     var originalName = AttachmentColumnValue(Path.GetFileName((original ?? "").Trim('"')), 260, "supporting-document");
                     var storedName = AttachmentColumnValue(Path.GetFileName(file.LocalFileName), 260, Guid.NewGuid().ToString("N"));
                     var contentType = AttachmentColumnValue(file.Headers.ContentType == null ? MimeMapping.GetMimeMapping(originalName) : file.Headers.ContentType.MediaType, 150, "application/octet-stream");
-                    Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET")), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", AttachmentColumnValue(User.Identity.Name, 254, "system")));
+                    Db.Execute(@"INSERT dbo.Attachments(EntityType,EntityId,OriginalName,StoredName,ContentType,FileSize,UploadedBy)
+                        VALUES(@type,@id,@original,@stored,@content,@size,@user)", P("@type", AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET")), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", new FileInfo(file.LocalFileName).Length), P("@user", AttachmentColumnValue(User.Identity.Name, 254, "system")));
                 }
                 return Ok();
             }

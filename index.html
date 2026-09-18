@@ -1088,7 +1088,7 @@
               ><div class="full table-scroll spend-preview" ng-if="vm.budgetLineSpendDetails.length">
                 <table class="nested">
                   <thead><tr><th>Select</th><th>Sr No</th><th>Date</th><th>ID</th><th>Department</th><th>Head</th><th>Topic</th><th>Vendor</th><th>Description</th><th>Cost Type</th><th>Unit Type</th><th>Unit(s)</th><th>Unit Price</th><th>CCY</th><th>FCY amt</th><th>AED amt</th><th>Cont.%</th><th>Final AED</th><th>GL#</th></tr></thead>
-                  <tbody><tr ng-repeat="item in vm.budgetLineSpendDetails track by item.spendItemId || $index"><td><input type="checkbox" ng-model="item.budgetLineSelected" ng-change="vm.onBudgetLineSpendSelectionChange(item)" /></td><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.department}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td><input ng-model="item.budgetLineVendor" ng-change="vm.onBudgetLineGridVendorChange(item)" /></td><td>{{item.description}}</td><td>{{item.costType}}</td><td>{{item.unitType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.amount(item.finalAedAmount||item.finalAed||vm.spendFinalAed(item))}}</td><td>{{item.glNumber}}</td></tr></tbody>
+                  <tbody><tr ng-repeat="item in vm.budgetLineSpendDetails track by item.spendItemId || $index"><td><input type="checkbox" ng-model="item.budgetLineSelected" ng-change="vm.onBudgetLineSpendSelectionChange(item)" /></td><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.department}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td><input ng-model="item.budgetLineVendor" ng-change="vm.onBudgetLineGridVendorChange(item)" /></td><td>{{item.description}}</td><td>{{item.costType}}</td><td>{{item.unitType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.amount(vm.budgetLineSpendItemApprovedAmount(item))}}</td><td>{{item.glNumber}}</td></tr></tbody>
                 </table>
               </div
               ><h3 class="form-section-title full" ng-if="vm.selectedPetLineBudgetLines().length">Existing budget lines for selected PET line</h3
@@ -1426,6 +1426,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=18"></script>
+    <script src="app/app.js?v=20"></script>
   </body>
 </html>

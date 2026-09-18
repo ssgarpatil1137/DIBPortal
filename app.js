@@ -643,7 +643,14 @@
         return (vm.budgetLineSpendDetails || []).filter(function (item) { return item.budgetLineSelected; });
       }
       function selectedBudgetLineSpendItem() {
+        var selectedId = selectedBudgetLineSpendItemId();
+        if (selectedId) return ((vm.budgetLineSpendDetails || []).concat((vm.selectedPet && vm.selectedPet.spendItems) || [])).filter(function (item) { return budgetLineSpendItemId(item) === selectedId; })[0] || null;
         return selectedBudgetLineSpendItems()[0] || null;
+      }
+      function selectedBudgetLineSpendItemId() {
+        var sourceIds = normalizeBudgetLineSourceIds(vm.form && vm.form.sourceSpendItemIds);
+        if (sourceIds.length) return sourceIds[0];
+        return budgetLineSpendItemId(selectedBudgetLineSpendItems()[0]);
       }
       function selectedBudgetLineSpendItemFinalAed() {
         return spendItemApprovedAmount(selectedBudgetLineSpendItem());
@@ -655,7 +662,7 @@
         });
       }
       vm.selectedPetLineBudgetLines = function () {
-        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+        var selectedId = selectedBudgetLineSpendItemId();
         return budgetLinesForSpendItemId(selectedId);
       };
       function applySelectedBudgetLineVendor() {
@@ -676,6 +683,7 @@
       vm.budgetLineDocuments = budgetLineDocuments;
       vm.budgetLineHasDocuments = function (line) { return !!(line && line.attachments && line.attachments.length); };
       vm.setBudgetLineDocumentFile = function (key, file) {
+        if (file && !validateUploadFileSize(file)) file = null;
         vm.budgetLineDocumentFiles = vm.budgetLineDocumentFiles || {};
         vm.budgetLineDocumentFiles[key] = file || null;
         redraw();
@@ -684,6 +692,7 @@
         return (invoice && invoice.attachments) || [];
       };
       vm.setInvoiceDocumentFile = function (file) {
+        if (file && !validateUploadFileSize(file)) file = null;
         vm.invoiceDocumentFile = file || null;
         redraw();
       };
@@ -699,7 +708,7 @@
         return budgetLineApprovedPetAmount(vm.selectedPet);
       };
       function budgetLineAllocatedAmount(pet, excludeBudgetLineId) {
-        var selectedId = budgetLineSpendItemId(selectedBudgetLineSpendItem());
+        var selectedId = selectedBudgetLineSpendItemId();
         var lines = selectedId ? budgetLinesForSpendItemId(selectedId) : ((pet && pet.budgetLines) || []);
         return lines.reduce(function (total, line) {
           if (excludeBudgetLineId && String(line.budgetLineId) === String(excludeBudgetLineId)) return total;
@@ -722,7 +731,7 @@
         if (vm.form.budgetLineId) {
           return;
         }
-        if (!(parseNumericInput(vm.form.cost) > 0)) vm.form.cost = defaultBudgetLineCost();
+        vm.form.cost = defaultBudgetLineCost();
         vm.form.justification = "";
         vm.form.glNumber = "";
         vm.form.camId = "";
@@ -1294,6 +1303,7 @@
         if (!blankNumericInput(finalAed)) return parseNumericInput(finalAed);
         return spendItemFinalAed(item);
       }
+      vm.budgetLineSpendItemApprovedAmount = spendItemApprovedAmount;
       function spendItemFinalAed(item) {
         var foreignAmount = spendForeignAmount(item);
         var aedAmount = spendAedAmount(item);
