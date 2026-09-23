@@ -1891,6 +1891,7 @@
           })[0] || project;
         vm.form = angular.extend({}, project, jira, {
           projectName: jira.summary || project.projectName,
+          projectSize: project.projectSize || jira.projectSize || jira.size,
         });
         vm.modal = {
           type: "jira",
