@@ -53,6 +53,20 @@ namespace DFM.Web.Infrastructure
                 throw new ArgumentException("Budget Line amount exceeds the available balance for PET Reference " + Convert.ToString(pet["Code"]) + ". Available balance: " + Money(Math.Max(available, 0)) + "; entered amount: " + Money(cost) + ".");
         }
 
+            public static void ValidateInvoiceAmount(int budgetLineId, int? invoiceId, decimal invoiceAmount)
+            {
+                if (invoiceAmount <= 0) throw new ArgumentException("A positive Invoice amount is required.");
+
+                var budgetLine = Db.Query("SELECT Cost FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId", P("@BudgetLineId", budgetLineId)).FirstOrDefault();
+                if (budgetLine == null) throw new ArgumentException("Budget Line was not found.");
+
+                var budgetLineCost = ToDecimal(budgetLine["Cost"]);
+                var existingInvoiceTotal = ScalarDecimal("SELECT ISNULL(SUM(InvoiceAmount),0) Amount FROM dbo.Invoices WHERE BudgetLineId=@BudgetLineId AND (@InvoiceId IS NULL OR InvoiceId<>@InvoiceId)", P("@BudgetLineId", budgetLineId), P("@InvoiceId", invoiceId));
+                var available = budgetLineCost - existingInvoiceTotal;
+                if (invoiceAmount > available)
+                throw new ArgumentException("Invoice amount exceeds the available Budget Line balance. Available balance: " + Money(Math.Max(available, 0)) + "; entered amount: " + Money(invoiceAmount) + ".");
+            }
+
         private static decimal ApprovedBudgetLineBaseAmount(int petId, Dictionary<string, object> pet, int spendItemId)
         {
             if (spendItemId > 0)

@@ -23,7 +23,7 @@ namespace DFM.Web.Controllers
         private static readonly string[] CostTypeOptions = {
             "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
             "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
-            "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+            "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "QA Functional Testing",
             "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
             "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out"
         };
@@ -143,12 +143,70 @@ namespace DFM.Web.Controllers
             return Ok(Db.Query("EXEC dbo.sp_GetWorkflowHistory @id", new SqlParameter("@id", petId)));
         }
 
+        private bool IsApproverOnly()
+        {
+            return User != null && User.IsInRole("Approver") && !User.IsInRole("Reviewer") && !User.IsInRole("Admin") && !User.IsInRole("Master");
+        }
+
+        private IHttpActionResult RejectApproverWrite()
+        {
+            return Content(HttpStatusCode.Forbidden, "Approver can view only.");
+        }
+
+        private static string NormalizeBudgetType(string value)
+        {
+            var budgetType = (value ?? "").Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(budgetType)) return null;
+            if (budgetType != "CAPEX" && budgetType != "OPEX") throw new ArgumentException("Select CAPEX or OPEX.");
+            return budgetType;
+        }
+
+        private static void ValidateBudgetSourceSelection(string budgetType, int? budgetSourceId)
+        {
+            if (string.IsNullOrWhiteSpace(budgetType) && !budgetSourceId.HasValue) return;
+            if (string.IsNullOrWhiteSpace(budgetType) || !budgetSourceId.HasValue) throw new ArgumentException("Select CAPEX or OPEX and a matching budget source.");
+            var source = Db.Query("SELECT BudgetSourceId FROM dbo.BudgetSources WHERE BudgetSourceId=@BudgetSourceId AND BudgetType=@BudgetType", P("@BudgetSourceId", budgetSourceId), P("@BudgetType", budgetType)).FirstOrDefault();
+            if (source == null) throw new ArgumentException("Budget source does not match CAPEX/OPEX selection.");
+        }
+
+        private static void EnsureProjectBudgetSelection(PetRequest value)
+        {
+            var project = Db.Query("SELECT BudgetType,BudgetSourceId FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            if (project == null) throw new ArgumentException("Project was not found.");
+            var currentType = Convert.ToString(project["BudgetType"]);
+            var currentSource = project["BudgetSourceId"] == null || project["BudgetSourceId"] == DBNull.Value ? (int?)null : Convert.ToInt32(project["BudgetSourceId"]);
+            if (!string.IsNullOrWhiteSpace(currentType) && currentSource.HasValue) return;
+            var budgetType = NormalizeBudgetType(value.BudgetType);
+            ValidateBudgetSourceSelection(budgetType, value.BudgetSourceId);
+            Db.Execute("UPDATE dbo.Projects SET BudgetType=@BudgetType,BudgetSourceId=@BudgetSourceId,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId AND (BudgetType IS NULL OR BudgetSourceId IS NULL)", P("@BudgetType", budgetType), P("@BudgetSourceId", value.BudgetSourceId), P("@ProjectId", value.ProjectId));
+        }
+
+        private static string DuplicateProjectRegistrationMessage(ProjectRequest value)
+        {
+            if (value == null || value.ProjectId.HasValue) return null;
+            Dictionary<string, object> existing;
+            if (value.IsJira && !string.IsNullOrWhiteSpace(value.JiraKey))
+            {
+                existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE UPPER(LTRIM(RTRIM(ISNULL(JiraKey,''))))=UPPER(LTRIM(RTRIM(@JiraKey)))", P("@JiraKey", value.JiraKey)).FirstOrDefault();
+            }
+            else
+            {
+                existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE LOWER(LTRIM(RTRIM(ProjectName)))=LOWER(LTRIM(RTRIM(@ProjectName)))", P("@ProjectName", value.ProjectName)).FirstOrDefault();
+            }
+            return existing == null ? null : "This project is already registered as " + Convert.ToString(existing["ProjectCode"]) + ".";
+        }
+
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("projects")]
         public IHttpActionResult SaveProject(ProjectRequest value)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             if (value == null || string.IsNullOrWhiteSpace(value.ProjectName)) return BadRequest("Project name is required.");
             try
             {
+                var duplicate = DuplicateProjectRegistrationMessage(value);
+                if (duplicate != null) return BadRequest(duplicate);
+                value.BudgetType = NormalizeBudgetType(value.BudgetType);
+                ValidateBudgetSourceSelection(value.BudgetType, value.BudgetSourceId);
                 var requiresPet = true;
                 var skipReview = false;
                 var workflowFlags = Db.Query("SELECT CASE WHEN COL_LENGTH('dbo.Projects','RequiresPet') IS NOT NULL AND COL_LENGTH('dbo.Projects','SkipReview') IS NOT NULL THEN 1 ELSE 0 END HasWorkflowFlags").FirstOrDefault();
@@ -170,12 +228,14 @@ namespace DFM.Web.Controllers
                 }
                 return Ok(rows.FirstOrDefault());
             }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
-        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("projects/{projectId:int}")]
+        [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpDelete, Route("projects/{projectId:int}")]
         public IHttpActionResult DeleteProject(int projectId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try { Db.Execute("EXEC dbo.sp_DeleteProject @ProjectId,@User", P("@ProjectId", projectId), P("@User", User.Identity.Name)); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -183,6 +243,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("pets/{petId:int}")]
         public IHttpActionResult DeletePet(int petId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try { Db.Execute("EXEC dbo.sp_DeletePet @PetId,@User", P("@PetId", petId), P("@User", User.Identity.Name)); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -190,9 +251,11 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets")]
         public IHttpActionResult SavePet(PetRequest value)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             if (value == null) return BadRequest("PET details are required.");
             try
             {
+                EnsureProjectBudgetSelection(value);
                 if (value.PetId.HasValue)
                 {
                     var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
@@ -271,6 +334,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("spend-items")]
         public IHttpActionResult SaveSpendItem(SpendItemRequest value)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
             try { RequireEditablePetStatus(value.PetId); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -371,6 +435,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
         public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try
             {
                 if (value == null) return BadRequest("Budget Line details are required.");
@@ -421,6 +486,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("budget-lines/{budgetLineId:int}")]
         public IHttpActionResult DeleteBudgetLine(int budgetLineId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try { Db.Execute("EXEC dbo.sp_DeleteBudgetLine @BudgetLineId,@User", P("@BudgetLineId", budgetLineId), P("@User", User.Identity.Name)); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -428,7 +494,8 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices")]
         public IHttpActionResult SaveInvoice(InvoiceRequest value)
         {
-            try { return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault()); }
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try { AmountValidation.ValidateInvoiceAmount(value.BudgetLineId, value.InvoiceId, value.InvoiceAmount); return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault()); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
@@ -436,6 +503,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("invoices/{invoiceId:int}")]
         public IHttpActionResult DeleteInvoice(int invoiceId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try { Db.Execute("EXEC dbo.sp_DeleteInvoice @InvoiceId,@User", P("@InvoiceId", invoiceId), P("@User", User.Identity.Name)); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -446,6 +514,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("attachments/{entityType}/{entityId:int}")]
         public async Task<IHttpActionResult> UploadAttachment(string entityType, int entityId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try
             {
                 if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
@@ -584,6 +653,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/rows")]
         public IHttpActionResult BulkPetRows(int projectId, List<PetUploadRowRequest> rows)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             try
             {
                 var imported = CsvBulkImporter.ImportPetRows(projectId, rows, User.Identity.Name);
@@ -596,6 +666,7 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/{kind}/{parentId:int}")]
         public async Task<IHttpActionResult> Bulk(string kind, int parentId)
         {
+            if (IsApproverOnly()) return RejectApproverWrite();
             if (!new[] { "pet", "budget", "invoice" }.Contains(kind, StringComparer.OrdinalIgnoreCase)) return BadRequest("Unknown template type.");
             try
             {

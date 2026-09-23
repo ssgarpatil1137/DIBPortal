@@ -114,9 +114,23 @@
       vm.costTypeOptions = [
         "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
         "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
-        "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "OA Functional Testing",
+        "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "QA Functional Testing",
         "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
         "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out",
+      ];
+      vm.projectSizingLevels = [
+        { key: "low", label: "Low", score: 1 },
+        { key: "medium", label: "Medium", score: 3 },
+        { key: "high", label: "High", score: 5 },
+      ];
+      vm.projectSizingCriteria = [
+        { key: "technical", label: "Technical / Service Complexity", weight: 20, low: "Existing Platform, Proven Tech", medium: "Some custom design, novelty", high: "New / Unproven tech, Complex Integration" },
+        { key: "regulatory", label: "Regulatory / Compliance / Security", weight: 20, low: "No regulated data, Standard Security", medium: "Compliance, Privacy Requirement", high: "High Regulatory, Audit Exposure" },
+        { key: "stakeholder", label: "Stakeholder Complexity", weight: 15, low: "Single Business Owner, Aligned", medium: "Multiple BUs, Competing Priorities", high: "Many Stakeholders, Divergent Interests" },
+        { key: "resource", label: "Resource / Capability Dependency", weight: 15, low: "Skills available internally", medium: "Some External Specialist", high: "Critical niche skills, Major hiring" },
+        { key: "scale", label: "Scale / Reliability / Performance", weight: 15, low: "Non critical, Degradation acceptable", medium: "Normal Production SLAs", high: "Mission-critical, Strict HA/SLA" },
+        { key: "interdependencies", label: "Interdependencies / Portfolio", weight: 10, low: "Standalone, Few Dependencies", medium: "Some Upstream/Downstream deps", high: "Foundational, Impact many initiatives, Strict HA/SLA" },
+        { key: "budget", label: "Budget / Contract Complexity", weight: 5, low: "Small Budget, Simple Procurement", medium: "Multi-Phase funding, Complex terms", high: "Large Capital, Strategic supplier" },
       ];
       vm.yearlyRecurrenceOptions = [1, 2, 3, 4, 5];
       vm.tabs = [
@@ -512,7 +526,10 @@
         });
       };
       vm.can = function (action) {
-        return action === "request" ? vm.hasRole("Requestor") : false;
+        return action === "request" ? vm.hasRole("Requestor") && !vm.isApproverOnly() : false;
+      };
+      vm.isApproverOnly = function () {
+        return vm.hasRole("Approver") && !vm.hasRole("Reviewer") && !vm.hasRole("Admin") && !vm.hasRole("Master");
       };
       function updateNavigation() {
         vm.navTabs = vm.tabs.filter(function (tab) { return !tab.roles || tab.roles.some(vm.hasRole); });
@@ -543,6 +560,36 @@
           return b.budgetSourceId === vm.form.budgetSourceId;
         })[0];
       };
+      vm.setProjectSizingScore = function (criterion, level) {
+        if (!vm.form || vm.form.isJira) return;
+        vm.form.projectSizingScores = vm.form.projectSizingScores || {};
+        vm.form.projectSizingScores[criterion.key] = level.score;
+        updateProjectSizeFromScores();
+      };
+      vm.projectSizingScore = function (criterion) {
+        return vm.form && vm.form.projectSizingScores && Number(vm.form.projectSizingScores[criterion.key]) || 0;
+      };
+      vm.projectSizingComplete = function () {
+        return !!vm.form && vm.projectSizingCriteria.every(function (criterion) { return vm.projectSizingScore(criterion) > 0; });
+      };
+      vm.projectSizingWeightedTotal = function () {
+        if (!vm.form || !vm.form.projectSizingScores) return 0;
+        return Math.round(vm.projectSizingCriteria.reduce(function (total, criterion) {
+          return total + (Number(vm.form.projectSizingScores[criterion.key]) || 0) * criterion.weight / 100;
+        }, 0) * 100) / 100;
+      };
+      function projectSizeFromScore(score) {
+        if (score <= 0) return "";
+        if (score <= 1.5) return "XS";
+        if (score <= 2.3) return "S";
+        if (score <= 3.5) return "M";
+        if (score <= 4.1) return "L";
+        return "XL";
+      }
+      function updateProjectSizeFromScores() {
+        var size = projectSizeFromScore(vm.projectSizingWeightedTotal());
+        if (size) vm.form.projectSize = size;
+      }
       vm.decisionCapexEditable = function () {
         return vm.form && vm.form.decision === "Approve" && vm.modal && (vm.modal.stage === "review" || vm.modal.stage === "approve");
       };
@@ -949,7 +996,7 @@
         row.petReference = ensurePetReferenceNo();
       }
       function petProjectExpenseHead(project) {
-        return String(project && (project.budgetType || project.BudgetType) || "").toUpperCase();
+        return String(project && (project.budgetType || project.BudgetType) || vm.form && vm.form.budgetType || "").toUpperCase();
       }
       vm.petProjectExpenseHead = function (project) {
         return petProjectExpenseHead(project || vm.selectedProject || (vm.form && vm.form.item)) || "Not supplied";
@@ -1382,6 +1429,45 @@
         if (!validateNumericInput(form && form.availableBudget, "Available budget", false)) return false;
         return true;
       }
+      function projectNeedsBudgetSelection(project) {
+        return project && project.requiresPet !== false && (!project.budgetType || !project.budgetSourceId);
+      }
+      function validatePetBudgetSelection() {
+        if (!projectNeedsBudgetSelection(vm.selectedProject)) return true;
+        if (!vm.form || !vm.form.budgetType || !vm.form.budgetSourceId) {
+          noticeError("Select CAPEX or OPEX and a budget source before adding PET for this project.");
+          return false;
+        }
+        return true;
+      }
+      function applyProjectBudgetSelection(project) {
+        if (!project || !vm.form || !vm.form.budgetType || !vm.form.budgetSourceId) return;
+        var budget = vm.selectedBudgetSource();
+        project.budgetType = vm.form.budgetType;
+        project.budgetSourceId = vm.form.budgetSourceId;
+        project.budgetSource = budget ? budget.externalId : project.budgetSource;
+        project.availableBudget = budget ? budget.availableBudget : project.availableBudget;
+        project.budget = budget ? budget.budget : project.budget;
+      }
+      function saveProjectBudgetSelectionIfNeeded(project) {
+        if (!projectNeedsBudgetSelection(project)) return $q.when();
+        if (!validatePetBudgetSelection()) return $q.reject({ handled: true });
+        var payload = {
+          projectId: project.projectId,
+          isJira: !!project.jiraKey,
+          jiraKey: project.jiraKey,
+          projectName: project.projectName,
+          projectType: project.projectType,
+          accountableExecLead: project.accountableExecLead,
+          accountableExec: project.accountableExec,
+          smeLead: project.smeLead,
+          projectSize: project.projectSize,
+          projectManager: project.projectManager,
+          budgetType: vm.form.budgetType,
+          budgetSourceId: vm.form.budgetSourceId,
+        };
+        return $http.post("api/portfolio/projects", payload).then(function () { applyProjectBudgetSelection(project); });
+      }
       function selectedReportProject() {
         if (!vm.reportProjectId) return null;
         return (vm.projects || []).filter(function (project) { return String(project.projectId) === String(vm.reportProjectId); })[0] || null;
@@ -1774,11 +1860,13 @@
           project || {
             isJira: true,
             projectType: "Project",
-            projectSize: "Medium",
-            budgetType: "CAPEX",
+            projectSize: "",
+            budgetType: "",
+            budgetSourceId: null,
             requiresPet: true,
           },
         );
+        vm.form.projectSizingScores = vm.form.projectSizingScores || {};
         vm.form.isJira = project ? !!project.jiraKey : true;
         redraw();
       };
@@ -1793,6 +1881,7 @@
         vm.form.accountableExec = jira.accountableExec;
         vm.form.smeLead = jira.smeLead;
         vm.form.projectSize = jira.size || jira.projectSize || vm.form.projectSize;
+        vm.form.projectSizingScores = {};
         vm.form.projectManager = jira.assignedProjectManager;
       };
       vm.openJira = function (project) {
@@ -1865,6 +1954,8 @@
           if (vm.form.status === "Sent Back" && angular.isUndefined(vm.form.reviewRequired)) vm.form.reviewRequired = angular.isDefined(vm.form.ReviewRequired) ? !!vm.form.ReviewRequired : !project.skipReview;
           if (vm.form.status === "Sent Back") vm.form.comments = "";
         }
+        vm.form.budgetType = vm.form.budgetType || project.budgetType || "";
+        vm.form.budgetSourceId = vm.form.budgetSourceId || project.budgetSourceId || null;
         vm.uploadPreview = ((pet && pet.spendItems) || []).map(function (item) { return preparePetUploadRow(angular.extend({ petReference: vm.form.code, projectId: vm.projectDisplayId(project), finalAed: spendItemFinalAed(item) }, item)); });
         vm.recalculateUploadPreview();
         vm.modal = {
@@ -2298,8 +2389,8 @@
             smeLead: vm.form.smeLead,
             projectSize: vm.form.projectSize,
             projectManager: vm.form.projectManager,
-            budgetType: vm.form.budgetType,
-            budgetSourceId: vm.form.budgetSourceId,
+            budgetType: vm.form.budgetType || null,
+            budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
           };
           $http.post("api/portfolio/projects", payload).then(function () {
             notice(payload.projectId ? "Project updated" : "Project registered");
@@ -2351,6 +2442,8 @@
               currency: vm.form.currency || "AED",
               vendorName: vm.form.vendorName,
               vendorNameOnly: true,
+              budgetType: vm.form.budgetType || vm.selectedProject.budgetType,
+              budgetSourceId: vm.form.budgetSourceId || vm.selectedProject.budgetSourceId,
               spendItems: petLineVendorPayloads(vm.form.petId),
             };
             $http.post("api/portfolio/pets", vendorPayload).then(function () {
@@ -2367,8 +2460,11 @@
           }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
           if (!vm.selectedPet && (vm.uploadPreview || []).length) {
+            if (!validatePetBudgetSelection()) return;
             var bulkPetProjectId = vm.selectedProject.projectId;
-            savePetUploadRows(bulkPetProjectId, function () { refreshProjectPets(bulkPetProjectId, true); }, vm.form.reviewRequired);
+            saveProjectBudgetSelectionIfNeeded(vm.selectedProject).then(function () {
+              savePetUploadRows(bulkPetProjectId, function () { refreshProjectPets(bulkPetProjectId, true); }, vm.form.reviewRequired);
+            }, function (response) { if (!response || !response.handled) noticeError(responseMessage(response, "Unable to save the project budget selection.")); });
             return;
           }
           if (!vm.selectedPet && !(vm.uploadPreview || []).length) { noticeError("Upload Excel rows or add a PET row before saving."); return; }
@@ -2385,9 +2481,13 @@
             vendorName: vm.form.vendorName,
             comments: vm.form.comments,
             reviewRequired: vm.form.reviewRequired,
+            budgetType: vm.form.budgetType || vm.selectedProject.budgetType,
+            budgetSourceId: vm.form.budgetSourceId || vm.selectedProject.budgetSourceId,
           };
           if ((vm.uploadPreview || []).length) petPayload.spendItems = petLinePayloads(vm.form.petId || 0);
+          if (!validatePetBudgetSelection()) return;
           $http.post("api/portfolio/pets", petPayload).then(function (response) {
+            applyProjectBudgetSelection(vm.selectedProject);
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
             uploadAttachment("PET", savedPetId, supportingDocument).then(function () {
               notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
