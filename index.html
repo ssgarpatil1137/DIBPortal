@@ -560,7 +560,7 @@
           </div>
         </div>
         <div class="table-scroll">
-          <table class="data-table">
+          <table class="data-table currency-register">
             <thead><tr><th>Code</th><th>Name</th><th>Rate to local</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="currency in vm.visibleCurrencies track by currency.currencyId"><td>{{currency.code}}</td><td>{{currency.name}}</td><td>{{vm.amount(currency.rateToLocal)}}</td><td><span class="status" ng-class="currency.isActive?'approved':'rejected'">{{currency.isActive?'Active':'Inactive'}}</span></td><td><button class="icon-btn" title="Edit currency" ng-click="vm.openCurrency(currency)"><i data-lucide="pencil"></i></button></td></tr>
@@ -1418,7 +1418,7 @@
                 </header>
                 <div class="form-grid pet-row-form">
                   <h3 class="form-section-title full">PET line details</h3>
-                  <label>Sr No<input ng-model="vm.petRowEditor.row.serialNo" /></label>
+                  <label>Sr No<input ng-model="vm.petRowEditor.row.serialNo" readonly /></label>
                   <label>Date<input type="date" ng-model="vm.petRowEditor.row.lineDate" /></label>
                   <label>Department<select ng-model="vm.petRowEditor.row.department" ng-options="option for option in vm.departmentOptions" required><option value="">Select</option></select></label>
                   <label>ID<input ng-model="vm.petRowEditor.row.lineId" /></label>

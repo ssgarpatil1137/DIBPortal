@@ -2065,6 +2065,68 @@ main {
 .wide-cell {
   max-width: none;
 }
+.budget-register,
+.currency-register {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+.budget-register th,
+.budget-register td,
+.currency-register th,
+.currency-register td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.budget-register th,
+.currency-register th {
+  z-index: 9;
+  background: #f0f4f1;
+}
+.budget-register th:nth-child(1),
+.budget-register td:nth-child(1) { width: 92px; }
+.budget-register th:nth-child(2),
+.budget-register td:nth-child(2) { width: 130px; }
+.budget-register th:nth-child(3),
+.budget-register td:nth-child(3) { width: auto; }
+.budget-register th:nth-child(4),
+.budget-register td:nth-child(4),
+.budget-register th:nth-child(5),
+.budget-register td:nth-child(5),
+.budget-register th:nth-child(6),
+.budget-register td:nth-child(6),
+.budget-register th:nth-child(7),
+.budget-register td:nth-child(7),
+.budget-register th:nth-child(8),
+.budget-register td:nth-child(8) {
+  width: 115px;
+  text-align: right;
+}
+.budget-register th:nth-child(9),
+.budget-register td:nth-child(9) {
+  width: 72px;
+  text-align: center;
+}
+.currency-register th:nth-child(1),
+.currency-register td:nth-child(1) { width: 110px; }
+.currency-register th:nth-child(2),
+.currency-register td:nth-child(2) { width: auto; }
+.currency-register th:nth-child(3),
+.currency-register td:nth-child(3) {
+  width: 140px;
+  text-align: right;
+}
+.currency-register th:nth-child(4),
+.currency-register td:nth-child(4) {
+  width: 120px;
+  text-align: center;
+}
+.currency-register th:nth-child(5),
+.currency-register td:nth-child(5) {
+  width: 80px;
+  text-align: center;
+}
 .count-chip {
   min-width: 22px;
   height: 20px;

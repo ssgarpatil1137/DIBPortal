@@ -954,7 +954,10 @@
           row: preparePetUploadRow(row ? angular.copy(row) : {}, !row),
           isEdit: !!row,
         };
-        if (!row) assignUniquePetReference(vm.petRowEditor.row);
+        if (!row) {
+          assignUniquePetReference(vm.petRowEditor.row);
+          vm.petRowEditor.row.serialNo = (vm.uploadPreview || []).length + 1;
+        }
         calculatePetUploadRow(vm.petRowEditor.row, false);
         redraw();
       };
@@ -993,10 +996,16 @@
       };
       vm.recalculateUploadPreview = function () {
         var sum = 0;
+        assignPetLineSerialNumbers();
         (vm.uploadPreview || []).forEach(function (row) { calculatePetUploadRow(row, false); sum += parseNumericInput(row.finalAed); });
         vm.petUploadTotal = Math.round(sum * 100) / 100;
         vm.form.requestedAmount = Math.round(sum * 100) / 100;
       };
+      function assignPetLineSerialNumbers() {
+        (vm.uploadPreview || []).forEach(function (row, index) {
+          row.serialNo = index + 1;
+        });
+      }
       function petReferenceExists(reference, excludeRow, extraRows) {
         var normalized = String(reference || "").trim().toLowerCase();
         if (!normalized) return false;
@@ -1072,6 +1081,7 @@
           assignUniqueLineId(prepared, null, preparedRows, true);
           preparedRows.push(prepared);
         });
+        preparedRows.forEach(function (row, index) { row.serialNo = index + 1; });
         return preparedRows;
       }
       function preparePetUploadRow(row, generateReference) {
