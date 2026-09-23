@@ -590,6 +590,21 @@
         var size = projectSizeFromScore(vm.projectSizingWeightedTotal());
         if (size) vm.form.projectSize = size;
       }
+      function parseProjectSizingScores(value) {
+        if (!value) return {};
+        if (angular.isObject(value)) return angular.copy(value);
+        try { return JSON.parse(value); }
+        catch (ignore) { return {}; }
+      }
+      function normalizeProjectSizing(project) {
+        if (!project) return project;
+        project.projectSize = project.projectSize || project.ProjectSize || "";
+        project.projectSizingScores = parseProjectSizingScores(project.projectSizingScores || project.ProjectSizingScores);
+        return project;
+      }
+      function projectSizingPayload() {
+        return JSON.stringify(vm.form && vm.form.projectSizingScores || {});
+      }
       vm.decisionCapexEditable = function () {
         return vm.form && vm.form.decision === "Approve" && vm.modal && (vm.modal.stage === "review" || vm.modal.stage === "approve");
       };
@@ -1462,6 +1477,7 @@
           accountableExec: project.accountableExec,
           smeLead: project.smeLead,
           projectSize: project.projectSize,
+          projectSizingScores: JSON.stringify(project.projectSizingScores || {}),
           projectManager: project.projectManager,
           budgetType: vm.form.budgetType,
           budgetSourceId: vm.form.budgetSourceId,
@@ -1782,6 +1798,7 @@
       function prepareProjects() {
         if (vm.demo) vm.budgetUsage = [];
         vm.projects.forEach(function (project) {
+          normalizeProjectSizing(project);
           if (typeof project.petsLoaded === "undefined") project.petsLoaded = angular.isArray(project.pets);
           project.pets = project.pets || [];
           project.budgetLines = project.budgetLines || [];
@@ -1829,7 +1846,7 @@
         project.loading = true;
         return $http.get("api/portfolio/projects/" + project.projectId).then(function (response) {
           var data = response.data;
-          if (data.project) angular.extend(project, data.project);
+          if (data.project) angular.extend(project, normalizeProjectSizing(data.project));
           project.pets = data.pets || [];
           var budgetLineAttachmentTypes = budgetLineDocumentEntityTypes();
           project.pets.forEach(function (pet) {
@@ -1866,7 +1883,8 @@
             requiresPet: true,
           },
         );
-        vm.form.projectSizingScores = vm.form.projectSizingScores || {};
+        normalizeProjectSizing(vm.form);
+        vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
         vm.form.isJira = project ? !!project.jiraKey : true;
         redraw();
       };
@@ -1889,9 +1907,11 @@
           vm.jira.filter(function (j) {
             return j.jiraKey === project.jiraKey;
           })[0] || project;
+        normalizeProjectSizing(project);
         vm.form = angular.extend({}, project, jira, {
           projectName: jira.summary || project.projectName,
-          projectSize: project.projectSize || jira.projectSize || jira.size,
+          projectSize: project.projectSize || jira.projectSize || jira.size || "",
+          projectSizingScores: parseProjectSizingScores(project.projectSizingScores || jira.projectSizingScores || jira.ProjectSizingScores),
         });
         vm.modal = {
           type: "jira",
@@ -2389,6 +2409,7 @@
             accountableExec: vm.form.accountableExec,
             smeLead: vm.form.smeLead,
             projectSize: vm.form.projectSize,
+            projectSizingScores: projectSizingPayload(),
             projectManager: vm.form.projectManager,
             budgetType: vm.form.budgetType || null,
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,

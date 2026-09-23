@@ -6,11 +6,30 @@ GO
 
 ALTER TABLE dbo.Projects ALTER COLUMN BudgetType nvarchar(10) NULL;
 ALTER TABLE dbo.Projects ALTER COLUMN BudgetSourceId int NULL;
+IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
+ ALTER TABLE dbo.Projects ADD ProjectSizingScores nvarchar(max) NULL;
+GO
+
+CREATE OR ALTER VIEW dbo.vw_ProjectPortfolio AS
+SELECT p.ProjectId,p.ProjectCode,p.JiraKey,p.ProjectName,p.ProjectType,p.AccountableExecLead,p.AccountableExec,p.SmeLead,p.ProjectSize,p.ProjectSizingScores,p.ProjectManager,p.RequestorEmail,COALESCE(u.DisplayName,p.RequestorEmail) RequestorName,p.BudgetType,p.BudgetSourceId,p.RequiresPet,p.SkipReview,p.Status,p.CreatedUtc,
+ b.ExternalId BudgetSource,b.Budget,b.Utilization,
+ CAST(ISNULL(b.Budget,0)-ISNULL((SELECT SUM(x.RequestedAmount) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND ISNULL(x.Status,'')<>'Rejected'),0) AS decimal(19,2)) AvailableBudget,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) PetCount,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND x.Status='Approved') ApprovedPetCount,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND x.Status='Pending Review') PendingReviewPetCount,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND x.Status='Pending Approval') PendingApprovalPetCount,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND x.Status='Rejected') RejectedPetCount,
+ (SELECT COUNT(*) FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND x.Status='Sent Back') SentBackPetCount,
+ (SELECT COUNT(*) FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId WHERE pet.ProjectId=p.ProjectId) SpendRequestCount,
+ (SELECT COUNT(*) FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=p.ProjectId) BudgetLineCount,
+ (SELECT COUNT(*) FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=p.ProjectId) InvoiceCount,
+ (SELECT ISNULL(SUM(x.InvoiceAmount),0) FROM dbo.Invoices x JOIN dbo.BudgetLines bl ON bl.BudgetLineId=x.BudgetLineId JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=p.ProjectId) InvoicedAmount
+FROM dbo.Projects p LEFT JOIN dbo.Users u ON u.Email=p.RequestorEmail LEFT JOIN dbo.BudgetSources b ON b.BudgetSourceId=p.BudgetSourceId;
 GO
 
 CREATE OR ALTER PROCEDURE dbo.sp_SaveProject
  @ProjectId int=NULL,@IsJira bit,@JiraKey nvarchar(50)=NULL,@Name nvarchar(500),@Type nvarchar(100)=NULL,
- @Lead nvarchar(200),@Executive nvarchar(200),@Sme nvarchar(200)=NULL,@Size nvarchar(50)=NULL,@Manager nvarchar(200)=NULL,
+ @Lead nvarchar(200),@Executive nvarchar(200),@Sme nvarchar(200)=NULL,@Size nvarchar(50)=NULL,@SizingScores nvarchar(max)=NULL,@Manager nvarchar(200)=NULL,
  @BudgetType nvarchar(10)=NULL,@BudgetSource int=NULL,@RequiresPet bit=1,@SkipReview bit=0,@User nvarchar(254)
 AS
 BEGIN
@@ -31,12 +50,12 @@ BEGIN
   THROW 50004,'This project is already registered.',1;
  IF @ProjectId IS NULL
  BEGIN
-  INSERT dbo.Projects(IsJira,JiraKey,ProjectName,ProjectType,AccountableExecLead,AccountableExec,SmeLead,ProjectSize,ProjectManager,RequestorEmail,BudgetType,BudgetSourceId,RequiresPet,SkipReview,Status)
-  VALUES(@IsJira,NULLIF(@JiraKey,''),@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@User,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,CASE WHEN @RequiresPet=0 THEN 'Registered' ELSE 'Active' END);
+  INSERT dbo.Projects(IsJira,JiraKey,ProjectName,ProjectType,AccountableExecLead,AccountableExec,SmeLead,ProjectSize,ProjectSizingScores,ProjectManager,RequestorEmail,BudgetType,BudgetSourceId,RequiresPet,SkipReview,Status)
+  VALUES(@IsJira,NULLIF(@JiraKey,''),@Name,@Type,@Lead,@Executive,@Sme,@Size,@SizingScores,@Manager,@User,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,CASE WHEN @RequiresPet=0 THEN 'Registered' ELSE 'Active' END);
   SET @ProjectId=SCOPE_IDENTITY();
  END
  ELSE
-  UPDATE dbo.Projects SET IsJira=@IsJira,JiraKey=NULLIF(@JiraKey,''),ProjectName=@Name,ProjectType=@Type,AccountableExecLead=@Lead,AccountableExec=@Executive,SmeLead=@Sme,ProjectSize=@Size,ProjectManager=@Manager,BudgetType=@BudgetType,BudgetSourceId=@BudgetSource,RequiresPet=@RequiresPet,SkipReview=@SkipReview,Status=CASE WHEN @RequiresPet=0 THEN 'Registered' ELSE Status END,UpdatedUtc=SYSUTCDATETIME()
+  UPDATE dbo.Projects SET IsJira=@IsJira,JiraKey=NULLIF(@JiraKey,''),ProjectName=@Name,ProjectType=@Type,AccountableExecLead=@Lead,AccountableExec=@Executive,SmeLead=@Sme,ProjectSize=@Size,ProjectSizingScores=@SizingScores,ProjectManager=@Manager,BudgetType=@BudgetType,BudgetSourceId=@BudgetSource,RequiresPet=@RequiresPet,SkipReview=@SkipReview,Status=CASE WHEN @RequiresPet=0 THEN 'Registered' ELSE Status END,UpdatedUtc=SYSUTCDATETIME()
   WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'));
  SELECT ProjectId,ProjectCode FROM dbo.Projects WHERE ProjectId=@ProjectId;
 END;
