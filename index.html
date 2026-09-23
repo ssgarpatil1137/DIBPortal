@@ -221,19 +221,6 @@
                     <button class="btn compact review" ng-if="vm.hasRole('Reviewer')&&vm.pendingPet(project,'Pending Review')&&vm.isReviewerForPet(project,vm.pendingPet(project,'Pending Review'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Review'),'review')">Review</button>
                     <button class="btn compact" ng-if="vm.hasRole('Approver')&&vm.pendingPet(project,'Pending Approval')&&vm.isApproverForPet(project,vm.pendingPet(project,'Pending Approval'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Approval'),'approve')">Approve</button>
                     <button
-              <div class="project-sizing sizing-summary">
-                <div class="sizing-head">
-                  <div><small>Project Sizing</small><strong>{{vm.projectSizingLabel(vm.form)}}</strong></div>
-                  <span>Saved selected values</span>
-                </div>
-                <div class="sizing-row" ng-repeat="criterion in vm.projectSizingCriteria">
-                  <div class="sizing-label"><strong>{{criterion.label}}</strong><span>Weight: {{criterion.weight}}%</span></div>
-                  <div class="sizing-selected">
-                    <strong>{{vm.projectSizingSelectedLevel(vm.form,criterion)}}</strong>
-                    <span>{{vm.projectSizingSelectedText(vm.form,criterion)}}</span>
-                  </div>
-                </div>
-              </div>
                       class="icon-btn"
                       title="View JIRA details"
                       ng-click="vm.openJira(project)"
@@ -896,6 +883,18 @@
                 <div>
                   <small>IDH Portfolio</small
                   ><strong>{{vm.form.idhPortfolioHead||'Not supplied'}}</strong>
+                </div>
+              </div>
+              <div class="jira-sizing-detail">
+                <div class="jira-sizing-head">
+                  <div><small>Project Sizing</small><strong>{{vm.projectSizingLabel(vm.form)}}</strong></div>
+                </div>
+                <div class="jira-sizing-grid">
+                  <div class="jira-sizing-card" ng-repeat="criterion in vm.projectSizingCriteria">
+                    <small>{{criterion.label}}</small>
+                    <strong>{{vm.projectSizingSelectedLevel(vm.form,criterion)}}</strong>
+                    <span>{{vm.projectSizingSelectedText(vm.form,criterion)}}</span>
+                  </div>
                 </div>
               </div>
               <div class="narrative">

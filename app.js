@@ -623,8 +623,9 @@
         return size || "Not supplied";
       };
       function projectSizingLevel(project, criterion) {
+        if (!criterion) return null;
         var scores = parseProjectSizingScores(project && (project.projectSizingScores || project.ProjectSizingScores));
-        var score = Number(scores && criterion && scores[criterion.key]) || 0;
+        var score = Number(scores[criterion.key]) || 0;
         return vm.projectSizingLevels.filter(function (level) { return level.score === score; })[0] || null;
       }
       vm.projectSizingSelectedLevel = function (project, criterion) {
