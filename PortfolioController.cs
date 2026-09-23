@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http;
+using Newtonsoft.Json.Linq;
 using DFM.Web.Infrastructure;
 using DFM.Web.Models;
 
@@ -161,6 +162,34 @@ namespace DFM.Web.Controllers
             return budgetType;
         }
 
+        private static string PlainProjectSize(string value)
+        {
+            return Convert.ToString(value ?? "").Split('|')[0];
+        }
+
+        private static string ProjectSizeForLegacyDatabase(ProjectRequest value)
+        {
+            var size = PlainProjectSize(value.ProjectSize);
+            var scores = EncodedProjectSizingScores(value.ProjectSizingScores);
+            return string.IsNullOrWhiteSpace(scores) ? size : size + "|" + scores;
+        }
+
+        private static string EncodedProjectSizingScores(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                var scores = JObject.Parse(json);
+                var keys = new[] { "technical", "regulatory", "stakeholder", "resource", "scale", "interdependencies", "budget" };
+                var values = keys.Select(key => Convert.ToInt32(scores[key] ?? 0)).ToArray();
+                return values.Any(value => value > 0) ? string.Join(",", values) : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
         private static void ValidateBudgetSourceSelection(string budgetType, int? budgetSourceId)
         {
             if (string.IsNullOrWhiteSpace(budgetType) && !budgetSourceId.HasValue) return;
@@ -219,12 +248,12 @@ namespace DFM.Web.Controllers
                 List<Dictionary<string, object>> rows;
                 try
                 {
-                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@SizingScores,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@SizingScores", value.ProjectSizingScores), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@SizingScores,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", PlainProjectSize(value.ProjectSize)), P("@SizingScores", value.ProjectSizingScores), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
                 }
                 catch (SqlException ex)
                 {
                     if (!ProcedureParameterError(ex)) throw;
-                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", value.ProjectSize), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@User", User.Identity.Name));
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", ProjectSizeForLegacyDatabase(value)), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@User", User.Identity.Name));
                 }
                 return Ok(rows.FirstOrDefault());
             }

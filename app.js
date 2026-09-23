@@ -596,10 +596,39 @@
         try { return JSON.parse(value); }
         catch (ignore) { return {}; }
       }
+      function splitStoredProjectSize(value) {
+        var parts = String(value || "").split("|");
+        return { size: parts[0] || "", scores: parts[1] || "" };
+      }
+      function scoresFromStoredProjectSize(value) {
+        var encoded = splitStoredProjectSize(value).scores;
+        if (!encoded) return {};
+        var scores = {};
+        encoded.split(",").forEach(function (score, index) {
+          var criterion = vm.projectSizingCriteria[index];
+          var numericScore = Number(score) || 0;
+          if (criterion && numericScore) scores[criterion.key] = numericScore;
+        });
+        return scores;
+      }
+      function storedProjectSizeValue() {
+        var size = vm.form && vm.form.projectSize || "";
+        var scores = vm.projectSizingCriteria.map(function (criterion) {
+          return Number(vm.form && vm.form.projectSizingScores && vm.form.projectSizingScores[criterion.key]) || 0;
+        });
+        return scores.some(function (score) { return score > 0; }) ? size + "|" + scores.join(",") : size;
+      }
+      vm.projectSizingLabel = function (project) {
+        var size = splitStoredProjectSize(project && (project.projectSize || project.ProjectSize)).size;
+        return size || "Not supplied";
+      };
       function normalizeProjectSizing(project) {
         if (!project) return project;
-        project.projectSize = project.projectSize || project.ProjectSize || "";
+        var rawSize = project.projectSize || project.ProjectSize || "";
+        var storedSize = splitStoredProjectSize(rawSize);
+        project.projectSize = storedSize.size;
         project.projectSizingScores = parseProjectSizingScores(project.projectSizingScores || project.ProjectSizingScores);
+        if (!Object.keys(project.projectSizingScores).length) project.projectSizingScores = scoresFromStoredProjectSize(rawSize);
         return project;
       }
       function projectSizingPayload() {
