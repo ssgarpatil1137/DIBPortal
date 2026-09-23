@@ -784,7 +784,7 @@
                 <div class="sizing-row" ng-repeat="criterion in vm.projectSizingCriteria">
                   <div class="sizing-label"><strong>{{criterion.label}}</strong><span>Weight: {{criterion.weight}}%</span></div>
                   <div class="sizing-buttons">
-                    <button type="button" ng-repeat="level in vm.projectSizingLevels" ng-disabled="vm.form.isJira" ng-class="{active:vm.projectSizingScore(criterion)===level.score}" ng-click="vm.setProjectSizingScore(criterion,level)">{{level.label}} ({{level.score}})<small>{{criterion[level.key]}}</small></button>
+                    <button type="button" ng-repeat="level in vm.projectSizingLevels" ng-class="{active:vm.projectSizingScore(criterion)===level.score}" ng-click="vm.setProjectSizingScore(criterion,level)">{{level.label}} ({{level.score}})<small>{{criterion[level.key]}}</small></button>
                   </div>
                 </div>
                 <div class="sizing-result"><span>Weighted total: {{vm.projectSizingWeightedTotal()||0}}</span><strong>Project size: {{vm.form.projectSize||'Not selected'}}</strong></div>

@@ -561,7 +561,7 @@
         })[0];
       };
       vm.setProjectSizingScore = function (criterion, level) {
-        if (!vm.form || vm.form.isJira) return;
+        if (!vm.form) return;
         vm.form.projectSizingScores = vm.form.projectSizingScores || {};
         vm.form.projectSizingScores[criterion.key] = level.score;
         updateProjectSizeFromScores();
@@ -1880,8 +1880,8 @@
         vm.form.accountableExecLead = jira.accountableExecLead;
         vm.form.accountableExec = jira.accountableExec;
         vm.form.smeLead = jira.smeLead;
-        vm.form.projectSize = jira.size || jira.projectSize || vm.form.projectSize;
         vm.form.projectSizingScores = {};
+        vm.form.projectSize = "";
         vm.form.projectManager = jira.assignedProjectManager;
       };
       vm.openJira = function (project) {
