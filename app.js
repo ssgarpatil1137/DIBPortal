@@ -622,6 +622,19 @@
         var size = splitStoredProjectSize(project && (project.projectSize || project.ProjectSize)).size;
         return size || "Not supplied";
       };
+      function projectSizingLevel(project, criterion) {
+        var scores = parseProjectSizingScores(project && (project.projectSizingScores || project.ProjectSizingScores));
+        var score = Number(scores && criterion && scores[criterion.key]) || 0;
+        return vm.projectSizingLevels.filter(function (level) { return level.score === score; })[0] || null;
+      }
+      vm.projectSizingSelectedLevel = function (project, criterion) {
+        var level = projectSizingLevel(project, criterion);
+        return level ? level.label + " (" + level.score + ")" : "Not selected";
+      };
+      vm.projectSizingSelectedText = function (project, criterion) {
+        var level = projectSizingLevel(project, criterion);
+        return level ? criterion[level.key] : "No saved value";
+      };
       function normalizeProjectSizing(project) {
         if (!project) return project;
         var rawSize = project.projectSize || project.ProjectSize || "";

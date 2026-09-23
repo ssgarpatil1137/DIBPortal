@@ -172,7 +172,6 @@
                 <th>Type</th>
                 <th>Accountable Exec Lead</th>
                 <th>SME Lead</th>
-                <th>Size</th>
                 <th>Project Manager</th>
                 <th>Requestor</th>
                 <th>PET items</th>
@@ -210,7 +209,6 @@
                 <td>{{project.projectType}}</td>
                 <td title="{{project.accountableExecLead}}">{{project.accountableExecLead}}</td>
                 <td title="{{project.smeLead}}">{{project.smeLead}}</td>
-                <td>{{project.projectSize}}</td>
                 <td title="{{project.projectManager}}">{{project.projectManager}}</td>
                 <td title="{{project.requestorName||project.requestorEmail}}">{{project.requestorName||project.requestorEmail}}</td>
                 <td><span class="count-chip">{{project.spendRequestCount}}</span></td>
@@ -223,6 +221,19 @@
                     <button class="btn compact review" ng-if="vm.hasRole('Reviewer')&&vm.pendingPet(project,'Pending Review')&&vm.isReviewerForPet(project,vm.pendingPet(project,'Pending Review'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Review'),'review')">Review</button>
                     <button class="btn compact" ng-if="vm.hasRole('Approver')&&vm.pendingPet(project,'Pending Approval')&&vm.isApproverForPet(project,vm.pendingPet(project,'Pending Approval'))" ng-click="vm.openDecision(vm.pendingPet(project,'Pending Approval'),'approve')">Approve</button>
                     <button
+              <div class="project-sizing sizing-summary">
+                <div class="sizing-head">
+                  <div><small>Project Sizing</small><strong>{{vm.projectSizingLabel(vm.form)}}</strong></div>
+                  <span>Saved selected values</span>
+                </div>
+                <div class="sizing-row" ng-repeat="criterion in vm.projectSizingCriteria">
+                  <div class="sizing-label"><strong>{{criterion.label}}</strong><span>Weight: {{criterion.weight}}%</span></div>
+                  <div class="sizing-selected">
+                    <strong>{{vm.projectSizingSelectedLevel(vm.form,criterion)}}</strong>
+                    <span>{{vm.projectSizingSelectedText(vm.form,criterion)}}</span>
+                  </div>
+                </div>
+              </div>
                       class="icon-btn"
                       title="View JIRA details"
                       ng-click="vm.openJira(project)"
@@ -909,7 +920,7 @@
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
-                <div><small>Project sizing</small><strong>{{vm.selectedProject.projectSize||'Not supplied'}}</strong></div>
+                <div><small>Project sizing</small><strong>{{vm.projectSizingLabel(vm.selectedProject)}}</strong></div>
                 <div><small>Approvals</small><strong>{{vm.selectedProject.accountableExecLead||'Reviewer not supplied'}} / {{vm.selectedProject.accountableExec||'Approver not supplied'}}</strong></div>
                 <div><small>Budget type</small><strong>{{vm.petProjectExpenseHead(vm.selectedProject)}}</strong></div>
                 <div><small>Budget source</small><strong>{{vm.selectedProject.budgetSource||'Not supplied'}}</strong></div>
@@ -1097,7 +1108,7 @@
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
-                <div><small>Project sizing</small><strong>{{vm.selectedProject.projectSize||'Not supplied'}}</strong></div>
+                <div><small>Project sizing</small><strong>{{vm.projectSizingLabel(vm.selectedProject)}}</strong></div>
                 <div><small>Approvals</small><strong>{{vm.selectedProject.accountableExecLead||'Reviewer not supplied'}} / {{vm.selectedProject.accountableExec||'Approver not supplied'}}</strong></div>
               </div>
               <h3 class="form-section-title full">Source PET</h3>
@@ -1195,7 +1206,7 @@
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
                 <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
-                <div><small>Project sizing</small><strong>{{vm.selectedProject.projectSize||'Not supplied'}}</strong></div>
+                <div><small>Project sizing</small><strong>{{vm.projectSizingLabel(vm.selectedProject)}}</strong></div>
                 <div><small>Approvals</small><strong>{{vm.selectedProject.accountableExecLead||'Reviewer not supplied'}} / {{vm.selectedProject.accountableExec||'Approver not supplied'}}</strong></div>
               </div>
               <h3 class="form-section-title full">Invoice details</h3>

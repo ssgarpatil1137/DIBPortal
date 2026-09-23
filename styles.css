@@ -1067,6 +1067,25 @@ textarea {
   color: var(--muted);
   font-weight: 500;
 }
+.sizing-summary {
+  margin-top: 12px;
+}
+.sizing-selected {
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid #d7e1dc;
+  border-radius: 5px;
+  background: #fff;
+}
+.sizing-selected strong,
+.sizing-selected span {
+  display: block;
+}
+.sizing-selected span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+}
 .compact-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -1719,7 +1738,7 @@ main {
 }
 .project-register-table {
   width: 100%;
-  min-width: 1720px;
+  min-width: 1660px;
   table-layout: fixed;
 }
 .project-register-table th,
@@ -1749,42 +1768,40 @@ main {
 .project-register-table th:nth-child(6),
 .project-register-table td:nth-child(6) { width: 132px; }
 .project-register-table th:nth-child(7),
-.project-register-table td:nth-child(7) { width: 60px; }
+.project-register-table td:nth-child(7) { width: 150px; }
 .project-register-table th:nth-child(8),
-.project-register-table td:nth-child(8) { width: 150px; }
+.project-register-table td:nth-child(8) { width: 138px; }
 .project-register-table th:nth-child(9),
-.project-register-table td:nth-child(9) { width: 138px; }
+.project-register-table td:nth-child(9),
 .project-register-table th:nth-child(10),
 .project-register-table td:nth-child(10),
 .project-register-table th:nth-child(11),
-.project-register-table td:nth-child(11),
-.project-register-table th:nth-child(12),
-.project-register-table td:nth-child(12) {
+.project-register-table td:nth-child(11) {
   width: 62px;
   text-align: center;
 }
-.project-register-table th:nth-child(13),
-.project-register-table td:nth-child(13) {
+.project-register-table th:nth-child(12),
+.project-register-table td:nth-child(12) {
   width: 105px;
   text-align: right;
 }
+.project-register-table th:nth-child(13),
+.project-register-table td:nth-child(13) { width: 88px; }
 .project-register-table th:nth-child(14),
-.project-register-table td:nth-child(14) { width: 88px; }
-.project-register-table th:nth-child(15),
-.project-register-table td:nth-child(15) {
+.project-register-table td:nth-child(14) {
   width: 190px;
   overflow: visible;
 }
-.project-register-table td:nth-child(15) {
+.project-register-table td:nth-child(14) {
   z-index: 24;
   background: var(--paper);
   white-space: nowrap;
 }
-.project-register-table th:nth-child(15) {
+.project-register-table th:nth-child(14) {
   z-index: 32;
 }
-.project-register-table th:nth-child(15),
-.project-register-table td:nth-child(15) {
+.project-register-table th:nth-child(14),
+.project-register-table td:nth-child(14) {
   position: sticky;
   right: 0;
   box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
