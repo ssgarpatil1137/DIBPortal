@@ -519,7 +519,7 @@
         <div class="pagination" ng-if="vm.approvalPageCount>1"><button class="icon-btn" ng-disabled="vm.approvalPage===1" ng-click="vm.changeApprovalPage(vm.approvalPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.approvalPage}} of {{vm.approvalPageCount}}</span><button class="icon-btn" ng-disabled="vm.approvalPage===vm.approvalPageCount" ng-click="vm.changeApprovalPage(vm.approvalPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
-      <section ng-if="vm.tab==='budgets'" class="workspace">
+      <section ng-if="vm.tab==='budgets'" class="workspace budget-workspace">
         <div class="section-bar">
           <div>
             <h2>CAPEX &amp; OPEX register</h2>
@@ -548,7 +548,7 @@
         <div class="pagination" ng-if="vm.budgetPageCount>1"><button class="icon-btn" ng-disabled="vm.budgetPage===1" ng-click="vm.changeBudgetPage(vm.budgetPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.budgetPage}} of {{vm.budgetPageCount}}</span><button class="icon-btn" ng-disabled="vm.budgetPage===vm.budgetPageCount" ng-click="vm.changeBudgetPage(vm.budgetPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
-      <section ng-if="vm.tab==='currencies'" class="workspace">
+      <section ng-if="vm.tab==='currencies'" class="workspace currency-workspace">
         <div class="section-bar">
           <div>
             <h2>Currency maintenance</h2>

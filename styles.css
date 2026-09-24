@@ -2071,6 +2071,22 @@ main {
   min-width: 0;
   table-layout: fixed;
 }
+.budget-workspace,
+.currency-workspace {
+  overflow: visible;
+}
+.budget-workspace .section-bar,
+.currency-workspace .section-bar {
+  position: static;
+  top: auto;
+  z-index: auto;
+}
+.budget-workspace .table-scroll,
+.currency-workspace .table-scroll {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
 .budget-register th,
 .budget-register td,
 .currency-register th,
@@ -3184,4 +3200,26 @@ textarea {
   .workspace .section-bar .filters select {
     flex: 0 1 148px;
   }
+}
+.budget-workspace,
+.currency-workspace {
+  overflow: visible;
+}
+.budget-workspace .section-bar,
+.currency-workspace .section-bar {
+  position: static;
+  top: auto;
+  z-index: auto;
+}
+.budget-workspace .table-scroll,
+.currency-workspace .table-scroll {
+  max-height: none;
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.budget-register th,
+.currency-register th {
+  position: static;
+  top: auto;
+  z-index: auto;
 }
