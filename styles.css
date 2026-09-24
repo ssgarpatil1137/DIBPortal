@@ -2081,8 +2081,21 @@ main {
 }
 .budget-register th,
 .currency-register th {
-  z-index: 9;
+  position: static;
+  top: auto;
+  z-index: auto;
   background: #f0f4f1;
+  color: #263a32;
+}
+.budget-register tbody tr:first-child td,
+.currency-register tbody tr:first-child td {
+  border-top: 0;
+}
+.budget-register td:nth-child(3),
+.currency-register td:nth-child(2) {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
 }
 .budget-register th:nth-child(1),
 .budget-register td:nth-child(1) { width: 92px; }
