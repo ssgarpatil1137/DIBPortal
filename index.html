@@ -752,10 +752,12 @@
                     {{jira.jiraKey}} · {{jira.summary}}
                   </option>
                 </select></label
+              ><p class="form-error full" ng-if="vm.form.registrationError">{{vm.form.registrationError}}</p
               ><h3 class="form-section-title full">Project details</h3>
               <label
                 >Project name<input
                   ng-model="vm.form.projectName"
+                  ng-change="vm.form.isJira||vm.validateProjectRegistration(true)"
                   ng-readonly="vm.form.isJira"
                   required /></label
               ><label

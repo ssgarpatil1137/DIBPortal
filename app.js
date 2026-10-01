@@ -1939,13 +1939,38 @@
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
         vm.form.isJira = project ? !!project.jiraKey : true;
+        validateProjectRegistration(false);
         redraw();
       };
+      function normalizedRegistrationValue(value) {
+        return String(value || "").trim().toLowerCase();
+      }
+      function existingProjectRegistration() {
+        if (!vm.form) return null;
+        var currentProjectId = vm.form.projectId;
+        var jiraKey = normalizedRegistrationValue(vm.form.isJira ? vm.form.jiraKey : "");
+        var projectName = normalizedRegistrationValue(vm.form.projectName);
+        if (!jiraKey && !projectName) return null;
+        return (vm.projects || []).filter(function (project) {
+          if (!project) return false;
+          if (currentProjectId && String(project.projectId) === String(currentProjectId)) return false;
+          var existingJiraKey = normalizedRegistrationValue(project.jiraKey);
+          var existingProjectName = normalizedRegistrationValue(project.projectName);
+          return (jiraKey && existingJiraKey === jiraKey) || (projectName && existingProjectName === projectName);
+        })[0] || null;
+      }
+      function validateProjectRegistration(showToast) {
+        if (!vm.form) return true;
+        vm.form.registrationError = existingProjectRegistration() ? "Project Already Registered!" : "";
+        if (vm.form.registrationError && showToast) noticeError(vm.form.registrationError);
+        return !vm.form.registrationError;
+      }
+      vm.validateProjectRegistration = validateProjectRegistration;
       vm.pickJira = function () {
         var jira = vm.jira.filter(function (j) {
           return j.jiraKey === vm.form.jiraKey;
         })[0];
-        if (!jira) return;
+        if (!jira) { validateProjectRegistration(true); return; }
         vm.form.projectName = jira.summary;
         vm.form.projectType = jira.projectType;
         vm.form.accountableExecLead = jira.accountableExecLead;
@@ -1954,6 +1979,7 @@
         vm.form.projectSizingScores = {};
         vm.form.projectSize = "";
         vm.form.projectManager = jira.assignedProjectManager;
+        validateProjectRegistration(true);
       };
       vm.openJira = function (project) {
         var jira =
@@ -2449,6 +2475,7 @@
       }
       vm.saveModal = function () {
         var type = vm.modal.type;
+        if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
