@@ -55,6 +55,7 @@ namespace DFM.Web.Infrastructure
             var uploadRows = sourceRows.Select(row => { row.PetReference = petReference; return CalculatePetRow(row, true); }).ToList();
             EnsurePetLineIds(uploadRows, true);
             if (uploadRows.Count == 0) throw new ArgumentException("Add at least one PET row before saving.");
+            VendorMaintenance.EnsureVendors(uploadRows, row => row.Vendor);
             var imported = 0;
             foreach (var group in uploadRows.GroupBy(row => row.PetReference, StringComparer.OrdinalIgnoreCase))
             {

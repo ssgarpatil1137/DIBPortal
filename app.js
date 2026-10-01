@@ -1275,6 +1275,7 @@
           notice((response.data.imported || 0) + " PET row(s) saved.");
           vm.uploadFile = null;
           vm.close();
+          loadVendors(false);
           loadDashboard().then(function () { if (onDone) onDone(); });
         }, function (response) {
           noticeError(responseMessage(response, "Unable to save PET rows."));
@@ -2643,6 +2644,7 @@
               notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
               vm.close();
               refreshProjectPets(petPayload.projectId, true);
+              loadVendors(false);
               loadDashboard();
             }, function (attachmentResponse) {
               noticeError(responseMessage(attachmentResponse, "PET was saved, but the supporting document upload failed."));
@@ -2710,6 +2712,7 @@
             else angular.extend(vm.selectedPet.spendItems.filter(function (item) { return item.spendItemId === spendPayload.spendItemId; })[0] || {}, spendPayload);
             if (saved.finalRequestAedAmount != null) vm.selectedPet.requestedAmount = saved.finalRequestAedAmount;
             notice("PET line item saved");
+            loadVendors(false);
             vm.spendFormVisible = false;
             prepareProjects();
             vm.updateView(true);

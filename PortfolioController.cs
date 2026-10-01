@@ -327,6 +327,8 @@ namespace DFM.Web.Controllers
                     foreach (var item in value.SpendItems) ValidatePetRequiredDropdowns(item);
                     value.RequestedAmount = value.SpendItems.Sum(item => item.FinalAed > 0 ? item.FinalAed : item.AedAmount * (1 + item.ContingencyPercent / 100));
                 }
+                VendorMaintenance.EnsureVendors(value.VendorName);
+                VendorMaintenance.EnsureVendors(value.SpendItems, item => item.Vendor);
                 AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
                 var isSentBack = false;
                 if (value.PetId.HasValue)
@@ -364,11 +366,13 @@ namespace DFM.Web.Controllers
                 {
                     if (!item.SpendItemId.HasValue) continue;
                     if (string.IsNullOrWhiteSpace(item.Vendor)) throw new ArgumentException("Vendor is required on each PET line.");
+                    VendorMaintenance.EnsureVendors(item.Vendor);
                     Db.Execute("UPDATE dbo.SpendItems SET Vendor=@Vendor WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@Vendor", item.Vendor), P("@PetId", petId), P("@SpendItemId", item.SpendItemId));
                 }
                 return;
             }
             if (string.IsNullOrWhiteSpace(vendorName)) throw new ArgumentException("Vendor is required.");
+            VendorMaintenance.EnsureVendors(vendorName);
             Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", vendorName), P("@PetId", petId));
         }
 
@@ -400,6 +404,7 @@ namespace DFM.Web.Controllers
             try { ValidatePetRequiredDropdowns(value); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
             EnsureSpendLineId(value);
+            VendorMaintenance.EnsureVendors(value.Vendor);
             var foreignAmount = value.Units * value.UnitPrice;
             var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
             value.ExchangeRate = rate;
@@ -425,6 +430,7 @@ namespace DFM.Web.Controllers
             foreach (var item in items)
             {
                 item.PetId = petId;
+                VendorMaintenance.EnsureVendors(item.Vendor);
                 var foreignAmount = item.Units * item.UnitPrice;
                 var exchangeRate = CurrencyRateToLocal(item.Currency, item.ExchangeRate);
                 item.ExchangeRate = exchangeRate;
@@ -519,6 +525,7 @@ namespace DFM.Web.Controllers
                     ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
+                VendorMaintenance.EnsureVendors(value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds);
                 var saved = SaveBudgetLineRow(value, lpoStatus);
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
