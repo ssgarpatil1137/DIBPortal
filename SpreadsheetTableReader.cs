@@ -132,6 +132,7 @@ namespace DFM.Web.Infrastructure
             var rows = new List<List<string>>();
             foreach (XmlNode rowNode in document.SelectNodes("//x:sheetData/x:row", manager))
             {
+                if (HiddenRow(rowNode)) continue;
                 var row = new List<string>();
                 foreach (XmlNode cell in rowNode.SelectNodes("x:c", manager))
                 {
@@ -145,6 +146,13 @@ namespace DFM.Web.Infrastructure
                 rows.Add(row);
             }
             return rows;
+        }
+
+        private static bool HiddenRow(XmlNode row)
+        {
+            var hidden = row.Attributes["hidden"] == null ? "" : row.Attributes["hidden"].Value;
+            var zeroHeight = row.Attributes["zeroHeight"] == null ? "" : row.Attributes["zeroHeight"].Value;
+            return hidden == "1" || zeroHeight == "1" || hidden.Equals("true", StringComparison.OrdinalIgnoreCase) || zeroHeight.Equals("true", StringComparison.OrdinalIgnoreCase);
         }
 
         private static HashSet<int> HiddenColumns(XmlDocument document, XmlNamespaceManager manager)

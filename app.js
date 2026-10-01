@@ -1101,6 +1101,7 @@
         var preparedRows = [];
         (rows || []).forEach(function (row) {
           var prepared = preparePetUploadRow(row, false);
+          if (!hasPetUploadData(prepared)) return;
           assignUniquePetReference(prepared);
           assignUniqueLineId(prepared, null, preparedRows, true);
           preparedRows.push(prepared);
@@ -1200,7 +1201,7 @@
         return true;
       }
       function hasPetUploadData(row) {
-        return !!String(row && (row.topic || row.vendor || row.description || row.costType || row.unitType || row.glNumber) || "").trim() || parseNumericInput(row && row.unitPrice) > 0 || parseNumericInput(row && row.foreignAmount) > 0 || parseNumericInput(row && row.aedAmount) > 0 || parseNumericInput(row && row.finalAed) > 0;
+        return !!String(row && (row.topic || row.vendor || row.description || row.glNumber) || "").trim() || parseNumericInput(row && row.unitPrice) > 0 || parseNumericInput(row && row.foreignAmount) > 0 || parseNumericInput(row && row.aedAmount) > 0 || parseNumericInput(row && row.finalAed) > 0;
       }
       function removeBlankPetUploadRows() {
         vm.uploadPreview = (vm.uploadPreview || []).filter(hasPetUploadData);
