@@ -128,6 +128,7 @@ namespace DFM.Web.Infrastructure
         {
             var document = LoadXml(sheetPart);
             var manager = NamespaceManager(document);
+            var hiddenColumns = HiddenColumns(document, manager);
             var rows = new List<List<string>>();
             foreach (XmlNode rowNode in document.SelectNodes("//x:sheetData/x:row", manager))
             {
@@ -135,13 +136,36 @@ namespace DFM.Web.Infrastructure
                 foreach (XmlNode cell in rowNode.SelectNodes("x:c", manager))
                 {
                     var columnIndex = ColumnIndex(cell.Attributes["r"] == null ? null : cell.Attributes["r"].Value);
-                    while (row.Count < columnIndex) row.Add("");
+                    if (hiddenColumns.Contains(columnIndex)) continue;
+                    var visibleColumnIndex = VisibleColumnIndex(columnIndex, hiddenColumns);
+                    while (row.Count < visibleColumnIndex) row.Add("");
                     row.Add(CellValue(cell, manager, sharedStrings, styles));
                 }
                 while (row.Count > 0 && string.IsNullOrWhiteSpace(row[row.Count - 1])) row.RemoveAt(row.Count - 1);
                 rows.Add(row);
             }
             return rows;
+        }
+
+        private static HashSet<int> HiddenColumns(XmlDocument document, XmlNamespaceManager manager)
+        {
+            var hiddenColumns = new HashSet<int>();
+            foreach (XmlNode column in document.SelectNodes("//x:cols/x:col", manager))
+            {
+                var hidden = column.Attributes["hidden"] == null ? "" : column.Attributes["hidden"].Value;
+                if (hidden != "1" && !hidden.Equals("true", StringComparison.OrdinalIgnoreCase)) continue;
+                int min;
+                int max;
+                if (!int.TryParse(column.Attributes["min"] == null ? null : column.Attributes["min"].Value, out min)) continue;
+                if (!int.TryParse(column.Attributes["max"] == null ? null : column.Attributes["max"].Value, out max)) max = min;
+                for (var index = min; index <= max; index++) hiddenColumns.Add(index - 1);
+            }
+            return hiddenColumns;
+        }
+
+        private static int VisibleColumnIndex(int columnIndex, HashSet<int> hiddenColumns)
+        {
+            return Math.Max(columnIndex - hiddenColumns.Count(hiddenColumn => hiddenColumn < columnIndex), 0);
         }
 
         private static string CellValue(XmlNode cell, XmlNamespaceManager manager, List<string> sharedStrings, WorkbookStyles styles)

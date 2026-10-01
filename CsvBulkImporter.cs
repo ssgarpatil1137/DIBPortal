@@ -49,7 +49,7 @@ namespace DFM.Web.Infrastructure
 
         public static int ImportPetRows(int projectId, IEnumerable<PetUploadRowRequest> rows, string user)
         {
-            var sourceRows = (rows ?? Enumerable.Empty<PetUploadRowRequest>()).Where(row => row != null).ToList();
+            var sourceRows = (rows ?? Enumerable.Empty<PetUploadRowRequest>()).Where(row => row != null && HasPetUploadData(row)).ToList();
             var petReference = sourceRows.Select(row => row.PetReference).FirstOrDefault(reference => !string.IsNullOrWhiteSpace(reference));
             if (string.IsNullOrWhiteSpace(petReference)) petReference = GeneratedPetReference();
             var uploadRows = sourceRows.Select(row => { row.PetReference = petReference; return CalculatePetRow(row, true); }).ToList();
@@ -101,9 +101,19 @@ namespace DFM.Web.Infrastructure
         {
             RequireAny(headers, "vendor", new[] { "vendor", "vendorname", "supplier", "vendorsupplier" });
             RequireAny(headers, "unitprice", new[] { "unitprice", "price" });
-            var petRows = rows.Where(row => !Empty(row)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), SerialNo = GetAny(row, headers, "", "srno", "serialno", "serialnumber", "sr", "sno", "slno"), LineDate = DateNullable(row, headers, "date", "linedate"), LineId = "", Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
+            var petRows = rows.Where(row => !Empty(row) && HasPetLineData(row, headers)).Select(row => CalculatePetRow(new PetUploadRowRequest { ProjectId = GetAny(row, headers, "", "projectid"), PetReference = GetAny(row, headers, "", "petreference", "petreferenceno", "petreferencenumber"), SerialNo = GetAny(row, headers, "", "srno", "serialno", "serialnumber", "sr", "sno", "slno"), LineDate = DateNullable(row, headers, "date", "linedate"), LineId = "", Department = Get(row, headers, "department"), Currency = GetAny(row, headers, "AED", "currency", "basecy"), Head = GetAny(row, headers, "", "head", "exphead"), Topic = Get(row, headers, "topic"), Vendor = GetAny(row, headers, "", "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor"), Description = Get(row, headers, "description"), CostType = Get(row, headers, "costtype"), UnitType = Get(row, headers, "unittype"), Units = Decimal(row, headers, "units", 1), UnitPrice = DecimalAny(row, headers, 0, "unitprice", "price"), ForeignAmount = DecimalAny(row, headers, 0, "fcyamount", "amtfcy"), ExchangeRate = DecimalAny(row, headers, 0, "exchangerate", "conversionrate", "fxrate", "aedrate"), AedAmount = DecimalAny(row, headers, 0, "aedamount", "amtlcy"), ContingencyPercent = DecimalAny(row, headers, 0, "contingency", "cont"), FinalAed = DecimalAny(row, headers, 0, "finalaed", "finalamtlcy"), YearlyRecurrence = IntNullable(row, headers, "yearlyrecurrence"), GlNumber = Get(row, headers, "glnumber") }, strict)).ToList();
             EnsurePetLineIds(petRows, true);
             return petRows;
+        }
+
+        private static bool HasPetLineData(List<string> row, Dictionary<string, int> headers)
+        {
+            return HasAnyValue(row, headers, "vendor", "vendorname", "supplier", "vendorsupplier", "suppliervendor", "unitprice", "price", "topic", "description", "costtype", "unittype", "glnumber", "fcyamount", "amtfcy", "aedamount", "amtlcy", "finalaed", "finalamtlcy");
+        }
+
+        private static bool HasPetUploadData(PetUploadRowRequest row)
+        {
+            return !string.IsNullOrWhiteSpace(row.Department) || !string.IsNullOrWhiteSpace(row.Topic) || !string.IsNullOrWhiteSpace(row.Vendor) || !string.IsNullOrWhiteSpace(row.Description) || !string.IsNullOrWhiteSpace(row.CostType) || !string.IsNullOrWhiteSpace(row.UnitType) || !string.IsNullOrWhiteSpace(row.GlNumber) || row.UnitPrice > 0 || row.ForeignAmount > 0 || row.AedAmount > 0 || row.FinalAed > 0;
         }
 
         private static PetUploadRowRequest CalculatePetRow(PetUploadRowRequest row, bool strict)
@@ -275,9 +285,10 @@ namespace DFM.Web.Infrastructure
             if (negative && numeric.Length > 0 && numeric[0] != '-') numeric = "-" + numeric;
             return numeric;
         }
-        private static decimal DecimalAny(List<string> row, Dictionary<string, int> headers, decimal fallback, params string[] names) { foreach (var name in names) { var value = Decimal(row, headers, name, decimal.MinValue); if (value != decimal.MinValue) return value; } return fallback; }
+        private static decimal DecimalAny(List<string> row, Dictionary<string, int> headers, decimal fallback, params string[] names) { foreach (var name in names) { var value = Decimal(row, headers, name, decimal.MinValue); if (value != decimal.MinValue) return value; var key = headers.Keys.FirstOrDefault(item => item.Contains(name)); if (key != null) { value = Decimal(row, headers, key, decimal.MinValue); if (value != decimal.MinValue) return value; } } return fallback; }
         private static bool Has(List<string> row, Dictionary<string, int> headers, string name) { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]); }
         private static bool HasAny(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name)); }
+        private static bool HasAnyValue(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name) || headers.Keys.Any(key => key.Contains(name) && Has(row, headers, key))); }
         private static int Int(List<string> row, Dictionary<string, int> headers, string name, int fallback) { int value; return int.TryParse(Get(row, headers, name), out value) ? value : fallback; }
         private static int? IntNullable(List<string> row, Dictionary<string, int> headers, string name) { int value; return int.TryParse(Get(row, headers, name), out value) ? (int?)value : null; }
         private static DateTime? DateNullable(List<string> row, Dictionary<string, int> headers, params string[] names)
