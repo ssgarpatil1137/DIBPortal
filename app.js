@@ -1199,7 +1199,15 @@
         if (!(parseNumericInput(row.unitPrice) > 0)) { noticeError("Unit Price is required on " + rowLabel + "."); return false; }
         return true;
       }
+      function hasPetUploadData(row) {
+        return !!String(row && (row.topic || row.vendor || row.description || row.costType || row.unitType || row.glNumber) || "").trim() || parseNumericInput(row && row.unitPrice) > 0 || parseNumericInput(row && row.foreignAmount) > 0 || parseNumericInput(row && row.aedAmount) > 0 || parseNumericInput(row && row.finalAed) > 0;
+      }
+      function removeBlankPetUploadRows() {
+        vm.uploadPreview = (vm.uploadPreview || []).filter(hasPetUploadData);
+        vm.uploadPreview.forEach(function (row, index) { row.serialNo = index + 1; });
+      }
       function validatePetUploadRows(requirePetReference) {
+        removeBlankPetUploadRows();
         if (!(vm.uploadPreview || []).length) { noticeError("Upload Excel/CSV rows or add a PET row before saving."); return false; }
         for (var rowIndex = 0; rowIndex < vm.uploadPreview.length; rowIndex++) {
           var row = vm.uploadPreview[rowIndex];
