@@ -710,6 +710,15 @@
         });
         return values;
       };
+      vm.activeVendorOptions = function () {
+        var values = [];
+        (vm.vendors || []).forEach(function (vendor) {
+          var name = String(vendor && (vendor.name || vendor.Name) || "").trim();
+          if (!name || vendor.isActive === false || vendor.IsActive === false) return;
+          if (values.map(function (value) { return value.toLowerCase(); }).indexOf(name.toLowerCase()) < 0) values.push(name);
+        });
+        return values.sort(function (left, right) { return left.localeCompare(right); });
+      };
       function spendItemValue(item, names) {
         for (var index = 0; index < names.length; index++) {
           var value = item && item[names[index]];
@@ -2992,6 +3001,7 @@
         if (iconTimer) $timeout.cancel(iconTimer);
         iconTimer = $timeout(function () {
           angular.element(document.querySelectorAll('select[ng-model$="yearlyRecurrence"]')).removeAttr("required");
+          Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="row.vendor"], input[ng-model="vm.form.vendor"], input[ng-model="vm.form.vendorName"], input[ng-model="vm.petRowEditor.row.vendor"]'), function (input) { input.setAttribute("list", "vendor-suggestions"); });
           Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="item.budgetLineVendor"]'), function (input) { input.readOnly = true; input.setAttribute("tabindex", "-1"); });
           refreshIcons();
           $timeout(refreshIcons, 60, false);
@@ -3069,7 +3079,7 @@
         });
       }
       function loadVendors(showError) {
-        if (!vm.hasRole("Admin") || vm.demo) { vm.updateVendorView(true); return $q.when(); }
+        if (vm.demo) { vm.updateVendorView(true); return $q.when(); }
         return $http.get("api/portfolio/vendors").then(function (response) {
           vm.vendors = response.data || [];
           vm.updateVendorView(true);

@@ -1491,6 +1491,9 @@
       <i data-lucide="{{vm.toastIsError?'alert-triangle':'check-circle-2'}}"></i><span class="toast-message">{{vm.toast}}</span
       ><button type="button" class="icon-btn toast-close" title="Dismiss" ng-click="vm.dismissToast()"><span aria-hidden="true">&times;</span></button>
     </div>
+    <datalist id="vendor-suggestions">
+      <option ng-repeat="vendorName in vm.activeVendorOptions() track by vendorName" value="{{vendorName}}"></option>
+    </datalist>
     <script src="vendor/jquery.min.js"></script>
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>

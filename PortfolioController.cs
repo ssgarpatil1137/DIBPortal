@@ -138,10 +138,14 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
-        [ApiAuthorize("Admin", "Master"), HttpGet, Route("vendors")]
+        [HttpGet, Route("vendors")]
         public IHttpActionResult Vendors()
         {
-            try { return Ok(Db.Query("SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors ORDER BY Name")); }
+            try
+            {
+                var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
+                return Ok(Db.Query("SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors WHERE @includeInactive=1 OR IsActive=1 ORDER BY Name", P("@includeInactive", includeInactive)));
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
