@@ -264,7 +264,17 @@ namespace DFM.Web.Infrastructure
         private static Dictionary<string, int> HeaderMap(List<string> row) { var headers = new Dictionary<string, int>(); row.Select((name, index) => new { name = Normalize(name), index }).Where(item => !string.IsNullOrWhiteSpace(item.name)).ToList().ForEach(item => { if (!headers.ContainsKey(item.name)) headers.Add(item.name, item.index); }); return headers; }
         private static string Get(List<string> row, Dictionary<string, int> headers, string name, string fallback = "") { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]) ? row[index].Trim() : fallback; }
         private static string GetAny(List<string> row, Dictionary<string, int> headers, string fallback, params string[] names) { foreach (var name in names) { var value = Get(row, headers, name); if (!string.IsNullOrWhiteSpace(value)) return value; var key = headers.Keys.FirstOrDefault(item => item.Contains(name)); if (key != null) { value = Get(row, headers, key); if (!string.IsNullOrWhiteSpace(value)) return value; } } return fallback; }
-        private static decimal Decimal(List<string> row, Dictionary<string, int> headers, string name, decimal fallback = 0) { decimal value; return decimal.TryParse(Get(row, headers, name).Replace(",", ""), NumberStyles.Number, CultureInfo.InvariantCulture, out value) ? value : fallback; }
+        private static decimal Decimal(List<string> row, Dictionary<string, int> headers, string name, decimal fallback = 0) { decimal value; return decimal.TryParse(NumericText(Get(row, headers, name)), NumberStyles.Number, CultureInfo.InvariantCulture, out value) ? value : fallback; }
+        private static string NumericText(string value)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length == 0) return text;
+            var negative = text.StartsWith("(") && text.EndsWith(")");
+            var characters = text.Where(character => char.IsDigit(character) || character == '.' || character == '-').ToArray();
+            var numeric = new string(characters).Replace(",", "");
+            if (negative && numeric.Length > 0 && numeric[0] != '-') numeric = "-" + numeric;
+            return numeric;
+        }
         private static decimal DecimalAny(List<string> row, Dictionary<string, int> headers, decimal fallback, params string[] names) { foreach (var name in names) { var value = Decimal(row, headers, name, decimal.MinValue); if (value != decimal.MinValue) return value; } return fallback; }
         private static bool Has(List<string> row, Dictionary<string, int> headers, string name) { int index; return headers.TryGetValue(name, out index) && index < row.Count && !string.IsNullOrWhiteSpace(row[index]); }
         private static bool HasAny(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name)); }
