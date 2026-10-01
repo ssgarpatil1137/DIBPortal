@@ -571,6 +571,29 @@
         <div class="pagination" ng-if="vm.currencyPageCount>1"><button class="icon-btn" ng-disabled="vm.currencyPage===1" ng-click="vm.changeCurrencyPage(vm.currencyPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.currencyPage}} of {{vm.currencyPageCount}}</span><button class="icon-btn" ng-disabled="vm.currencyPage===vm.currencyPageCount" ng-click="vm.changeCurrencyPage(vm.currencyPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
+      <section ng-if="vm.tab==='vendors'" class="workspace vendor-workspace">
+        <div class="section-bar">
+          <div>
+            <h2>Vendor maintenance</h2>
+            <span>Add approved vendors and keep duplicate names out of spend entry.</span>
+          </div>
+          <button class="btn secondary" ng-click="vm.openVendor()"><i data-lucide="plus"></i>Add Vendor</button>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.vendorSearch" ng-change="vm.updateVendorView()" placeholder="Search vendor, status" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table vendor-register">
+            <thead><tr><th>Vendor name</th><th>Status</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="vendor in vm.visibleVendors track by vendor.vendorId"><td>{{vendor.name}}</td><td><span class="status" ng-class="vendor.isActive?'approved':'rejected'">{{vendor.isActive?'Active':'Inactive'}}</span></td><td><button class="icon-btn" title="Edit vendor" ng-click="vm.openVendor(vendor)"><i data-lucide="pencil"></i></button></td></tr>
+              <tr ng-if="!vm.visibleVendors.length"><td colspan="3"><div class="empty inline-empty"><i data-lucide="store"></i><strong>No vendors match the search.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.vendorPageCount>1"><button class="icon-btn" ng-disabled="vm.vendorPage===1" ng-click="vm.changeVendorPage(vm.vendorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.vendorPage}} of {{vm.vendorPageCount}}</span><button class="icon-btn" ng-disabled="vm.vendorPage===vm.vendorPageCount" ng-click="vm.changeVendorPage(vm.vendorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
       <section ng-if="vm.tab==='roles'" class="workspace">
         <div class="section-bar">
           <div><h2>Role management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
@@ -1360,6 +1383,14 @@
                   type="text"
                   inputmode="decimal"
                   ng-model="vm.form.rateToLocal"
+                  required /></label
+              ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
+            </div>
+            <div ng-if="vm.modal.type==='vendor'" class="form-grid">
+              <label class="full"
+                >Vendor name<input
+                  ng-model="vm.form.name"
+                  maxlength="300"
                   required /></label
               ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>

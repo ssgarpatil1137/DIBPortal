@@ -109,6 +109,12 @@
       vm.currencyPageCount = 1;
       vm.currencyFilteredCount = 0;
       vm.visibleCurrencies = [];
+      vm.vendorSearch = "";
+      vm.vendorPage = 1;
+      vm.vendorPageSize = 20;
+      vm.vendorPageCount = 1;
+      vm.vendorFilteredCount = 0;
+      vm.visibleVendors = [];
       vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
       vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
       vm.costTypeOptions = [
@@ -138,6 +144,7 @@
         { id: "approvals", label: "Approvals", icon: "stamp", roles: ["Reviewer", "Approver"] },
         { id: "budgets", label: "CAPEX / OPEX", icon: "landmark", roles: ["Admin", "Master"] },
         { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
+        { id: "vendors", label: "Vendors", icon: "store", roles: ["Admin", "Master"] },
         { id: "roles", label: "Role management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
@@ -210,6 +217,11 @@
         { currencyId: 4, code: "GBP", name: "British Pound", rateToLocal: 4.65, isActive: true },
         { currencyId: 5, code: "INR", name: "Indian Rupee", rateToLocal: 0.044, isActive: true },
         { currencyId: 6, code: "SAR", name: "Saudi Riyal", rateToLocal: 0.979, isActive: true },
+      ];
+      vm.vendors = [
+        { vendorId: 1, name: "Data Systems LLC", isActive: true },
+        { vendorId: 2, name: "MDS Computers", isActive: true },
+        { vendorId: 3, name: "Wipro", isActive: true },
       ];
       vm.jira = [
         {
@@ -423,6 +435,7 @@
           approvals: "PET review & approval queue",
           budgets: "Budget source control",
           currencies: "Currency maintenance",
+          vendors: "Vendor maintenance",
           roles: "Role management",
           reports: "Management reporting",
         }[vm.tab];
@@ -430,7 +443,7 @@
       vm.authTitle = function () { return { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
-      vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); prepareProjects(); vm.updateView(); redraw(); };
+      vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
         return String(value || "").trim().replace(/[;,]+$/g, "").trim().toLowerCase();
@@ -449,6 +462,7 @@
             updateNavigation();
             loadDashboard();
             loadCurrencies(false);
+            loadVendors(false);
             loadRoles(false);
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
           else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
@@ -503,14 +517,14 @@
         var loadedFromCache = false;
         try {
           var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
-          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadRoles(false); }
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadVendors(false); loadRoles(false); }
         } catch (ignore) { }
         $http.get("api/auth/session").then(function (response) {
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
           if (loadedFromCache) vm.updateView(true);
-          else { loadDashboard(); loadCurrencies(false); loadRoles(false); }
+          else { loadDashboard(); loadCurrencies(false); loadVendors(false); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -538,6 +552,7 @@
       vm.setTab = function (tabId) {
         vm.tab = tabId;
         if (tabId === "currencies") loadCurrencies(true);
+        if (tabId === "vendors") loadVendors(true);
         if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
         redraw();
@@ -1703,6 +1718,7 @@
         vm.updateApprovalView(keepPage);
         vm.updateBudgetView(keepPage);
         vm.updateCurrencyView(keepPage);
+        vm.updateVendorView(keepPage);
         vm.updateReportView();
         vm.updateReportProjectView(keepPage);
       };
@@ -1710,6 +1726,7 @@
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); redraw(); };
       vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); redraw(); };
       vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); redraw(); };
+      vm.changeVendorPage = function (page) { vm.vendorPage = Math.max(1, Math.min(vm.vendorPageCount, page)); vm.updateVendorView(true); redraw(); };
       vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); redraw(); };
       vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); redraw(); };
       function buildApprovalItems() {
@@ -1828,6 +1845,17 @@
         if (!keepPage || vm.currencyPage > vm.currencyPageCount) vm.currencyPage = 1;
         var start = (vm.currencyPage - 1) * vm.currencyPageSize;
         vm.visibleCurrencies = filtered.slice(start, start + vm.currencyPageSize);
+      };
+      vm.updateVendorView = function (keepPage) {
+        var query = (vm.vendorSearch || "").toLowerCase();
+        var filtered = (vm.vendors || []).filter(function (vendor) {
+          return !query || [vendor.name, vendor.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
+        });
+        vm.vendorFilteredCount = filtered.length;
+        vm.vendorPageCount = Math.max(1, Math.ceil(filtered.length / vm.vendorPageSize));
+        if (!keepPage || vm.vendorPage > vm.vendorPageCount) vm.vendorPage = 1;
+        var start = (vm.vendorPage - 1) * vm.vendorPageSize;
+        vm.visibleVendors = filtered.slice(start, start + vm.vendorPageSize);
       };
       vm.updateRoleView = function (keepPage) {
         var query = (vm.roleSearch || "").toLowerCase();
@@ -2299,6 +2327,17 @@
           kicker: "MASTER CONTROL",
           title: currency ? "Edit " + currency.code : "Add currency",
           submit: currency ? "Update currency" : "Add currency",
+        };
+        redraw();
+      };
+      vm.openVendor = function (vendor) {
+        vm.selectedVendor = vendor || null;
+        vm.form = angular.copy(vendor || { name: "", isActive: true });
+        vm.modal = {
+          type: "vendor",
+          kicker: "MASTER CONTROL",
+          title: vendor ? "Edit " + vendor.name : "Add vendor",
+          submit: vendor ? "Update vendor" : "Add vendor",
         };
         redraw();
       };
@@ -2870,6 +2909,28 @@
             return;
           }
         }
+        if (type === "vendor") {
+          if (!vm.form || !String(vm.form.name || "").trim()) { noticeError("Vendor name is required."); return; }
+          vm.form.name = String(vm.form.name || "").trim();
+          if (!validateVendorDuplicate(vm.form)) return;
+          if (vm.demo) {
+            if (vm.selectedVendor) angular.extend(vm.selectedVendor, vm.form);
+            else { vm.form.vendorId = Date.now(); vm.vendors.push(vm.form); }
+            vm.updateVendorView(true);
+            notice("Vendor saved");
+          } else {
+            $http.post("api/portfolio/vendors", vm.form).then(function (response) {
+              var saved = response.data || vm.form;
+              if (vm.selectedVendor) angular.extend(vm.selectedVendor, saved);
+              else vm.vendors.push(saved);
+              vm.updateVendorView(true);
+              notice("Vendor saved");
+              vm.close();
+              redraw();
+            }, function (response) { noticeError(responseMessage(response, "Unable to save vendor.")); });
+            return;
+          }
+        }
         if (type === "upload" && vm.modal.kind !== "attachment" && vm.modal.kind !== "sources" && !vm.demo) {
           var item = vm.form.item;
           var kind = vm.modal.kind;
@@ -2912,12 +2973,14 @@
           vm.toast = "";
         }, 3000);
       }
-      // Error toasts stay on screen (no auto-dismiss) until the user closes them or another
-      // notice/noticeError replaces them, per the "don't hide errors" requirement.
       function noticeError(message) {
         if (toastTimer) $timeout.cancel(toastTimer);
         vm.toast = message;
         vm.toastIsError = true;
+        toastTimer = $timeout(function () {
+          vm.toast = "";
+          vm.toastIsError = false;
+        }, 5000);
       }
       vm.dismissToast = function () {
         if (toastTimer) $timeout.cancel(toastTimer);
@@ -3005,6 +3068,28 @@
           if (showError || vm.tab === "currencies") noticeError(responseMessage(response, "Unable to load currencies."));
         });
       }
+      function loadVendors(showError) {
+        if (!vm.hasRole("Admin") || vm.demo) { vm.updateVendorView(true); return $q.when(); }
+        return $http.get("api/portfolio/vendors").then(function (response) {
+          vm.vendors = response.data || [];
+          vm.updateVendorView(true);
+          redraw();
+        }, function (response) {
+          if (showError || vm.tab === "vendors") noticeError(responseMessage(response, "Unable to load vendors."));
+        });
+      }
+      function normalizedVendorName(value) {
+        return String(value || "").trim().toLowerCase();
+      }
+      function validateVendorDuplicate(vendor) {
+        var name = normalizedVendorName(vendor && vendor.name);
+        var vendorId = vendor && vendor.vendorId;
+        var duplicate = (vm.vendors || []).filter(function (item) {
+          return item && normalizedVendorName(item.name) === name && (!vendorId || String(item.vendorId) !== String(vendorId));
+        })[0];
+        if (duplicate) { noticeError("Vendor already exists."); return false; }
+        return true;
+      }
       function normalizeRoleUsers(users) {
         return users.map(function (user) {
           var roles = String(user.roles || "").split(",").filter(Boolean);
@@ -3046,7 +3131,7 @@
         loadDashboard().then(function () {
           return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
         }).then(function () {
-          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies")]);
+          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors")]);
         }).then(function () {
           notice("Transactions refreshed");
           vm.refreshing = false;

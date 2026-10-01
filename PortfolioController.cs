@@ -138,6 +138,32 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("vendors")]
+        public IHttpActionResult Vendors()
+        {
+            try { return Ok(Db.Query("SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors ORDER BY Name")); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("vendors")]
+        public IHttpActionResult SaveVendor(VendorRequest value)
+        {
+            if (value == null) return BadRequest("Vendor details are required.");
+            value.Name = (value.Name ?? "").Trim();
+            if (value.Name.Length == 0) return BadRequest("Vendor name is required.");
+            try
+            {
+                return Ok(Db.Query(@"DECLARE @SavedVendorId INT = NULLIF(@VendorId,0);
+                    IF EXISTS(SELECT 1 FROM dbo.Vendors WHERE UPPER(LTRIM(RTRIM(Name)))=UPPER(@Name) AND (@SavedVendorId IS NULL OR VendorId<>@SavedVendorId)) THROW 50038,'Vendor already exists.',1;
+                    IF @SavedVendorId IS NULL
+                    BEGIN INSERT dbo.Vendors(Name,IsActive) VALUES(@Name,@IsActive); SET @SavedVendorId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Vendors SET Name=@Name,IsActive=@IsActive,UpdatedUtc=SYSUTCDATETIME() WHERE VendorId=@SavedVendorId;
+                    SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors WHERE VendorId=@SavedVendorId",
+                    P("@VendorId", value.VendorId ?? 0), P("@Name", value.Name), P("@IsActive", value.IsActive)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet, Route("pets/{petId:int}/history")]
         public IHttpActionResult History(int petId)
         {
