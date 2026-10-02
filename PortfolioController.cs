@@ -288,7 +288,7 @@ namespace DFM.Web.Controllers
                 }
                 var saved = rows.FirstOrDefault();
                 var projectId = SavedProjectId(saved, value.ProjectId);
-                PersistProjectSizing(projectId, value);
+                PersistProjectSizing(projectId, value, User.Identity.Name);
                 return Ok(RefreshedProject(projectId) ?? saved);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -301,7 +301,7 @@ namespace DFM.Web.Controllers
             return fallback;
         }
 
-        private static void PersistProjectSizing(int? projectId, ProjectRequest value)
+        private static void PersistProjectSizing(int? projectId, ProjectRequest value, string userName)
         {
             if (!projectId.HasValue) return;
             Db.Execute(@"IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
@@ -310,7 +310,7 @@ namespace DFM.Web.Controllers
                 ELSE
                     UPDATE dbo.Projects SET ProjectSize=@ProjectSize,ProjectSizingScores=@ProjectSizingScores,UpdatedUtc=SYSUTCDATETIME()
                     WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'))",
-                P("@ProjectId", projectId.Value), P("@ProjectSize", PlainProjectSize(value.ProjectSize)), P("@LegacyProjectSize", ProjectSizeForLegacyDatabase(value)), P("@ProjectSizingScores", value.ProjectSizingScores), P("@User", User.Identity.Name));
+                P("@ProjectId", projectId.Value), P("@ProjectSize", PlainProjectSize(value.ProjectSize)), P("@LegacyProjectSize", ProjectSizeForLegacyDatabase(value)), P("@ProjectSizingScores", value.ProjectSizingScores), P("@User", userName));
         }
 
         private static Dictionary<string, object> RefreshedProject(int? projectId)
