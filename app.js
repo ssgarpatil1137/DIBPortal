@@ -1984,6 +1984,7 @@
             requiresPet: true,
           },
         );
+        vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
         vm.form.isJira = project ? !!project.jiraKey : true;
@@ -2015,6 +2016,7 @@
       }
       vm.validateProjectRegistration = validateProjectRegistration;
       vm.pickJira = function () {
+        if (vm.form && vm.form.isEdit) return;
         var jira = vm.jira.filter(function (j) {
           return j.jiraKey === vm.form.jiraKey;
         })[0];
@@ -2538,6 +2540,7 @@
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
+          updateProjectSizeFromScores();
           var payload = {
             projectId: vm.form.projectId || null,
             isJira: !!vm.form.isJira,

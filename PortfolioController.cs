@@ -262,6 +262,7 @@ namespace DFM.Web.Controllers
             if (value == null || string.IsNullOrWhiteSpace(value.ProjectName)) return BadRequest("Project name is required.");
             try
             {
+                PreserveRegisteredProjectIdentity(value);
                 var duplicate = DuplicateProjectRegistrationMessage(value);
                 if (duplicate != null) return BadRequest(duplicate);
                 value.BudgetType = NormalizeBudgetType(value.BudgetType);
@@ -289,6 +290,15 @@ namespace DFM.Web.Controllers
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static void PreserveRegisteredProjectIdentity(ProjectRequest value)
+        {
+            if (value == null || !value.ProjectId.HasValue) return;
+            var existing = Db.Query("SELECT IsJira,JiraKey FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            if (existing == null) return;
+            value.IsJira = Convert.ToBoolean(existing["IsJira"]);
+            value.JiraKey = Convert.ToString(existing["JiraKey"]);
         }
 
         [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpDelete, Route("projects/{projectId:int}")]

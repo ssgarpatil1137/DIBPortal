@@ -751,12 +751,14 @@
                   <button
                     type="button"
                     ng-class="{active:vm.form.isJira}"
+                    ng-disabled="vm.form.isEdit"
                     ng-click="vm.form.isJira=true"
                   >
                     JIRA</button
                   ><button
                     type="button"
                     ng-class="{active:!vm.form.isJira}"
+                    ng-disabled="vm.form.isEdit"
                     ng-click="vm.form.isJira=false"
                   >
                     Non-JIRA
@@ -766,6 +768,7 @@
                 >JIRA ID<select falcon-select2 data-placeholder="Search JIRA ID or project name"
                   ng-model="vm.form.jiraKey"
                   ng-change="vm.pickJira()"
+                  ng-disabled="vm.form.isEdit"
                   required
                 >
                   <option value="">
@@ -810,7 +813,7 @@
                     <button type="button" ng-repeat="level in vm.projectSizingLevels" ng-class="{active:vm.projectSizingScore(criterion)===level.score}" ng-click="vm.setProjectSizingScore(criterion,level)">{{level.label}} ({{level.score}})<small>{{criterion[level.key]}}</small></button>
                   </div>
                 </div>
-                <div class="sizing-result"><span>Weighted total: {{vm.projectSizingWeightedTotal()||0}}</span><strong>Project size: {{vm.form.projectSize||'Not selected'}}</strong></div>
+                <div class="sizing-result"><span>Weighted total: {{vm.projectSizingWeightedTotal()||0}}</span><strong><small>Project size</small>{{vm.form.projectSize||'Not selected'}}</strong></div>
               </div
               ><label
                 >Project manager<input
