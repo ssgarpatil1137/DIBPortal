@@ -40,6 +40,11 @@ namespace DFM.Web.Infrastructure
 
         public static void ValidateBudgetLineAmount(int petId, int? budgetLineId, decimal cost, IEnumerable<int> sourceSpendItemIds)
         {
+            ValidateBudgetLineAmount(petId, budgetLineId, cost, sourceSpendItemIds, null);
+        }
+
+        public static void ValidateBudgetLineAmount(int petId, int? budgetLineId, decimal cost, IEnumerable<int> sourceSpendItemIds, string glNumber)
+        {
             if (cost <= 0) throw new ArgumentException("A positive Budget Line amount is required.");
 
             var pet = Db.Query("SELECT Code,RequestedAmount FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
@@ -51,6 +56,28 @@ namespace DFM.Web.Infrastructure
             var available = approvedAmount - existingBudgetLines;
             if (cost > available)
                 throw new ArgumentException("Budget Line amount exceeds the available balance for PET Reference " + Convert.ToString(pet["Code"]) + ". Available balance: " + Money(Math.Max(available, 0)) + "; entered amount: " + Money(cost) + ".");
+
+            ValidateGlBudgetLineAmount(budgetLineId, cost, glNumber);
+        }
+
+        private static void ValidateGlBudgetLineAmount(int? budgetLineId, decimal cost, string glNumber)
+        {
+            glNumber = (glNumber ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(glNumber)) return;
+            var gl = Db.Query(@"SELECT FundAmount,IsActive FROM dbo.GLFunds WHERE UPPER(LTRIM(RTRIM(GlNumber)))=UPPER(LTRIM(RTRIM(@GlNumber)))", P("@GlNumber", glNumber)).FirstOrDefault();
+            if (gl == null) throw new ArgumentException("Selected GL is not active or was not found.");
+            var keepingExistingInactiveGl = budgetLineId.HasValue && ScalarDecimal(@"SELECT COUNT(1) Amount FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId AND UPPER(LTRIM(RTRIM(ISNULL(GlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))", P("@BudgetLineId", budgetLineId), P("@GlNumber", glNumber)) > 0;
+            if (!Convert.ToBoolean(gl["IsActive"]) && !keepingExistingInactiveGl) throw new ArgumentException("Selected GL is not active or was not found.");
+            var used = ScalarDecimal(@"SELECT ISNULL(SUM(bl.Cost),0) Amount
+                FROM dbo.BudgetLines bl
+                JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                WHERE UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))
+                    AND ISNULL(pet.Status,'') NOT IN ('Rejected','Cancelled')
+                    AND ISNULL(bl.CamStatus,'') NOT IN ('Rejected','Cancelled')
+                    AND (@BudgetLineId IS NULL OR bl.BudgetLineId<>@BudgetLineId)", P("@GlNumber", glNumber), P("@BudgetLineId", budgetLineId));
+            var available = ToDecimal(gl["FundAmount"]) - used;
+            if (cost > available)
+                throw new ArgumentException("Budget Line amount exceeds the available GL balance for " + glNumber + ". Available GL balance: " + Money(Math.Max(available, 0)) + "; entered amount: " + Money(cost) + ".");
         }
 
             public static void ValidateInvoiceAmount(int budgetLineId, int? invoiceId, decimal invoiceAmount)

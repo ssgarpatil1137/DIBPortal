@@ -594,6 +594,29 @@
         <div class="pagination" ng-if="vm.vendorPageCount>1"><button class="icon-btn" ng-disabled="vm.vendorPage===1" ng-click="vm.changeVendorPage(vm.vendorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.vendorPage}} of {{vm.vendorPageCount}}</span><button class="icon-btn" ng-disabled="vm.vendorPage===vm.vendorPageCount" ng-click="vm.changeVendorPage(vm.vendorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
+      <section ng-if="vm.tab==='gl'" class="workspace gl-workspace">
+        <div class="section-bar">
+          <div>
+            <h2>GL Management</h2>
+            <span>Manage optional GL funding definitions used at Budget Line level.</span>
+          </div>
+          <button class="btn secondary" ng-click="vm.openGlFund()"><i data-lucide="plus"></i>Add GL</button>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.glSearch" ng-change="vm.updateGlView()" placeholder="Search GL number, name, status" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table gl-register">
+            <thead><tr><th>GL Number</th><th>Description / Name</th><th>Fund Amount</th><th>Reserved</th><th>Available</th><th>Status</th><th>Created</th><th>Created By</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="gl in vm.visibleGlFunds track by gl.glFundId"><td>{{gl.glNumber}}</td><td title="{{gl.glName}}"><span class="truncate-cell wide-cell">{{gl.glName}}</span></td><td>{{vm.money(gl.fundAmount)}}</td><td>{{vm.money(gl.reservedAmount)}}</td><td>{{vm.money(gl.availableBalance)}}</td><td><span class="status" ng-class="gl.isActive?'approved':'rejected'">{{gl.isActive?'Active':'Inactive'}}</span></td><td>{{gl.createdUtc|date:'dd-MMM-yyyy'}}</td><td title="{{gl.createdBy}}"><span class="truncate-cell">{{gl.createdBy}}</span></td><td><button class="icon-btn" title="Edit GL" ng-click="vm.openGlFund(gl)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{gl.isActive?'Deactivate':'Activate'}} GL" ng-click="vm.toggleGlFund(gl)"><i data-lucide="power"></i></button></td></tr>
+              <tr ng-if="!vm.visibleGlFunds.length"><td colspan="9"><div class="empty inline-empty"><i data-lucide="badge-dollar-sign"></i><strong>No GL funding definitions match the search.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.glPageCount>1"><button class="icon-btn" ng-disabled="vm.glPage===1" ng-click="vm.changeGlPage(vm.glPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.glPage}} of {{vm.glPageCount}}</span><button class="icon-btn" ng-disabled="vm.glPage===vm.glPageCount" ng-click="vm.changeGlPage(vm.glPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
       <section ng-if="vm.tab==='roles'" class="workspace">
         <div class="section-bar">
           <div><h2>Role management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
@@ -1190,7 +1213,12 @@
                   <option>USD</option>
                   <option>EUR</option>
                 </select></label
-              ><label>GL number<input ng-model="vm.form.glNumber" /></label
+              ><label>GL funding<select ng-model="vm.form.glNumber" ng-options="gl.glNumber as (gl.glNumber+' · '+gl.glName+' · '+vm.money(gl.availableBalance)+' available') for gl in vm.activeGlFunds()"><option value="">No GL - use project CAPEX/OPEX</option></select></label
+              ><div class="full detail-grid" ng-if="vm.selectedGlFund()" style="grid-template-columns:repeat(3,1fr)">
+                <div><small>GL Description</small><strong>{{vm.selectedGlFund().glName}}</strong></div>
+                <div><small>GL Fund Amount</small><strong>{{vm.money(vm.selectedGlFund().fundAmount)}}</strong></div>
+                <div><small>Available GL Balance</small><strong>{{vm.money(vm.selectedGlFund().availableBalance)}}</strong></div>
+              </div
               ><label>CAM ID<input ng-model="vm.form.camId" /></label
               ><label
                 >Status<select ng-model="vm.form.camStatus">
@@ -1397,6 +1425,30 @@
                   required /></label
               ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>
+            <div ng-if="vm.modal.type==='gl'" class="form-grid">
+              <label
+                >GL Number<input
+                  ng-model="vm.form.glNumber"
+                  maxlength="50"
+                  required /></label
+              ><label
+                >GL Description / Name<input
+                  ng-model="vm.form.glName"
+                  maxlength="300"
+                  required /></label
+              ><label
+                >Fund Amount<input
+                  type="text"
+                  inputmode="decimal"
+                  ng-model="vm.form.fundAmount"
+                  required /></label
+              ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label
+              ><div class="full detail-grid" ng-if="vm.form.glFundId" style="grid-template-columns:repeat(3,1fr)">
+                <div><small>Reserved</small><strong>{{vm.money(vm.form.reservedAmount)}}</strong></div>
+                <div><small>Available</small><strong>{{vm.money(vm.form.availableBalance)}}</strong></div>
+                <div><small>Created By</small><strong>{{vm.form.createdBy||'Not supplied'}}</strong></div>
+              </div>
+            </div>
             <div ng-if="vm.modal.type==='upload'" class="upload-zone">
               <i data-lucide="cloud-upload"></i>
               <h3>Drop CSV, Excel, or attachments here</h3>
@@ -1501,6 +1553,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=22"></script>
+    <script src="app/app.js?v=23"></script>
   </body>
 </html>

@@ -115,6 +115,15 @@
       vm.vendorPageCount = 1;
       vm.vendorFilteredCount = 0;
       vm.visibleVendors = [];
+      vm.glFunds = [
+        { glFundId: 1, glNumber: "GL001", glName: "Strategic transformation GL", fundAmount: 1200000, reservedAmount: 400000, availableBalance: 800000, isActive: true, createdUtc: new Date(), createdBy: "preview" },
+      ];
+      vm.glSearch = "";
+      vm.glPage = 1;
+      vm.glPageSize = 20;
+      vm.glPageCount = 1;
+      vm.glFilteredCount = 0;
+      vm.visibleGlFunds = [];
       vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
       vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
       vm.costTypeOptions = [
@@ -145,6 +154,7 @@
         { id: "budgets", label: "CAPEX / OPEX", icon: "landmark", roles: ["Admin", "Master"] },
         { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
         { id: "vendors", label: "Vendors", icon: "store", roles: ["Admin", "Master"] },
+        { id: "gl", label: "GL Management", icon: "badge-dollar-sign", roles: ["Admin", "Master"] },
         { id: "roles", label: "Role management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
@@ -443,7 +453,7 @@
       vm.authTitle = function () { return { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
-      vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); prepareProjects(); vm.updateView(); redraw(); };
+      vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
         return String(value || "").trim().replace(/[;,]+$/g, "").trim().toLowerCase();
@@ -463,6 +473,7 @@
             loadDashboard();
             loadCurrencies(false);
             loadVendors(false);
+            loadGlFunds(false);
             loadRoles(false);
           } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
           else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
@@ -517,14 +528,14 @@
         var loadedFromCache = false;
         try {
           var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
-          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadVendors(false); loadRoles(false); }
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadVendors(false); loadGlFunds(false); loadRoles(false); }
         } catch (ignore) { }
         $http.get("api/auth/session").then(function (response) {
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
           if (loadedFromCache) vm.updateView(true);
-          else { loadDashboard(); loadCurrencies(false); loadVendors(false); loadRoles(false); }
+          else { loadDashboard(); loadCurrencies(false); loadVendors(false); loadGlFunds(false); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -553,6 +564,7 @@
         vm.tab = tabId;
         if (tabId === "currencies") loadCurrencies(true);
         if (tabId === "vendors") loadVendors(true);
+        if (tabId === "gl") loadGlFunds(true);
         if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
         redraw();
@@ -1532,6 +1544,17 @@
           noticeError("Budget Line amount exceeds the Available PET Amount for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available PET Amount: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
           return false;
         }
+        if (String(vm.form && vm.form.glNumber || "").trim()) {
+          var gl = vm.selectedGlFund();
+          if (!gl || !gl.isActive) { noticeError("Selected GL is not active or was not found."); return false; }
+          var currentLine = (vm.selectedPet && vm.form && vm.form.budgetLineId && (vm.selectedPet.budgetLines || []).filter(function (line) { return Number(line.budgetLineId) === Number(vm.form.budgetLineId); })[0]) || null;
+          var availableGl = parseNumericInput(gl.availableBalance);
+          if (currentLine && normalizedGlNumber(currentLine.glNumber) === normalizedGlNumber(gl.glNumber)) availableGl += parseNumericInput(currentLine.cost);
+          if (cost > availableGl) {
+            noticeError("Budget Line amount exceeds the available GL balance for " + gl.glNumber + ". Available GL balance: " + vm.money(Math.max(availableGl, 0)) + "; entered amount: " + vm.money(cost) + ".");
+            return false;
+          }
+        }
         return true;
       }
       function validateSpendFormAmounts(form) {
@@ -1757,6 +1780,7 @@
         vm.updateBudgetView(keepPage);
         vm.updateCurrencyView(keepPage);
         vm.updateVendorView(keepPage);
+        vm.updateGlView(keepPage);
         vm.updateReportView();
         vm.updateReportProjectView(keepPage);
       };
@@ -1765,6 +1789,7 @@
       vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); redraw(); };
       vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); redraw(); };
       vm.changeVendorPage = function (page) { vm.vendorPage = Math.max(1, Math.min(vm.vendorPageCount, page)); vm.updateVendorView(true); redraw(); };
+      vm.changeGlPage = function (page) { vm.glPage = Math.max(1, Math.min(vm.glPageCount, page)); vm.updateGlView(true); redraw(); };
       vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); redraw(); };
       vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); redraw(); };
       function buildApprovalItems() {
@@ -1894,6 +1919,17 @@
         if (!keepPage || vm.vendorPage > vm.vendorPageCount) vm.vendorPage = 1;
         var start = (vm.vendorPage - 1) * vm.vendorPageSize;
         vm.visibleVendors = filtered.slice(start, start + vm.vendorPageSize);
+      };
+      vm.updateGlView = function (keepPage) {
+        var query = (vm.glSearch || "").toLowerCase();
+        var filtered = (vm.glFunds || []).filter(function (gl) {
+          return !query || [gl.glNumber, gl.glName, gl.fundAmount, gl.availableBalance, gl.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
+        });
+        vm.glFilteredCount = filtered.length;
+        vm.glPageCount = Math.max(1, Math.ceil(filtered.length / vm.glPageSize));
+        if (!keepPage || vm.glPage > vm.glPageCount) vm.glPage = 1;
+        var start = (vm.glPage - 1) * vm.glPageSize;
+        vm.visibleGlFunds = filtered.slice(start, start + vm.glPageSize);
       };
       vm.updateRoleView = function (keepPage) {
         var query = (vm.roleSearch || "").toLowerCase();
@@ -2381,6 +2417,40 @@
         };
         redraw();
       };
+      vm.openGlFund = function (gl) {
+        vm.selectedGlFundItem = gl || null;
+        vm.form = angular.copy(gl || { glNumber: "", glName: "", fundAmount: 0, isActive: true });
+        vm.modal = {
+          type: "gl",
+          kicker: "MASTER CONTROL",
+          title: gl ? "Edit " + gl.glNumber : "Add GL funding",
+          submit: gl ? "Update GL" : "Add GL",
+        };
+        redraw();
+      };
+      vm.toggleGlFund = function (gl) {
+        if (!gl) return;
+        var previous = !!gl.isActive;
+        vm.selectedGlFundItem = gl;
+        vm.form = angular.copy(gl);
+        vm.form.isActive = !previous;
+        if (vm.demo) {
+          angular.extend(gl, vm.form);
+          vm.updateGlView(true);
+          notice(gl.isActive ? "GL activated" : "GL deactivated");
+          redraw();
+          return;
+        }
+        $http.post("api/portfolio/gl-funds", vm.form).then(function (response) {
+          angular.extend(gl, response.data || vm.form);
+          vm.updateGlView(true);
+          notice(gl.isActive ? "GL activated" : "GL deactivated");
+          redraw();
+        }, function (response) {
+          gl.isActive = previous;
+          noticeError(responseMessage(response, "Unable to update GL status."));
+        });
+      };
       vm.openUpload = function (kind, item) {
         var templates = {
           pet: "templates/pet-upload-template.csv",
@@ -2858,7 +2928,7 @@
             uploadBudgetLineDocuments(budgetLineId).then(function () {
               notice("Budget line saved");
               vm.close();
-              loadDashboard().then(function () { if (budgetLineProjectId) refreshProjectPets(budgetLineProjectId, true); });
+              loadDashboard().then(function () { return loadGlFunds(false); }).then(function () { if (budgetLineProjectId) refreshProjectPets(budgetLineProjectId, true); });
             }, function (uploadResponse) {
               noticeError(responseMessage(uploadResponse, "Budget line was saved, but document upload failed."));
             });
@@ -2980,6 +3050,34 @@
               vm.close();
               redraw();
             }, function (response) { noticeError(responseMessage(response, "Unable to save vendor.")); });
+            return;
+          }
+        }
+        if (type === "gl") {
+          if (!vm.form || !String(vm.form.glNumber || "").trim()) { noticeError("GL Number is required."); return; }
+          if (!String(vm.form.glName || "").trim()) { noticeError("GL Description/Name is required."); return; }
+          if (!validateNumericInput(vm.form.fundAmount, "Fund Amount", false)) return;
+          vm.form.glNumber = normalizedGlNumber(vm.form.glNumber);
+          vm.form.glName = String(vm.form.glName || "").trim();
+          vm.form.fundAmount = parseNumericInput(vm.form.fundAmount);
+          if (!validateGlDuplicate(vm.form)) return;
+          if (vm.demo) {
+            vm.form.reservedAmount = vm.form.reservedAmount || 0;
+            vm.form.availableBalance = Math.max(vm.form.fundAmount - vm.form.reservedAmount, 0);
+            if (vm.selectedGlFundItem) angular.extend(vm.selectedGlFundItem, vm.form);
+            else { vm.form.glFundId = Date.now(); vm.form.createdUtc = new Date(); vm.form.createdBy = vm.session.email; vm.glFunds.push(vm.form); }
+            vm.updateGlView(true);
+            notice("GL saved");
+          } else {
+            $http.post("api/portfolio/gl-funds", vm.form).then(function (response) {
+              var saved = response.data || vm.form;
+              if (vm.selectedGlFundItem) angular.extend(vm.selectedGlFundItem, saved);
+              else vm.glFunds.push(saved);
+              vm.updateGlView(true);
+              notice("GL saved");
+              vm.close();
+              redraw();
+            }, function (response) { noticeError(responseMessage(response, "Unable to save GL.")); });
             return;
           }
         }
@@ -3131,6 +3229,16 @@
           if (showError || vm.tab === "vendors") noticeError(responseMessage(response, "Unable to load vendors."));
         });
       }
+      function loadGlFunds(showError) {
+        if (vm.demo) { vm.updateGlView(true); return $q.when(); }
+        return $http.get("api/portfolio/gl-funds").then(function (response) {
+          vm.glFunds = response.data || [];
+          vm.updateGlView(true);
+          redraw();
+        }, function (response) {
+          if (showError || vm.tab === "gl") noticeError(responseMessage(response, "Unable to load GL funding."));
+        });
+      }
       function normalizedVendorName(value) {
         return String(value || "").trim().toLowerCase();
       }
@@ -3143,6 +3251,26 @@
         if (duplicate) { noticeError("Vendor already exists."); return false; }
         return true;
       }
+      function normalizedGlNumber(value) {
+        return String(value || "").trim().toUpperCase();
+      }
+      function validateGlDuplicate(gl) {
+        var glNumber = normalizedGlNumber(gl && gl.glNumber);
+        var glFundId = gl && gl.glFundId;
+        var duplicate = (vm.glFunds || []).filter(function (item) {
+          return item && normalizedGlNumber(item.glNumber) === glNumber && (!glFundId || String(item.glFundId) !== String(glFundId));
+        })[0];
+        if (duplicate) { noticeError("GL Number already exists."); return false; }
+        return true;
+      }
+      vm.activeGlFunds = function () {
+        var selected = normalizedGlNumber(vm.form && vm.form.glNumber);
+        return (vm.glFunds || []).filter(function (gl) { return gl && (gl.isActive || normalizedGlNumber(gl.glNumber) === selected); });
+      };
+      vm.selectedGlFund = function () {
+        var glNumber = normalizedGlNumber(vm.form && vm.form.glNumber);
+        return (vm.glFunds || []).filter(function (gl) { return normalizedGlNumber(gl.glNumber) === glNumber; })[0] || null;
+      };
       function normalizeRoleUsers(users) {
         return users.map(function (user) {
           var roles = String(user.roles || "").split(",").filter(Boolean);
@@ -3184,7 +3312,7 @@
         loadDashboard().then(function () {
           return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
         }).then(function () {
-          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors")]);
+          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors"), loadGlFunds(vm.tab === "gl")]);
         }).then(function () {
           notice("Transactions refreshed");
           vm.refreshing = false;

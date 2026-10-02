@@ -149,6 +149,28 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [HttpGet, Route("gl-funds")]
+        public IHttpActionResult GlFunds()
+        {
+            try
+            {
+                var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
+                return Ok(Db.Query("SELECT GlFundId,GlNumber,GlName,FundAmount,ReservedAmount,AvailableBalance,IsActive,CreatedUtc,CreatedBy,UpdatedUtc,UpdatedBy,IsUsed FROM dbo.vw_GLFundBalances WHERE @includeInactive=1 OR IsActive=1 ORDER BY GlNumber", P("@includeInactive", includeInactive)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("gl-funds")]
+        public IHttpActionResult SaveGlFund(GlFundRequest value)
+        {
+            if (value == null) return BadRequest("GL details are required.");
+            try
+            {
+                return Ok(Db.Query("EXEC dbo.sp_SaveGLFund @GLFundId,@GlNumber,@GlName,@FundAmount,@IsActive,@User", P("@GLFundId", value.GlFundId), P("@GlNumber", value.GlNumber), P("@GlName", value.GlName), P("@FundAmount", value.FundAmount), P("@IsActive", value.IsActive), P("@User", User.Identity.Name)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Admin", "Master"), HttpPost, Route("vendors")]
         public IHttpActionResult SaveVendor(VendorRequest value)
         {
@@ -572,7 +594,7 @@ namespace DFM.Web.Controllers
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
                 VendorMaintenance.EnsureVendors(value.Vendor);
-                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds);
+                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds, value.GlNumber);
                 var saved = SaveBudgetLineRow(value, lpoStatus);
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
                 if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
