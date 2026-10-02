@@ -1334,7 +1334,7 @@
                       <td>{{invoice.paymentDate|date:'dd-MMM-yyyy'}}</td>
                       <td>{{invoice.createdUtc|date:'dd-MMM-yyyy'}}</td>
                       <td><p ng-repeat="doc in vm.invoiceDocuments(invoice) track by doc.attachmentId"><strong>{{doc.originalName}}</strong> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,true)">View</button> <button type="button" class="link-btn" ng-click="vm.downloadAttachment(doc,false)">Download</button></p><span ng-if="!vm.invoiceDocuments(invoice).length">Not uploaded</span></td>
-                      <td><button type="button" class="icon-btn danger" ng-if="vm.canDeleteInvoice(invoice)" ng-click="vm.deleteInvoice(invoice)" title="Delete invoice"><i data-lucide="trash-2"></i></button><span ng-if="!vm.canDeleteInvoice(invoice)">Locked</span></td>
+                      <td><button type="button" class="icon-btn" ng-click="vm.openInvoice(vm.selectedLine,invoice)" title="Edit invoice"><i data-lucide="pencil"></i></button><button type="button" class="icon-btn danger" ng-if="vm.canDeleteInvoice(invoice)" ng-click="vm.deleteInvoice(invoice)" title="Delete invoice"><i data-lucide="trash-2"></i></button><span ng-if="!vm.canDeleteInvoice(invoice)">Locked</span></td>
                     </tr>
                   </tbody>
                 </table>
