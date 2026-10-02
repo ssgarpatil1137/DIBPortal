@@ -605,11 +605,26 @@
         var size = projectSizeFromScore(vm.projectSizingWeightedTotal());
         if (size) vm.form.projectSize = size;
       }
+      function projectSizingTotal(scores) {
+        return Math.round(vm.projectSizingCriteria.reduce(function (total, criterion) {
+          return total + (Number(scores && scores[criterion.key]) || 0) * criterion.weight / 100;
+        }, 0) * 100) / 100;
+      }
       function parseProjectSizingScores(value) {
         if (!value) return {};
         if (angular.isObject(value)) return angular.copy(value);
         try { return JSON.parse(value); }
-        catch (ignore) { return {}; }
+        catch (ignore) {
+          var parts = String(value || "").split(",");
+          if (parts.length < 2) return {};
+          var scores = {};
+          parts.forEach(function (score, index) {
+            var criterion = vm.projectSizingCriteria[index];
+            var numericScore = Number(score) || 0;
+            if (criterion && numericScore) scores[criterion.key] = numericScore;
+          });
+          return scores;
+        }
       }
       function splitStoredProjectSize(value) {
         var parts = String(value || "").split("|");
@@ -634,12 +649,15 @@
         return scores.some(function (score) { return score > 0; }) ? size + "|" + scores.join(",") : size;
       }
       vm.projectSizingLabel = function (project) {
-        var size = splitStoredProjectSize(project && (project.projectSize || project.ProjectSize)).size;
+        var scores = parseProjectSizingScores(project && (project.projectSizingScores || project.ProjectSizingScores));
+        if (!Object.keys(scores).length) scores = scoresFromStoredProjectSize(project && (project.projectSize || project.ProjectSize));
+        var size = projectSizeFromScore(projectSizingTotal(scores)) || splitStoredProjectSize(project && (project.projectSize || project.ProjectSize)).size;
         return size || "Not supplied";
       };
       function projectSizingLevel(project, criterion) {
         if (!criterion) return null;
         var scores = parseProjectSizingScores(project && (project.projectSizingScores || project.ProjectSizingScores));
+        if (!Object.keys(scores).length) scores = scoresFromStoredProjectSize(project && (project.projectSize || project.ProjectSize));
         var score = Number(scores[criterion.key]) || 0;
         return vm.projectSizingLevels.filter(function (level) { return level.score === score; })[0] || null;
       }
@@ -655,9 +673,9 @@
         if (!project) return project;
         var rawSize = project.projectSize || project.ProjectSize || "";
         var storedSize = splitStoredProjectSize(rawSize);
-        project.projectSize = storedSize.size;
         project.projectSizingScores = parseProjectSizingScores(project.projectSizingScores || project.ProjectSizingScores);
         if (!Object.keys(project.projectSizingScores).length) project.projectSizingScores = scoresFromStoredProjectSize(rawSize);
+        project.projectSize = projectSizeFromScore(projectSizingTotal(project.projectSizingScores)) || storedSize.size;
         return project;
       }
       function projectSizingPayload() {
