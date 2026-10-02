@@ -1322,23 +1322,23 @@
       }
       vm.deleteProject = function (project) {
         if (!window.confirm("Delete project " + project.projectCode + "? This cannot be undone.")) return;
-        $http.delete("api/portfolio/projects/" + project.projectId).then(function () {
+        $http.post("api/portfolio/projects/" + project.projectId + "/delete").then(function () {
           notice("Project deleted");
           loadDashboard();
-        }, function (response) { noticeError((response.data && response.data.message) || "Unable to delete this project."); });
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete this project.")); });
       };
       vm.deletePet = function (project, pet) {
         if (!window.confirm("Delete PET " + pet.code + "? This cannot be undone.")) return;
-        $http.delete("api/portfolio/pets/" + pet.petId).then(function () {
+        $http.post("api/portfolio/pets/" + pet.petId + "/delete").then(function () {
           notice("PET deleted");
           refreshProjectPets(project.projectId, true);
           loadDashboard();
-        }, function (response) { noticeError((response.data && response.data.message) || "Unable to delete this PET."); });
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete this PET.")); });
       };
       vm.deleteBudgetLine = function (project, line) {
         if ((line.invoices || []).length) { noticeError("Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first."); return; }
         if (!window.confirm("Delete Budget Line " + (line.petReference || line.camId || line.budgetLineId) + "? This cannot be undone.")) return;
-        $http.delete("api/portfolio/budget-lines/" + line.budgetLineId).then(function () {
+        $http.post("api/portfolio/budget-lines/" + line.budgetLineId + "/delete").then(function () {
           notice("Budget line deleted");
           refreshProjectPets(project.projectId, true);
           loadDashboard();

@@ -362,17 +362,83 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpDelete, Route("projects/{projectId:int}")]
         public IHttpActionResult DeleteProject(int projectId)
         {
+            return DeleteProjectCore(projectId);
+        }
+
+        [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpPost, Route("projects/{projectId:int}/delete")]
+        public IHttpActionResult DeleteProjectPost(int projectId)
+        {
+            return DeleteProjectCore(projectId);
+        }
+
+        private IHttpActionResult DeleteProjectCore(int projectId)
+        {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try { Db.Execute("EXEC dbo.sp_DeleteProject @ProjectId,@User", P("@ProjectId", projectId), P("@User", User.Identity.Name)); return Ok(); }
+            try { DeleteProjectRow(projectId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("pets/{petId:int}")]
         public IHttpActionResult DeletePet(int petId)
         {
+            return DeletePetCore(petId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets/{petId:int}/delete")]
+        public IHttpActionResult DeletePetPost(int petId)
+        {
+            return DeletePetCore(petId);
+        }
+
+        private IHttpActionResult DeletePetCore(int petId)
+        {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try { Db.Execute("EXEC dbo.sp_DeletePet @PetId,@User", P("@PetId", petId), P("@User", User.Identity.Name)); return Ok(); }
+            try { DeletePetRow(petId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteProjectRow(int projectId)
+        {
+            Db.Execute(@"
+DECLARE @RequestorEmail nvarchar(254);
+SELECT @RequestorEmail=RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId;
+IF @RequestorEmail IS NULL BEGIN RAISERROR('Project not found.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this project.',16,1); RETURN; END;
+IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) BEGIN RAISERROR('This project has PET requests; delete them first.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
+DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;",
+                P("@ProjectId", projectId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
+        }
+
+        private void DeletePetRow(int petId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254);
+SELECT @ProjectId=pet.ProjectId, @Status=pet.Status, @RequestorEmail=p.RequestorEmail
+FROM dbo.PETRequests pet
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE pet.PetId=@PetId;
+IF @ProjectId IS NULL BEGIN RAISERROR('PET not found.',16,1); RETURN; END;
+IF @Status NOT IN ('Draft','Pending Review','Sent Back') BEGIN RAISERROR('Only a PET that has not been approved yet can be deleted.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this PET.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='InvoiceDocument' AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId WHERE bl.PetId=@PetId);
+DELETE FROM dbo.Attachments WHERE EntityType IN ('BudgetLineCAM','BudgetLineLPO') AND EntityId IN (SELECT BudgetLineId FROM dbo.BudgetLines WHERE PetId=@PetId);
+DELETE FROM dbo.Attachments WHERE EntityType='PET' AND EntityId=@PetId;
+DELETE i FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId WHERE bl.PetId=@PetId;
+IF OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NOT NULL DELETE bsi FROM dbo.BudgetLineSpendItems bsi JOIN dbo.BudgetLines bl ON bl.BudgetLineId=bsi.BudgetLineId WHERE bl.PetId=@PetId;
+DELETE FROM dbo.BudgetLines WHERE PetId=@PetId;
+DELETE FROM dbo.SpendItems WHERE PetId=@PetId;
+DELETE FROM dbo.WorkflowHistory WHERE PetId=@PetId;
+DELETE FROM dbo.PETRequests WHERE PetId=@PetId;
+IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Status NOT IN('Rejected'))
+ UPDATE dbo.Projects SET Status=CASE WHEN RequiresPet=0 THEN 'Registered' ELSE 'Active' END, UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId;",
+                P("@PetId", petId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets")]
@@ -620,16 +686,41 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("budget-lines/{budgetLineId:int}")]
         public IHttpActionResult DeleteBudgetLine(int budgetLineId)
         {
+            return DeleteBudgetLineCore(budgetLineId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines/{budgetLineId:int}/delete")]
+        public IHttpActionResult DeleteBudgetLinePost(int budgetLineId)
+        {
+            return DeleteBudgetLineCore(budgetLineId);
+        }
+
+        private IHttpActionResult DeleteBudgetLineCore(int budgetLineId)
+        {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try
-            {
-                var invoiceCount = Db.Query("SELECT COUNT(1) InvoiceCount FROM dbo.Invoices WHERE BudgetLineId=@BudgetLineId", P("@BudgetLineId", budgetLineId)).FirstOrDefault();
-                if (invoiceCount != null && Convert.ToInt32(invoiceCount["InvoiceCount"]) > 0) return BadRequest("Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first.");
-                if (BudgetLineSpendItemSelectionAvailable()) Db.Execute("DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId", P("@BudgetLineId", budgetLineId));
-                Db.Execute("EXEC dbo.sp_DeleteBudgetLine @BudgetLineId,@User", P("@BudgetLineId", budgetLineId), P("@User", User.Identity.Name));
-                return Ok();
-            }
+            try { DeleteBudgetLineRow(budgetLineId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteBudgetLineRow(int budgetLineId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @RequestorEmail nvarchar(254);
+SELECT @ProjectId=p.ProjectId, @RequestorEmail=p.RequestorEmail
+FROM dbo.BudgetLines bl
+JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE bl.BudgetLineId=@BudgetLineId;
+IF @ProjectId IS NULL BEGIN RAISERROR('Budget Line not found.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this Budget Line.',16,1); RETURN; END;
+IF EXISTS(SELECT 1 FROM dbo.Invoices WHERE BudgetLineId=@BudgetLineId) BEGIN RAISERROR('Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType IN ('BudgetLineCAM','BudgetLineLPO') AND EntityId=@BudgetLineId;
+IF OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NOT NULL DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId;
+DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
+                P("@BudgetLineId", budgetLineId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices")]
