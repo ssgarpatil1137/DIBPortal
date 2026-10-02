@@ -1353,7 +1353,7 @@
         if (!window.confirm("Delete Invoice " + (invoice.invoiceNumber || invoice.invoiceId) + "? This cannot be undone.")) return;
         var projectId = vm.selectedProject && vm.selectedProject.projectId;
         var budgetLineId = vm.selectedLine && vm.selectedLine.budgetLineId;
-        $http.delete("api/portfolio/invoices/" + invoice.invoiceId).then(function () {
+        $http.post("api/portfolio/invoices/" + invoice.invoiceId + "/delete").then(function () {
           notice("Invoice deleted");
           vm.invoices = (vm.invoices || []).filter(function (item) { return Number(item.invoiceId) !== Number(invoice.invoiceId); });
           if (vm.selectedLine && vm.selectedLine.invoices) vm.selectedLine.invoices = vm.invoices;

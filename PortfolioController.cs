@@ -644,9 +644,21 @@ namespace DFM.Web.Controllers
         [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("invoices/{invoiceId:int}")]
         public IHttpActionResult DeleteInvoice(int invoiceId)
         {
+            return DeleteInvoiceCore(invoiceId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices/{invoiceId:int}/delete")]
+        public IHttpActionResult DeleteInvoicePost(int invoiceId)
+        {
+            return DeleteInvoiceCore(invoiceId);
+        }
+
+        private IHttpActionResult DeleteInvoiceCore(int invoiceId)
+        {
             if (IsApproverOnly()) return RejectApproverWrite();
             try { DeleteInvoiceRow(invoiceId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
         }
 
         private void DeleteInvoiceRow(int invoiceId)
