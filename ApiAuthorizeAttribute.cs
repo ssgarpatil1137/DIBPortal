@@ -31,6 +31,8 @@ namespace DFM.Web.Infrastructure
         private static bool HasRole(string[] roles, string required)
         {
             return roles.Contains(required, StringComparer.OrdinalIgnoreCase) ||
+                (required.Equals("Requestor", StringComparison.OrdinalIgnoreCase) && roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)) ||
+                (required.Equals("Requestor", StringComparison.OrdinalIgnoreCase) && roles.Contains("Master", StringComparer.OrdinalIgnoreCase)) ||
                 (required.Equals("Master", StringComparison.OrdinalIgnoreCase) && roles.Contains("Admin", StringComparer.OrdinalIgnoreCase)) ||
                 (required.Equals("Admin", StringComparison.OrdinalIgnoreCase) && roles.Contains("Master", StringComparer.OrdinalIgnoreCase));
         }
