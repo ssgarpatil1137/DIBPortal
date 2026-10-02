@@ -645,8 +645,28 @@ namespace DFM.Web.Controllers
         public IHttpActionResult DeleteInvoice(int invoiceId)
         {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try { Db.Execute("EXEC dbo.sp_DeleteInvoice @InvoiceId,@User", P("@InvoiceId", invoiceId), P("@User", User.Identity.Name)); return Ok(); }
+            try { DeleteInvoiceRow(invoiceId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteInvoiceRow(int invoiceId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254);
+SELECT @ProjectId=p.ProjectId, @Status=i.InvoiceStatus, @RequestorEmail=p.RequestorEmail
+FROM dbo.Invoices i
+JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE i.InvoiceId=@InvoiceId;
+IF @ProjectId IS NULL BEGIN RAISERROR('Invoice not found.',16,1); RETURN; END;
+IF UPPER(LTRIM(RTRIM(ISNULL(@Status,'')))) IN ('SETTLED','PAID') BEGIN RAISERROR('Settled or Paid invoices cannot be deleted.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this Invoice.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='InvoiceDocument' AND EntityId=@InvoiceId;
+DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
+                P("@InvoiceId", invoiceId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
         }
 
         [ApiAuthorize("Master"), HttpPut, Route("budgets/{budgetSourceId:int}")]

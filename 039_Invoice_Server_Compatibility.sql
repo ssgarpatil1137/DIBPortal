@@ -24,8 +24,8 @@ CREATE OR ALTER PROCEDURE dbo.sp_DeleteInvoice @InvoiceId int, @User nvarchar(25
 AS
 BEGIN
  SET NOCOUNT ON;
- DECLARE @ProjectId int, @Status nvarchar(50);
- SELECT @ProjectId=p.ProjectId, @Status=i.InvoiceStatus
+ DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254), @IsElevated bit;
+ SELECT @ProjectId=p.ProjectId, @Status=i.InvoiceStatus, @RequestorEmail=p.RequestorEmail
  FROM dbo.Invoices i
  JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
  JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
@@ -33,7 +33,8 @@ BEGIN
  WHERE i.InvoiceId=@InvoiceId;
  IF @ProjectId IS NULL THROW 50032,'Invoice not found.',1;
  IF UPPER(LTRIM(RTRIM(ISNULL(@Status,'')))) IN ('SETTLED','PAID') THROW 50033,'Settled or Paid invoices cannot be deleted.',1;
- IF NOT EXISTS(SELECT 1 FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND (p.RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name IN ('Requestor','Master','Admin'))))
+ SELECT @IsElevated=CASE WHEN EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE UPPER(LTRIM(RTRIM(u.Email)))=UPPER(LTRIM(RTRIM(@User))) AND r.Name IN ('Master','Admin')) THEN 1 ELSE 0 END;
+ IF ISNULL(@IsElevated,0)=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,''))))
   THROW 50034,'You are not allowed to delete this Invoice.',1;
  DELETE FROM dbo.Attachments WHERE EntityType='InvoiceDocument' AND EntityId=@InvoiceId;
  DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;
