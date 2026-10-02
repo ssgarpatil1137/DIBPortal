@@ -488,6 +488,21 @@ caption {
   text-align: left;
   vertical-align: middle;
 }
+.gl-register {
+  min-width: 1180px;
+}
+.gl-workspace .table-scroll {
+  max-height: calc(100vh - 250px);
+  overflow: auto;
+}
+.gl-workspace .data-table th {
+  position: static;
+}
+.gl-workspace .data-table th,
+.gl-workspace .data-table td {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
 .icon-btn {
   border: 0;
   background: transparent;

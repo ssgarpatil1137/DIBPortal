@@ -1539,6 +1539,7 @@
         var cost = parseNumericInput(vm.form && vm.form.cost);
         if (cost <= 0) { noticeError("A positive Budget Line amount is required."); return false; }
         vm.form.cost = cost;
+        if (vm.form && vm.form.glNumber === "__NO_GL__") vm.form.glNumber = "";
         var available = budgetLineAvailablePetAmount(vm.selectedPet, vm.form && vm.form.budgetLineId);
         if (cost > available) {
           noticeError("Budget Line amount exceeds the Available PET Amount for PET Reference " + (vm.selectedPet && vm.selectedPet.code || "") + ". Available PET Amount: " + vm.money(Math.max(available, 0)) + "; entered amount: " + vm.money(cost) + ".");
@@ -2298,6 +2299,7 @@
         if (vm.form.camCreatedDate) vm.form.camCreatedDate = new Date(vm.form.camCreatedDate);
         if (vm.form.camApprovedDate) vm.form.camApprovedDate = new Date(vm.form.camApprovedDate);
         if (vm.form.lpoIssueDate) vm.form.lpoIssueDate = new Date(vm.form.lpoIssueDate);
+        if (!line && !vm.form.glNumber) vm.form.glNumber = "";
         vm.modal = {
           type: "budgetLine",
           kicker: "APPROVED PET",
@@ -3252,7 +3254,8 @@
         return true;
       }
       function normalizedGlNumber(value) {
-        return String(value || "").trim().toUpperCase();
+        value = String(value || "").trim();
+        return value === "__NO_GL__" ? "" : value.toUpperCase();
       }
       function validateGlDuplicate(gl) {
         var glNumber = normalizedGlNumber(gl && gl.glNumber);

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=27" />
+    <link rel="stylesheet" href="app/styles.css?v=28" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -1213,7 +1213,7 @@
                   <option>USD</option>
                   <option>EUR</option>
                 </select></label
-              ><label>GL funding<select ng-model="vm.form.glNumber" ng-options="gl.glNumber as (gl.glNumber+' · '+gl.glName+' · '+vm.money(gl.availableBalance)+' available') for gl in vm.activeGlFunds()"><option value="">No GL - use project CAPEX/OPEX</option></select></label
+              ><label>GL funding<select ng-model="vm.form.glNumber"><option value="" disabled>Select</option><option value="__NO_GL__">No GL - Use project CAPEX/OPEX</option><option ng-repeat="gl in vm.activeGlFunds()" value="{{gl.glNumber}}">{{gl.glNumber}} · {{gl.glName}} · {{vm.money(gl.availableBalance)}} available</option></select></label
               ><div class="full detail-grid" ng-if="vm.selectedGlFund()" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>GL Description</small><strong>{{vm.selectedGlFund().glName}}</strong></div>
                 <div><small>GL Fund Amount</small><strong>{{vm.money(vm.selectedGlFund().fundAmount)}}</strong></div>
