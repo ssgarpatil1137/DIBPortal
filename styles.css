@@ -491,9 +491,13 @@ caption {
 .gl-register {
   min-width: 1180px;
 }
-.gl-workspace .table-scroll {
-  max-height: calc(100vh - 250px);
-  overflow: auto;
+.gl-table-wrap {
+  overflow-x: auto;
+  overflow-y: visible;
+  max-height: none;
+}
+.gl-workspace .section-bar {
+  position: static;
 }
 .gl-workspace .data-table th {
   position: static;

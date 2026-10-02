@@ -605,7 +605,7 @@
             <label class="search"><i data-lucide="search"></i><input ng-model="vm.glSearch" ng-change="vm.updateGlView()" placeholder="Search GL number, name, status" /></label>
           </div>
         </div>
-        <div class="table-scroll">
+        <div class="gl-table-wrap">
           <table class="data-table gl-register">
             <thead><tr><th>GL Number</th><th>Description / Name</th><th>Fund Amount</th><th>Reserved</th><th>Available</th><th>Status</th><th>Created</th><th>Created By</th><th>Action</th></tr></thead>
             <tbody>
@@ -1213,7 +1213,7 @@
                   <option>USD</option>
                   <option>EUR</option>
                 </select></label
-              ><label>GL funding<select ng-model="vm.form.glNumber"><option value="" disabled>Select</option><option value="__NO_GL__">No GL - Use project CAPEX/OPEX</option><option ng-repeat="gl in vm.activeGlFunds()" value="{{gl.glNumber}}">{{gl.glNumber}} · {{gl.glName}} · {{vm.money(gl.availableBalance)}} available</option></select></label
+              ><label>GL funding<select ng-model="vm.form.glNumber"><option value="" disabled>Select</option><option ng-repeat="gl in vm.activeGlFunds()" value="{{gl.glNumber}}">{{gl.glNumber}} · {{gl.glName}} · {{vm.money(gl.availableBalance)}} available</option></select></label
               ><div class="full detail-grid" ng-if="vm.selectedGlFund()" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>GL Description</small><strong>{{vm.selectedGlFund().glName}}</strong></div>
                 <div><small>GL Fund Amount</small><strong>{{vm.money(vm.selectedGlFund().fundAmount)}}</strong></div>
