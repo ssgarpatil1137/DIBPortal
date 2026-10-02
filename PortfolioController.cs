@@ -304,13 +304,22 @@ namespace DFM.Web.Controllers
         private static void PersistProjectSizing(int? projectId, ProjectRequest value, string userName)
         {
             if (!projectId.HasValue) return;
-            Db.Execute(@"IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
+            var result = Db.Query(@"DECLARE @Affected int;
+                IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
+                BEGIN
                     UPDATE dbo.Projects SET ProjectSize=@LegacyProjectSize,UpdatedUtc=SYSUTCDATETIME()
-                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'))
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'));
+                    SET @Affected=@@ROWCOUNT;
+                END
                 ELSE
-                    UPDATE dbo.Projects SET ProjectSize=@ProjectSize,ProjectSizingScores=@ProjectSizingScores,UpdatedUtc=SYSUTCDATETIME()
-                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'))",
+                BEGIN
+                    UPDATE dbo.Projects SET ProjectSize=@LegacyProjectSize,ProjectSizingScores=@ProjectSizingScores,UpdatedUtc=SYSUTCDATETIME()
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'));
+                    SET @Affected=@@ROWCOUNT;
+                END
+                SELECT @Affected Affected;",
                 P("@ProjectId", projectId.Value), P("@ProjectSize", PlainProjectSize(value.ProjectSize)), P("@LegacyProjectSize", ProjectSizeForLegacyDatabase(value)), P("@ProjectSizingScores", value.ProjectSizingScores), P("@User", userName));
+            if (result.Count == 0 || Convert.ToInt32(result[0]["Affected"] ?? 0) == 0) throw new ArgumentException("Project was not updated. Refresh the dashboard and confirm you have permission to edit this project.");
         }
 
         private static Dictionary<string, object> RefreshedProject(int? projectId)
