@@ -236,14 +236,22 @@ namespace DFM.Web.Infrastructure
 
         private static int ImportInvoices(int defaultBudgetLineId, List<List<string>> rows, Dictionary<string, int> headers, string user)
         {
-            Require(headers, "vendorname", "invoicenumber", "invoiceamount"); var imported = 0;
+            RequireAny(headers, "vendorname", new[] { "vendorname", "vendor", "supplier" });
+            RequireAny(headers, "invoicenumber", new[] { "invoicenumber", "invoice", "number" });
+            RequireAny(headers, "invoiceamount", new[] { "invoiceamount", "amount" });
+            var imported = 0;
             for (var index = 1; index < rows.Count; index++)
             {
-                var row = rows[index]; if (Empty(row)) continue; var lineId = Int(row, headers, "budgetlineid", defaultBudgetLineId); var amount = Decimal(row, headers, "invoiceamount"); DateTime paymentDate; object date = DateTime.TryParse(Get(row, headers, "paymentdate"), CultureInfo.InvariantCulture, DateTimeStyles.None, out paymentDate) ? (object)paymentDate : null;
+                var row = rows[index]; if (Empty(row) || !HasInvoiceData(row, headers)) continue; var lineId = IntAny(row, headers, defaultBudgetLineId, "budgetlineid", "budgetline", "lineid"); if (lineId <= 0) throw new ArgumentException("Budget Line ID is required for every Invoice row."); var amount = DecimalAny(row, headers, 0, "invoiceamount", "amount"); DateTime paymentDate; object date = DateTime.TryParse(GetAny(row, headers, "", "paymentdate", "date"), CultureInfo.InvariantCulture, DateTimeStyles.None, out paymentDate) ? (object)paymentDate : null;
                 AmountValidation.ValidateInvoiceAmount(lineId, null, amount);
-                Db.Query("EXEC dbo.sp_SaveInvoice NULL,@line,@vendor,@justification,@gl,@number,@amount,@status,@paymentDate,@user", P("@line", lineId), P("@vendor", Get(row, headers, "vendorname")), P("@justification", Get(row, headers, "justification")), P("@gl", Get(row, headers, "glnumber")), P("@number", Get(row, headers, "invoicenumber")), P("@amount", amount), P("@status", Get(row, headers, "invoicestatus", "Raised")), P("@paymentDate", date), P("@user", user)); imported++;
+                Db.Query("EXEC dbo.sp_SaveInvoice NULL,@line,@vendor,@justification,@gl,@number,@amount,@status,@paymentDate,@user", P("@line", lineId), P("@vendor", GetAny(row, headers, "", "vendorname", "vendor", "supplier")), P("@justification", GetAny(row, headers, "", "justification", "description")), P("@gl", GetAny(row, headers, "", "glnumber", "gl")), P("@number", GetAny(row, headers, "", "invoicenumber", "invoice", "number")), P("@amount", amount), P("@status", GetAny(row, headers, "Raised", "invoicestatus", "status")), P("@paymentDate", date), P("@user", user)); imported++;
             }
             return imported;
+        }
+
+        private static bool HasInvoiceData(List<string> row, Dictionary<string, int> headers)
+        {
+            return HasAnyValue(row, headers, "vendorname", "vendor", "supplier", "invoicenumber", "invoice", "number", "invoiceamount", "amount");
         }
 
         public static List<List<string>> Parse(string text)
@@ -291,6 +299,7 @@ namespace DFM.Web.Infrastructure
         private static bool HasAny(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name)); }
         private static bool HasAnyValue(List<string> row, Dictionary<string, int> headers, params string[] names) { return names.Any(name => Has(row, headers, name) || headers.Keys.Any(key => key.Contains(name) && Has(row, headers, key))); }
         private static int Int(List<string> row, Dictionary<string, int> headers, string name, int fallback) { int value; return int.TryParse(Get(row, headers, name), out value) ? value : fallback; }
+        private static int IntAny(List<string> row, Dictionary<string, int> headers, int fallback, params string[] names) { foreach (var name in names) { int value; if (int.TryParse(Get(row, headers, name), out value)) return value; var key = headers.Keys.FirstOrDefault(item => item.Contains(name)); if (key != null && int.TryParse(Get(row, headers, key), out value)) return value; } return fallback; }
         private static int? IntNullable(List<string> row, Dictionary<string, int> headers, string name) { int value; return int.TryParse(Get(row, headers, name), out value) ? (int?)value : null; }
         private static DateTime? DateNullable(List<string> row, Dictionary<string, int> headers, params string[] names)
         {

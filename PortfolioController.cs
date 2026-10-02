@@ -553,7 +553,14 @@ namespace DFM.Web.Controllers
         public IHttpActionResult DeleteBudgetLine(int budgetLineId)
         {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try { Db.Execute("EXEC dbo.sp_DeleteBudgetLine @BudgetLineId,@User", P("@BudgetLineId", budgetLineId), P("@User", User.Identity.Name)); return Ok(); }
+            try
+            {
+                var invoiceCount = Db.Query("SELECT COUNT(1) InvoiceCount FROM dbo.Invoices WHERE BudgetLineId=@BudgetLineId", P("@BudgetLineId", budgetLineId)).FirstOrDefault();
+                if (invoiceCount != null && Convert.ToInt32(invoiceCount["InvoiceCount"]) > 0) return BadRequest("Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first.");
+                if (BudgetLineSpendItemSelectionAvailable()) Db.Execute("DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId", P("@BudgetLineId", budgetLineId));
+                Db.Execute("EXEC dbo.sp_DeleteBudgetLine @BudgetLineId,@User", P("@BudgetLineId", budgetLineId), P("@User", User.Identity.Name));
+                return Ok();
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 

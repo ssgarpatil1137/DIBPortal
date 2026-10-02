@@ -1306,7 +1306,8 @@
         }, function (response) { noticeError((response.data && response.data.message) || "Unable to delete this PET."); });
       };
       vm.deleteBudgetLine = function (project, line) {
-        if (!window.confirm("Delete Budget Line " + (line.petReference || line.camId || line.budgetLineId) + "? This will also delete its invoices.")) return;
+        if ((line.invoices || []).length) { noticeError("Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first."); return; }
+        if (!window.confirm("Delete Budget Line " + (line.petReference || line.camId || line.budgetLineId) + "? This cannot be undone.")) return;
         $http.delete("api/portfolio/budget-lines/" + line.budgetLineId).then(function () {
           notice("Budget line deleted");
           refreshProjectPets(project.projectId, true);
