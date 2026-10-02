@@ -2556,8 +2556,16 @@
             budgetType: vm.form.budgetType || null,
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
           };
-          $http.post("api/portfolio/projects", payload).then(function () {
+          $http.post("api/portfolio/projects", payload).then(function (response) {
             notice(payload.projectId ? "Project updated" : "Project registered");
+            var savedProject = normalizeProjectSizing(angular.extend({}, vm.form, payload, response && response.data));
+            if (savedProject && savedProject.ProjectId && !savedProject.projectId) savedProject.projectId = savedProject.ProjectId;
+            if (payload.projectId) {
+              var existing = vm.projects.filter(function (project) { return Number(project.projectId) === Number(payload.projectId); })[0];
+              if (existing) angular.extend(existing, savedProject);
+            } else if (savedProject) {
+              vm.projects.unshift(savedProject);
+            }
             vm.close();
             loadDashboard();
           }, function (response) {

@@ -286,10 +286,37 @@ namespace DFM.Web.Controllers
                     if (!ProcedureParameterError(ex)) throw;
                     rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", ProjectSizeForLegacyDatabase(value)), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@User", User.Identity.Name));
                 }
-                return Ok(rows.FirstOrDefault());
+                var saved = rows.FirstOrDefault();
+                var projectId = SavedProjectId(saved, value.ProjectId);
+                PersistProjectSizing(projectId, value);
+                return Ok(RefreshedProject(projectId) ?? saved);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static int? SavedProjectId(Dictionary<string, object> saved, int? fallback)
+        {
+            if (saved != null && saved.ContainsKey("ProjectId") && saved["ProjectId"] != null && saved["ProjectId"] != DBNull.Value) return Convert.ToInt32(saved["ProjectId"]);
+            return fallback;
+        }
+
+        private static void PersistProjectSizing(int? projectId, ProjectRequest value)
+        {
+            if (!projectId.HasValue) return;
+            Db.Execute(@"IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
+                    UPDATE dbo.Projects SET ProjectSize=@LegacyProjectSize,UpdatedUtc=SYSUTCDATETIME()
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'))
+                ELSE
+                    UPDATE dbo.Projects SET ProjectSize=@ProjectSize,ProjectSizingScores=@ProjectSizingScores,UpdatedUtc=SYSUTCDATETIME()
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'))",
+                P("@ProjectId", projectId.Value), P("@ProjectSize", PlainProjectSize(value.ProjectSize)), P("@LegacyProjectSize", ProjectSizeForLegacyDatabase(value)), P("@ProjectSizingScores", value.ProjectSizingScores), P("@User", User.Identity.Name));
+        }
+
+        private static Dictionary<string, object> RefreshedProject(int? projectId)
+        {
+            if (!projectId.HasValue) return null;
+            return Db.Query("SELECT TOP 1 * FROM dbo.vw_ProjectPortfolio WHERE ProjectId=@ProjectId", P("@ProjectId", projectId.Value)).FirstOrDefault();
         }
 
         private static void PreserveRegisteredProjectIdentity(ProjectRequest value)
