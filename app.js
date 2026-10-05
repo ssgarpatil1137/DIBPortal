@@ -462,9 +462,10 @@
         vm.auth.error = "";
         vm.auth.email = normalizeAuthEmail(vm.auth.email);
         if (!vm.auth.email || vm.auth.email.indexOf("@") < 1 || vm.auth.email.indexOf("@") === vm.auth.email.length - 1) { vm.auth.error = "Enter a valid email ID."; return; }
+        var mode = vm.auth.mode;
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
         $http.post("api/auth/" + route, vm.auth).then(function (response) {
-          if (vm.auth.mode === "login") {
+          if (mode === "login") {
             if (response.data.requiresPasswordSetup) { vm.auth.mode = "setup"; return; }
             saveRememberedLogin();
             applySession(response.data, response.data.token);
@@ -475,8 +476,8 @@
             loadVendors(false);
             loadGlFunds(false);
             loadRoles(false);
-          } else if (vm.auth.mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
-          else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice("Password saved. Sign in to continue."); }
+          } else if (mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
+          else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice(mode === "complete" ? "Password reset. Sign in to continue." : "Password saved. Sign in to continue."); }
           redraw();
         }, function (response) { vm.auth.error = authResponseMessage(response, "Unable to complete this request."); });
       };
@@ -2619,9 +2620,9 @@
         return detail || fallback || message;
       }
       function authResponseMessage(response, fallback) {
+        if (response && response.status === 401) return vm.auth && vm.auth.mode === "login" ? "Invalid email ID or password." : "Invalid email ID, security question, or security answer.";
         if (!response || response.data == null) return fallback;
         if (typeof response.data === "string") return /<html|<!doctype/i.test(response.data) ? fallback : response.data;
-        if (response.status === 401) return "Invalid email ID, password, or security answer.";
         return response.data.message || response.data.Message || fallback;
       }
       vm.saveModal = function () {
@@ -3002,11 +3003,30 @@
         }
         if (type === "budget") {
           if (!validateBudgetSourceAmounts(vm.form)) return;
+          vm.form.description = String(vm.form.description || "").trim();
+          if (!vm.form.description) { noticeError("Description is required."); return; }
+          var currentBudget = vm.selectedBudget ? parseNumericInput(vm.selectedBudget.budget) : parseNumericInput(vm.form.budget);
+          var currentAvailable = vm.selectedBudget ? parseNumericInput(vm.selectedBudget.availableBudget) : parseNumericInput(vm.form.availableBudget);
           vm.form.budget = parseNumericInput(vm.form.budget);
           vm.form.utilization = parseNumericInput(vm.form.utilization);
           vm.form.availableBudget = parseNumericInput(vm.form.availableBudget);
-          angular.extend(vm.selectedBudget, vm.form);
-          notice("Budget source updated");
+          var savedBudget = angular.copy(vm.form);
+          savedBudget.availableBudget = currentAvailable + (savedBudget.budget - currentBudget);
+          if (savedBudget.availableBudget < 0) { noticeError("Budget cannot be below the amount already utilized or reserved."); return; }
+          if (vm.demo) {
+            angular.extend(vm.selectedBudget, savedBudget);
+            vm.updateBudgetView(true);
+            notice("Budget source updated");
+          } else {
+            $http.put("api/portfolio/budgets/" + vm.form.budgetSourceId, vm.form).then(function () {
+              angular.extend(vm.selectedBudget, savedBudget);
+              vm.updateBudgetView(true);
+              notice("Budget source updated");
+              vm.close();
+              redraw();
+            }, function (response) { noticeError(responseMessage(response, "Unable to update budget source.")); });
+            return;
+          }
         }
         if (type === "currency") {
           if (!vm.form || !String(vm.form.code || "").trim()) { noticeError("Currency code is required."); return; }

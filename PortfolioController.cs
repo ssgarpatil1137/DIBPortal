@@ -772,8 +772,22 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
         }
 
-        [ApiAuthorize("Master"), HttpPut, Route("budgets/{budgetSourceId:int}")]
-        public IHttpActionResult UpdateBudget(int budgetSourceId, dynamic value) { Db.Execute("EXEC dbo.sp_UpdateBudget @Id,@Description,@Budget,@Utilization,@Available,@User", P("@Id", budgetSourceId), P("@Description", (string)value.description), P("@Budget", (decimal)value.budget), P("@Utilization", (decimal)value.utilization), P("@Available", (decimal)value.availableBudget), P("@User", User.Identity.Name)); return Ok(); }
+        [ApiAuthorize("Admin", "Master"), HttpPut, Route("budgets/{budgetSourceId:int}")]
+        public IHttpActionResult UpdateBudget(int budgetSourceId, BudgetSourceRequest value)
+        {
+            if (value == null) return BadRequest("Budget source details are required.");
+            var description = (value.Description ?? "").Trim();
+            if (description.Length == 0) return BadRequest("Description is required.");
+            if (value.Budget < 0) return BadRequest("Budget must be zero or greater.");
+            var current = Db.Query("SELECT Budget,Utilization,AvailableBudget FROM dbo.BudgetSources WHERE BudgetSourceId=@Id", P("@Id", budgetSourceId)).FirstOrDefault();
+            if (current == null) return NotFound();
+            var oldBudget = Convert.ToDecimal(current["Budget"]);
+            var utilization = Convert.ToDecimal(current["Utilization"]);
+            var available = Convert.ToDecimal(current["AvailableBudget"]) + (value.Budget - oldBudget);
+            if (available < 0) return BadRequest("Budget cannot be below the amount already utilized or reserved.");
+            Db.Execute("EXEC dbo.sp_UpdateBudget @Id,@Description,@Budget,@Utilization,@Available,@User", P("@Id", budgetSourceId), P("@Description", description), P("@Budget", value.Budget), P("@Utilization", utilization), P("@Available", available), P("@User", User.Identity.Name));
+            return Ok();
+        }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("attachments/{entityType}/{entityId:int}")]
         public async Task<IHttpActionResult> UploadAttachment(string entityType, int entityId)

@@ -8,6 +8,7 @@ namespace DFM.Web.Models
     public class ResetChallengeRequest { public string Email { get; set; } public int SecurityQuestionId { get; set; } public string SecurityAnswer { get; set; } }
     public class AuthResult { public string Token { get; set; } public string Email { get; set; } public string DisplayName { get; set; } public string[] Roles { get; set; } public bool RequiresPasswordSetup { get; set; } }
     public class RoleAssignmentRequest { public int UserId { get; set; } public string[] Roles { get; set; } }
+    public class BudgetSourceRequest { public string Description { get; set; } public decimal Budget { get; set; } }
     public class CurrencyRequest { public int? CurrencyId { get; set; } public string Code { get; set; } public string Name { get; set; } public decimal RateToLocal { get; set; } public bool IsActive { get; set; } }
     public class VendorRequest { public int? VendorId { get; set; } public string Name { get; set; } public bool IsActive { get; set; } }
     public class GlFundRequest { public int? GlFundId { get; set; } public string GlNumber { get; set; } public string GlName { get; set; } public decimal FundAmount { get; set; } public bool IsActive { get; set; } }
