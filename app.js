@@ -2084,6 +2084,8 @@
         vm.form.smeLead = jira.smeLead;
         vm.form.projectSizingScores = {};
         vm.form.projectSize = "";
+        vm.form.budgetType = "";
+        vm.form.budgetSourceId = null;
         vm.form.projectManager = jira.assignedProjectManager;
         validateProjectRegistration(true);
       };
@@ -2628,6 +2630,7 @@
       vm.saveModal = function () {
         var type = vm.modal.type;
         if (type === "project" && !validateProjectRegistration(true)) return;
+        if (type === "project" && !vm.form.isEdit && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
@@ -3223,7 +3226,7 @@
         if (!vm.hasRole("Admin") || vm.demo) return $q.when();
         return $http.get("api/portfolio/roles").then(function (response) {
           var data = response.data || {};
-          vm.availableManagedRoles = data.roles || vm.availableManagedRoles;
+          vm.availableManagedRoles = (data.roles || vm.availableManagedRoles).filter(function (role) { return role !== "Master"; });
           vm.roleUsers = normalizeRoleUsers(data.users || []);
           vm.updateRoleView();
           redraw();
@@ -3298,9 +3301,9 @@
         return users.map(function (user) {
           var roles = String(user.roles || "").split(",").filter(Boolean);
           user.roleMap = {};
-          roles.forEach(function (role) { user.roleMap[role === "Master" ? "Admin" : role] = true; });
+          roles.forEach(function (role) { user.roleMap[role] = true; if (role === "Master") user.roleMap.Admin = true; });
           user.elevatedRole = ["Reviewer", "Approver", "Admin"].filter(function (role) { return user.roleMap[role]; })[0] || "";
-          user.roleList = roles.map(function (role) { return role === "Master" ? "Admin" : role; }).join(", ") || "Requestor";
+          user.roleList = roles.join(", ") || "Requestor";
           return user;
         });
       }
