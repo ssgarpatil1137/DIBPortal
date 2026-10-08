@@ -2485,7 +2485,7 @@
             ((project && project.pets) || []).forEach(function (pet) {
               ((pet && pet.budgetLines) || []).forEach(function (line) {
                 if (normalizedGlNumber(line.glNumber) !== normalizedGlNumber(gl.glNumber)) return;
-                vm.glUtilizationRows.push({ projectCode: vm.projectDisplayId(project), projectName: project.projectName, projectType: project.projectType, budgetType: project.budgetType, budgetSource: project.budgetSource, petCode: pet.code, petStatus: pet.status, petAmount: pet.requestedAmount, petCurrency: pet.currency, budgetLineId: line.budgetLineId, petReference: line.petReference, vendor: line.vendor, justification: line.justification, budgetLineCost: line.cost, budgetLineCurrency: line.currency, camId: line.camId, camStatus: line.camStatus, lpoRequest: line.lpoRequest, lpoStatus: line.lpoStatus, invoiceCount: (line.invoices || []).length, invoiceAmount: (line.invoices || []).reduce(function (total, invoice) { return total + parseNumericInput(invoice.invoiceAmount); }, 0) });
+                vm.glUtilizationRows.push({ demandId: vm.projectDisplayId(project), projectCode: project.projectCode, projectName: project.projectName, projectType: project.projectType, budgetType: project.budgetType, budgetSource: project.budgetSource, petCode: pet.code, petStatus: pet.status, petAmount: pet.requestedAmount, petCurrency: pet.currency, budgetLineId: line.budgetLineId, petReference: line.petReference, vendor: line.vendor, justification: line.justification, budgetLineCost: line.cost, glAmount: line.cost, budgetLineCurrency: line.currency, camId: line.camId, camStatus: line.camStatus, lpoRequest: line.lpoRequest, lpoStatus: line.lpoStatus });
               });
             });
           });
