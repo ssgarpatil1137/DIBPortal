@@ -406,13 +406,13 @@ namespace DFM.Web.Controllers
             value.JiraKey = Convert.ToString(existing["JiraKey"]);
         }
 
-        [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpDelete, Route("projects/{projectId:int}")]
+        [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpDelete, Route("projects/{projectId:int}")]
         public IHttpActionResult DeleteProject(int projectId)
         {
             return DeleteProjectCore(projectId);
         }
 
-        [ApiAuthorize("Requestor", "Reviewer", "Master"), HttpPost, Route("projects/{projectId:int}/delete")]
+        [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpPost, Route("projects/{projectId:int}/delete")]
         public IHttpActionResult DeleteProjectPost(int projectId)
         {
             return DeleteProjectCore(projectId);
@@ -420,7 +420,6 @@ namespace DFM.Web.Controllers
 
         private IHttpActionResult DeleteProjectCore(int projectId)
         {
-            if (IsApproverOnly()) return RejectApproverWrite();
             try { DeleteProjectRow(projectId); return Ok(); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -452,13 +451,13 @@ namespace DFM.Web.Controllers
 DECLARE @RequestorEmail nvarchar(254);
 SELECT @RequestorEmail=RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId;
 IF @RequestorEmail IS NULL BEGIN RAISERROR('Project not found.',16,1); RETURN; END;
-IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this project.',16,1); RETURN; END;
 IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) BEGIN RAISERROR('This project has PET requests; delete them first.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this project.',16,1); RETURN; END;
 DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
 DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;",
                 P("@ProjectId", projectId),
                 P("@User", User.Identity.Name),
-                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master") || User.IsInRole("Reviewer") || User.IsInRole("Approver")));
         }
 
         private void DeletePetRow(int petId)

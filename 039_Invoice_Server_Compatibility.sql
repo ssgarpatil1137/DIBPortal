@@ -97,10 +97,10 @@ BEGIN
  DECLARE @RequestorEmail nvarchar(254), @IsElevated bit;
  SELECT @RequestorEmail=RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId;
  IF @RequestorEmail IS NULL THROW 50013,'Project not found.',1;
- SELECT @IsElevated=CASE WHEN EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE UPPER(LTRIM(RTRIM(u.Email)))=UPPER(LTRIM(RTRIM(@User))) AND r.Name IN ('Master','Admin')) THEN 1 ELSE 0 END;
+ IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) THROW 50015,'This project has PET requests; delete them first.',1;
+ SELECT @IsElevated=CASE WHEN EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE UPPER(LTRIM(RTRIM(u.Email)))=UPPER(LTRIM(RTRIM(@User))) AND r.Name IN ('Master','Admin','Reviewer','Approver')) THEN 1 ELSE 0 END;
  IF ISNULL(@IsElevated,0)=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,''))))
     THROW 50014,'You are not allowed to delete this project.',1;
- IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) THROW 50015,'This project has PET requests; delete them first.',1;
  DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
  DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;
 END;

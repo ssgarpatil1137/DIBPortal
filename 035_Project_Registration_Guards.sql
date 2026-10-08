@@ -65,13 +65,12 @@ CREATE OR ALTER PROCEDURE dbo.sp_DeleteProject @ProjectId int, @User nvarchar(25
 AS
 BEGIN
  SET NOCOUNT ON;
- IF EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Approver')
-    AND NOT EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name IN ('Reviewer','Admin','Master'))
-  THROW 50013,'Approver can view only.',1;
- IF NOT EXISTS(SELECT 1 FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND (p.RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name IN ('Reviewer','Master'))))
-  THROW 50013,'You are not allowed to delete this project.',1;
+ IF NOT EXISTS(SELECT 1 FROM dbo.Projects WHERE ProjectId=@ProjectId)
+  THROW 50013,'Project not found.',1;
  IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId)
   THROW 50014,'This project has PET requests; delete them first.',1;
+ IF NOT EXISTS(SELECT 1 FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND (UPPER(LTRIM(RTRIM(ISNULL(p.RequestorEmail,''))))=UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE UPPER(LTRIM(RTRIM(u.Email)))=UPPER(LTRIM(RTRIM(@User))) AND r.Name IN ('Reviewer','Approver','Admin','Master'))))
+  THROW 50013,'You are not allowed to delete this project.',1;
  DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
  DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;
 END;
