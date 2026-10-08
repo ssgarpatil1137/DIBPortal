@@ -87,7 +87,7 @@ namespace DFM.Web.Controllers
             var users = Db.Query(@"SELECT u.UserId,u.Email,u.DisplayName,u.IsActive,
                 STUFF((SELECT ',' + r.Name FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId FOR XML PATH('')),1,1,'') Roles
                 FROM dbo.Users u ORDER BY u.DisplayName,u.Email");
-            var roles = Db.Query("SELECT Name FROM dbo.Roles WHERE Name <> 'Requestor' ORDER BY CASE Name WHEN 'Reviewer' THEN 1 WHEN 'Approver' THEN 2 WHEN 'Admin' THEN 3 WHEN 'Master' THEN 4 ELSE 5 END,Name");
+            var roles = Db.Query("SELECT Name FROM dbo.Roles WHERE Name NOT IN ('Requestor','Master') ORDER BY CASE Name WHEN 'Reviewer' THEN 1 WHEN 'Approver' THEN 2 WHEN 'Admin' THEN 3 ELSE 4 END,Name");
             return Ok(new { users = users, roles = roles.Select(row => Convert.ToString(row["Name"])).ToArray() });
         }
 
@@ -659,6 +659,7 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                     ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
+                ValidateBudgetLineVendorSelection(value.PetId, sourceSpendItemIds, value.Vendor);
                 VendorMaintenance.EnsureVendors(value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds, value.GlNumber);
                 var saved = SaveBudgetLineRow(value, lpoStatus);
@@ -1064,6 +1065,30 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
             var row = Db.Query("SELECT COUNT(1) SelectedCount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
             if (row == null || Convert.ToInt32(row["SelectedCount"]) != sourceSpendItemIds.Count) throw new ArgumentException("Selected PET line must belong to the selected PET Request.");
+        }
+
+        private static void ValidateBudgetLineVendorSelection(int petId, List<int> sourceSpendItemIds, string vendor)
+        {
+            if (sourceSpendItemIds == null || sourceSpendItemIds.Count == 0) return;
+            var row = Db.Query("SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@PetId", petId), P("@SpendItemId", sourceSpendItemIds[0])).FirstOrDefault();
+            if (row == null) return;
+            var allowedVendors = SplitVendorNames(Convert.ToString(row["Vendor"])).ToList();
+            if (allowedVendors.Count == 0) return;
+            var selectedVendors = SplitVendorNames(vendor).ToList();
+            var isSingleAllowed = selectedVendors.Count == 1 && allowedVendors.Any(value => string.Equals(value, selectedVendors[0], StringComparison.OrdinalIgnoreCase));
+            var isAllAllowed = selectedVendors.Count == allowedVendors.Count && selectedVendors.All(selected => allowedVendors.Any(allowed => string.Equals(allowed, selected, StringComparison.OrdinalIgnoreCase)));
+            if (!isSingleAllowed && !isAllAllowed) throw new ArgumentException("Budget Line Vendor Name must match vendor(s) on the selected PET line.");
+        }
+
+        private static IEnumerable<string> SplitVendorNames(string value)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var part in (value ?? "").Split(','))
+            {
+                var vendor = part.Trim();
+                if (vendor.Length == 0 || !seen.Add(vendor)) continue;
+                yield return vendor;
+            }
         }
 
         private static bool BudgetLineSpendItemSelectionAvailable()

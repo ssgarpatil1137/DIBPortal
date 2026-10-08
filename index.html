@@ -1198,7 +1198,13 @@
                   inputmode="decimal"
                   ng-model="vm.form.cost"
                   required /></label
-              ><label
+              ><label ng-if="vm.budgetLineVendorOptions.length"
+                >Vendor name<select
+                  ng-model="vm.form.vendor"
+                  ng-options="vendor as vendor for vendor in vm.budgetLineVendorOptions"
+                  required
+                ></select></label
+              ><label ng-if="!vm.budgetLineVendorOptions.length"
                 >Vendor name<input
                   ng-model="vm.form.vendor"
                   required /></label
