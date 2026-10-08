@@ -1075,9 +1075,8 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             var allowedVendors = SplitVendorNames(Convert.ToString(row["Vendor"])).ToList();
             if (allowedVendors.Count == 0) return;
             var selectedVendors = SplitVendorNames(vendor).ToList();
-            var isSingleAllowed = selectedVendors.Count == 1 && allowedVendors.Any(value => string.Equals(value, selectedVendors[0], StringComparison.OrdinalIgnoreCase));
-            var isAllAllowed = selectedVendors.Count == allowedVendors.Count && selectedVendors.All(selected => allowedVendors.Any(allowed => string.Equals(allowed, selected, StringComparison.OrdinalIgnoreCase)));
-            if (!isSingleAllowed && !isAllAllowed) throw new ArgumentException("Budget Line Vendor Name must match vendor(s) on the selected PET line.");
+            var isAllowedSubset = selectedVendors.Count > 0 && selectedVendors.All(selected => allowedVendors.Any(allowed => string.Equals(allowed, selected, StringComparison.OrdinalIgnoreCase)));
+            if (!isAllowedSubset) throw new ArgumentException("Budget Line Vendor Name must match vendor(s) on the selected PET line.");
         }
 
         private static IEnumerable<string> SplitVendorNames(string value)

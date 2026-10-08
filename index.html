@@ -1198,16 +1198,15 @@
                   inputmode="decimal"
                   ng-model="vm.form.cost"
                   required /></label
-              ><label ng-if="vm.budgetLineVendorOptions.length"
-                >Vendor name<select
-                  ng-model="vm.form.vendor"
-                  ng-options="vendor as vendor for vendor in vm.budgetLineVendorOptions"
-                  required
-                ></select></label
-              ><label ng-if="!vm.budgetLineVendorOptions.length"
+              ><label
                 >Vendor name<input
                   ng-model="vm.form.vendor"
+                  data-vendor-list="budget-line-vendor-options"
+                  list="budget-line-vendor-options"
                   required /></label
+              ><datalist id="budget-line-vendor-options">
+                <option ng-repeat="vendor in vm.budgetLineVendorOptions track by vendor" value="{{vendor}}"></option>
+              </datalist
               ><label class="full"
                 >Justification<textarea
                   ng-model="vm.form.justification"

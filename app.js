@@ -827,8 +827,13 @@
       }
       function budgetLineVendorChoices(item) {
         var vendors = splitBudgetLineVendorParts(budgetLineSpendItemVendor(item));
-        if (vendors.length > 1) vendors.push(vendors.join(", "));
-        return vendors;
+        var choices = [];
+        function addChoices(start, selected, size) {
+          if (selected.length === size) { choices.push(selected.join(", ")); return; }
+          for (var index = start; index < vendors.length; index++) addChoices(index + 1, selected.concat(vendors[index]), size);
+        }
+        for (var length = 1; length <= vendors.length; length++) addChoices(0, [], length);
+        return choices;
       }
       function refreshBudgetLineVendorOptions() {
         vm.budgetLineVendorOptions = budgetLineVendorChoices(selectedBudgetLineSpendItem());
@@ -966,9 +971,9 @@
         if (allowedVendors.length) {
           var allowedParts = splitBudgetLineVendorParts(budgetLineSpendItemVendor(selectedBudgetLineSpendItem()));
           var selectedParts = splitBudgetLineVendorParts(vm.form.vendor);
-          var isSingleAllowed = selectedParts.length === 1 && allowedParts.map(function (vendor) { return vendor.toLowerCase(); }).indexOf(selectedParts[0].toLowerCase()) >= 0;
-          var isAllAllowed = selectedParts.length === allowedParts.length && selectedParts.every(function (vendor) { return allowedParts.map(function (value) { return value.toLowerCase(); }).indexOf(vendor.toLowerCase()) >= 0; });
-          if (!isSingleAllowed && !isAllAllowed) { noticeError("Select Vendor Name from the selected PET line."); return false; }
+          var allowedKeys = allowedParts.map(function (vendor) { return vendor.toLowerCase(); });
+          var isAllowedSubset = selectedParts.length > 0 && selectedParts.every(function (vendor) { return allowedKeys.indexOf(vendor.toLowerCase()) >= 0; });
+          if (!isAllowedSubset) { noticeError("Select Vendor Name from the selected PET line."); return false; }
         }
         return true;
       }
@@ -3197,7 +3202,7 @@
         if (iconTimer) $timeout.cancel(iconTimer);
         iconTimer = $timeout(function () {
           angular.element(document.querySelectorAll('select[ng-model$="yearlyRecurrence"]')).removeAttr("required");
-          Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="row.vendor"], input[ng-model="vm.form.vendor"], input[ng-model="vm.form.vendorName"], input[ng-model="vm.petRowEditor.row.vendor"]'), function (input) { input.setAttribute("list", "vendor-suggestions"); });
+          Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="row.vendor"], input[ng-model="vm.form.vendor"], input[ng-model="vm.form.vendorName"], input[ng-model="vm.petRowEditor.row.vendor"]'), function (input) { input.setAttribute("list", input.getAttribute("data-vendor-list") || "vendor-suggestions"); });
           Array.prototype.forEach.call(document.querySelectorAll('input[ng-model="item.budgetLineVendor"]'), function (input) { input.readOnly = true; input.setAttribute("tabindex", "-1"); });
           refreshIcons();
           $timeout(refreshIcons, 60, false);
