@@ -160,6 +160,53 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("gl-funds/utilization")]
+        public IHttpActionResult GlFundUtilization(string glNumber)
+        {
+            glNumber = (glNumber ?? "").Trim();
+            if (glNumber.Length == 0) return BadRequest("GL Number is required.");
+            try
+            {
+                return Ok(Db.Query(@"SELECT
+                    p.ProjectId,
+                    p.ProjectCode,
+                    p.ProjectName,
+                    p.ProjectType,
+                    p.ProjectManager,
+                    p.BudgetType,
+                    bs.ExternalId BudgetSource,
+                    bs.Description BudgetSourceDescription,
+                    pet.PetId,
+                    pet.Code PetCode,
+                    pet.Status PetStatus,
+                    pet.RequestedAmount PetAmount,
+                    pet.Currency PetCurrency,
+                    pet.ApprovedUtc,
+                    bl.BudgetLineId,
+                    bl.PetReference,
+                    bl.Vendor,
+                    bl.Justification,
+                    bl.Cost BudgetLineCost,
+                    bl.Currency BudgetLineCurrency,
+                    bl.GlNumber,
+                    bl.CamId,
+                    bl.CamStatus,
+                    bl.LpoRequest,
+                    bl.LpoStatus,
+                    bl.CreatedUtc BudgetLineCreatedUtc,
+                    ISNULL(invoice.InvoiceCount,0) InvoiceCount,
+                    ISNULL(invoice.InvoiceAmount,0) InvoiceAmount
+                FROM dbo.BudgetLines bl
+                JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+                LEFT JOIN dbo.BudgetSources bs ON bs.BudgetSourceId=p.BudgetSourceId
+                OUTER APPLY (SELECT COUNT(1) InvoiceCount, CAST(ISNULL(SUM(i.InvoiceAmount),0) AS decimal(19,2)) InvoiceAmount FROM dbo.Invoices i WHERE i.BudgetLineId=bl.BudgetLineId) invoice
+                WHERE UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))
+                ORDER BY p.ProjectCode, pet.Code, bl.BudgetLineId", P("@GlNumber", glNumber)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Admin", "Master"), HttpPost, Route("gl-funds")]
         public IHttpActionResult SaveGlFund(GlFundRequest value)
         {

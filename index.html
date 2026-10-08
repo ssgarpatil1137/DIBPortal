@@ -609,7 +609,7 @@
           <table class="data-table gl-register">
             <thead><tr><th>GL Number</th><th>Description / Name</th><th>Fund Amount</th><th>Reserved</th><th>Available</th><th>Status</th><th>Created</th><th>Created By</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="gl in vm.visibleGlFunds track by gl.glFundId"><td>{{gl.glNumber}}</td><td title="{{gl.glName}}"><span class="truncate-cell wide-cell">{{gl.glName}}</span></td><td>{{vm.money(gl.fundAmount)}}</td><td>{{vm.money(gl.reservedAmount)}}</td><td>{{vm.money(gl.availableBalance)}}</td><td><span class="status" ng-class="gl.isActive?'approved':'rejected'">{{gl.isActive?'Active':'Inactive'}}</span></td><td>{{gl.createdUtc|date:'dd-MMM-yyyy'}}</td><td title="{{gl.createdBy}}"><span class="truncate-cell">{{gl.createdBy}}</span></td><td><button class="icon-btn" title="Edit GL" ng-click="vm.openGlFund(gl)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{gl.isActive?'Deactivate':'Activate'}} GL" ng-click="vm.toggleGlFund(gl)"><i data-lucide="power"></i></button></td></tr>
+              <tr ng-repeat="gl in vm.visibleGlFunds track by gl.glFundId"><td><button type="button" class="link-btn" ng-click="vm.openGlUtilization(gl)" title="View GL utilization">{{gl.glNumber}}</button></td><td title="{{gl.glName}}"><span class="truncate-cell wide-cell">{{gl.glName}}</span></td><td>{{vm.money(gl.fundAmount)}}</td><td>{{vm.money(gl.reservedAmount)}}</td><td>{{vm.money(gl.availableBalance)}}</td><td><span class="status" ng-class="gl.isActive?'approved':'rejected'">{{gl.isActive?'Active':'Inactive'}}</span></td><td>{{gl.createdUtc|date:'dd-MMM-yyyy'}}</td><td title="{{gl.createdBy}}"><span class="truncate-cell">{{gl.createdBy}}</span></td><td><button class="icon-btn" title="Edit GL" ng-click="vm.openGlFund(gl)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{gl.isActive?'Deactivate':'Activate'}} GL" ng-click="vm.toggleGlFund(gl)"><i data-lucide="power"></i></button></td></tr>
               <tr ng-if="!vm.visibleGlFunds.length"><td colspan="9"><div class="empty inline-empty"><i data-lucide="badge-dollar-sign"></i><strong>No GL funding definitions match the search.</strong></div></td></tr>
             </tbody>
           </table>
@@ -1505,6 +1505,24 @@
                 <strong>No workflow history recorded yet.</strong>
               </div>
             </div>
+            <div ng-if="vm.modal.type==='glUtilization'">
+              <div class="detail-grid" style="grid-template-columns:repeat(4,1fr)">
+                <div><small>GL Number</small><strong>{{vm.selectedGlUtilization.glNumber}}</strong></div>
+                <div><small>Description</small><strong>{{vm.selectedGlUtilization.glName}}</strong></div>
+                <div><small>Fund Amount</small><strong>{{vm.money(vm.selectedGlUtilization.fundAmount)}}</strong></div>
+                <div><small>Reserved</small><strong>{{vm.money(vm.selectedGlUtilization.reservedAmount)}}</strong></div>
+              </div>
+              <div class="table-scroll spend-preview" ng-if="vm.glUtilizationRows.length">
+                <table class="nested">
+                  <thead><tr><th>Project ID</th><th>Project</th><th>Type</th><th>Budget</th><th>PET Ref</th><th>PET Status</th><th>PET Amount</th><th>Budget Line</th><th>Vendor</th><th>Justification</th><th>BL Amount</th><th>Currency</th><th>CAM ID</th><th>CAM Status</th><th>LPO</th><th>LPO Status</th><th>Invoices</th><th>Invoice Amount</th></tr></thead>
+                  <tbody><tr ng-repeat="row in vm.glUtilizationRows track by (row.budgetLineId||row.BudgetLineId)"><td>{{row.projectCode||row.ProjectCode}}</td><td title="{{row.projectName||row.ProjectName}}"><span class="truncate-cell wide-cell">{{row.projectName||row.ProjectName}}</span></td><td>{{row.projectType||row.ProjectType}}</td><td>{{row.budgetType||row.BudgetType}} · {{row.budgetSource||row.BudgetSource}}</td><td>{{row.petCode||row.PetCode||row.petReference||row.PetReference}}</td><td><span class="status" ng-class="vm.statusClass(row.petStatus||row.PetStatus)">{{row.petStatus||row.PetStatus}}</span></td><td>{{vm.money(row.petAmount||row.PetAmount)}}</td><td>{{row.budgetLineId||row.BudgetLineId}}</td><td>{{row.vendor||row.Vendor}}</td><td title="{{row.justification||row.Justification}}"><span class="truncate-cell wide-cell">{{row.justification||row.Justification}}</span></td><td>{{vm.money(row.budgetLineCost||row.BudgetLineCost)}}</td><td>{{row.budgetLineCurrency||row.BudgetLineCurrency}}</td><td>{{row.camId||row.CamId}}</td><td><span class="status" ng-class="vm.statusClass(row.camStatus||row.CamStatus)">{{row.camStatus||row.CamStatus}}</span></td><td>{{row.lpoRequest||row.LpoRequest}}</td><td>{{row.lpoStatus||row.LpoStatus}}</td><td>{{row.invoiceCount||row.InvoiceCount}}</td><td>{{vm.money(row.invoiceAmount||row.InvoiceAmount)}}</td></tr></tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.glUtilizationRows.length">
+                <i data-lucide="badge-dollar-sign"></i>
+                <strong>This GL is not utilized by any Budget Line.</strong>
+              </div>
+            </div>
             <div class="pet-row-dialog" ng-if="vm.petRowEditor">
               <div class="pet-row-card">
                 <header>
@@ -1539,7 +1557,7 @@
               </div>
             </div>
           </div>
-          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'">
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">

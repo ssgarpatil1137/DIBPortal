@@ -125,6 +125,8 @@
       vm.glPageCount = 1;
       vm.glFilteredCount = 0;
       vm.visibleGlFunds = [];
+      vm.glUtilizationRows = [];
+      vm.selectedGlUtilization = null;
       vm.departmentOptions = ["Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov."];
       vm.unitTypeOptions = ["Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope"];
       vm.costTypeOptions = [
@@ -2468,6 +2470,35 @@
         };
         redraw();
       };
+      vm.openGlUtilization = function (gl) {
+        if (!gl || !gl.glNumber) return;
+        vm.selectedGlUtilization = gl;
+        vm.glUtilizationRows = [];
+        vm.modal = {
+          type: "glUtilization",
+          kicker: "GL UTILIZATION",
+          title: "Utilization for " + gl.glNumber,
+        };
+        redraw();
+        if (vm.demo) {
+          (vm.projects || []).forEach(function (project) {
+            ((project && project.pets) || []).forEach(function (pet) {
+              ((pet && pet.budgetLines) || []).forEach(function (line) {
+                if (normalizedGlNumber(line.glNumber) !== normalizedGlNumber(gl.glNumber)) return;
+                vm.glUtilizationRows.push({ projectCode: vm.projectDisplayId(project), projectName: project.projectName, projectType: project.projectType, budgetType: project.budgetType, budgetSource: project.budgetSource, petCode: pet.code, petStatus: pet.status, petAmount: pet.requestedAmount, petCurrency: pet.currency, budgetLineId: line.budgetLineId, petReference: line.petReference, vendor: line.vendor, justification: line.justification, budgetLineCost: line.cost, budgetLineCurrency: line.currency, camId: line.camId, camStatus: line.camStatus, lpoRequest: line.lpoRequest, lpoStatus: line.lpoStatus, invoiceCount: (line.invoices || []).length, invoiceAmount: (line.invoices || []).reduce(function (total, invoice) { return total + parseNumericInput(invoice.invoiceAmount); }, 0) });
+              });
+            });
+          });
+          redraw();
+          return;
+        }
+        $http.get("api/portfolio/gl-funds/utilization", { params: { glNumber: gl.glNumber } }).then(function (response) {
+          vm.glUtilizationRows = response.data || [];
+          redraw();
+        }, function (response) {
+          noticeError(responseMessage(response, "Unable to load GL utilization details."));
+        });
+      };
       vm.toggleGlFund = function (gl) {
         if (!gl) return;
         var previous = !!gl.isActive;
@@ -2534,6 +2565,8 @@
         vm.decisionSelection = {};
         vm.budgetLineSpendDetails = [];
         vm.budgetLineSelectedSpendItems = {};
+        vm.glUtilizationRows = [];
+        vm.selectedGlUtilization = null;
         vm.budgetLineDocumentFiles = {};
         vm.invoiceDocumentFile = null;
         redraw();
