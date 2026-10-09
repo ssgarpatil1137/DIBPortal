@@ -176,7 +176,9 @@ BEGIN
 
  IF @PreviewOnly=1
  BEGIN
-  SELECT ScriptId,StepOrder,ObjectType,SchemaName,ObjectName,CommandText
+       SELECT CAST(1 AS bit) PreviewOnly,
+                             N'Preview only. Re-run with @PreviewOnly = 0 to create objects in the target database.' StatusMessage,
+                             ScriptId,StepOrder,ObjectType,SchemaName,ObjectName,CommandText
   FROM #ReplicateScripts
   ORDER BY StepOrder,ScriptId;
   RETURN;
