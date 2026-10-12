@@ -34,13 +34,21 @@ SELECT
  bl.LpoRequest LpoRequestId,
  bl.LpoStatus,
  i.InvoiceId,
- i.InvoiceNumber InvoiceNo,
+ i.InvoiceNo,
  i.InvoiceAmount,
  i.InvoiceStatus
 FROM dbo.BudgetSources b
 JOIN dbo.Projects p ON p.BudgetSourceId=b.BudgetSourceId
-JOIN dbo.PETRequests pet ON pet.ProjectId=p.ProjectId
-JOIN dbo.BudgetLines bl ON bl.PetId=pet.PetId
+JOIN dbo.PETRequests pet ON pet.ProjectId=p.ProjectId AND pet.Status='Approved'
+LEFT JOIN dbo.BudgetLines bl ON bl.PetId=pet.PetId
 LEFT JOIN dbo.GLFunds gl ON UPPER(LTRIM(RTRIM(gl.GlNumber)))=UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))
-LEFT JOIN dbo.Invoices i ON i.BudgetLineId=bl.BudgetLineId;
+OUTER APPLY (
+ SELECT
+  MAX(x.InvoiceId) InvoiceId,
+  MAX(x.InvoiceNumber) InvoiceNo,
+  SUM(x.InvoiceAmount) InvoiceAmount,
+  MAX(x.InvoiceStatus) InvoiceStatus
+ FROM dbo.Invoices x
+ WHERE x.BudgetLineId=bl.BudgetLineId
+) i;
 GO
