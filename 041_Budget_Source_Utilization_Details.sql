@@ -11,7 +11,9 @@ SELECT
  b.ExternalId BudgetSource,
  b.Description BudgetDescription,
  p.ProjectId,
+ COALESCE(NULLIF(p.JiraKey,''),p.ProjectCode) ProjectDisplayId,
  p.ProjectCode,
+ p.JiraKey,
  p.ProjectName,
  pet.PetId,
  pet.Code PetCode,
@@ -38,7 +40,7 @@ SELECT
 FROM dbo.BudgetSources b
 JOIN dbo.Projects p ON p.BudgetSourceId=b.BudgetSourceId
 JOIN dbo.PETRequests pet ON pet.ProjectId=p.ProjectId
-LEFT JOIN dbo.BudgetLines bl ON bl.PetId=pet.PetId
+JOIN dbo.BudgetLines bl ON bl.PetId=pet.PetId
 LEFT JOIN dbo.GLFunds gl ON UPPER(LTRIM(RTRIM(gl.GlNumber)))=UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))
 LEFT JOIN dbo.Invoices i ON i.BudgetLineId=bl.BudgetLineId;
 GO

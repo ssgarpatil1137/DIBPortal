@@ -2156,7 +2156,9 @@
       function budgetUsageRowsForSource(budget) {
         var id = String(budgetSourceId(budget) || "");
         if (!id) return [];
-        return (vm.budgetUsage || []).filter(function (row) { return String(budgetSourceId(row) || "") === id; });
+        return (vm.budgetUsage || []).filter(function (row) {
+          return String(budgetSourceId(row) || "") === id && !!(row.budgetLineId || row.BudgetLineId);
+        });
       }
       function refreshSelectedBudgetUsageRows() {
         vm.selectedBudgetUsageRows = vm.selectedBudgetUsageSource ? budgetUsageRowsForSource(vm.selectedBudgetUsageSource) : [];
