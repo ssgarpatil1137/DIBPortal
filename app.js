@@ -79,6 +79,8 @@
       vm.budgetPageCount = 1;
       vm.budgetFilteredCount = 0;
       vm.visibleBudgets = [];
+      vm.selectedBudgetUsageSource = null;
+      vm.selectedBudgetUsageRows = [];
       vm.reportProjectId = "";
       vm.reportProjectSearch = "";
       vm.reportProjectStatusFilter = "";
@@ -2148,6 +2150,29 @@
         var project = (vm.projects || []).filter(function (item) { return item.projectId === row.projectId || item.projectCode === row.projectCode || item.projectName === row.projectName; })[0];
         vm.openJira(project || row);
       };
+      function budgetSourceId(value) {
+        return value && (value.budgetSourceId || value.BudgetSourceId);
+      }
+      function budgetUsageRowsForSource(budget) {
+        var id = String(budgetSourceId(budget) || "");
+        if (!id) return [];
+        return (vm.budgetUsage || []).filter(function (row) { return String(budgetSourceId(row) || "") === id; });
+      }
+      function refreshSelectedBudgetUsageRows() {
+        vm.selectedBudgetUsageRows = vm.selectedBudgetUsageSource ? budgetUsageRowsForSource(vm.selectedBudgetUsageSource) : [];
+      }
+      vm.openBudgetSourceUsage = function (budget) {
+        vm.selectedBudgetUsageSource = budget;
+        refreshSelectedBudgetUsageRows();
+        redraw();
+      };
+      vm.closeBudgetSourceUsage = function () {
+        vm.selectedBudgetUsageSource = null;
+        vm.selectedBudgetUsageRows = [];
+      };
+      vm.isBudgetSourceUsageOpen = function (budget) {
+        return !!vm.selectedBudgetUsageSource && String(budgetSourceId(vm.selectedBudgetUsageSource) || "") === String(budgetSourceId(budget) || "");
+      };
       vm.openReportProjectDetails = function (project) {
         if (!project) return;
         function showReportDetails() {
@@ -3254,6 +3279,7 @@
           vm.budgets = data.budgets || [];
           vm.jira = data.jira || [];
           vm.budgetUsage = data.budgetUsage || [];
+          refreshSelectedBudgetUsageRows();
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();

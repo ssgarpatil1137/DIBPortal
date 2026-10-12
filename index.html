@@ -540,12 +540,30 @@
           <table class="data-table budget-register">
             <thead><tr><th>Type</th><th>Source</th><th>Description</th><th>Budget</th><th>Utilized</th><th>Available</th><th>Locked</th><th>Net balance</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="budget in vm.visibleBudgets track by budget.budgetSourceId"><td><span class="budget-type">{{budget.budgetType}}</span></td><td>{{budget.externalId}}</td><td title="{{budget.description}}"><span class="truncate-cell wide-cell">{{budget.description}}</span></td><td>{{vm.money(budget.budget)}}</td><td>{{vm.money(budget.utilization)}}</td><td>{{vm.money(budget.availableBudget)}}</td><td>{{vm.money(budget.lockedAmount)}}</td><td>{{vm.money(budget.netBalance)}}</td><td><button class="icon-btn" ng-if="vm.hasRole('Admin')" title="Edit budget" ng-click="vm.openBudget(budget)"><i data-lucide="pencil"></i></button></td></tr>
+              <tr ng-repeat="budget in vm.visibleBudgets track by budget.budgetSourceId" ng-class="{'selected-source-row':vm.isBudgetSourceUsageOpen(budget)}"><td><span class="budget-type">{{budget.budgetType}}</span></td><td><button type="button" class="link-btn budget-source-link" title="View utilized projects" ng-click="vm.openBudgetSourceUsage(budget)">{{budget.externalId}}</button></td><td title="{{budget.description}}"><span class="truncate-cell wide-cell">{{budget.description}}</span></td><td>{{vm.money(budget.budget)}}</td><td>{{vm.money(budget.utilization)}}</td><td>{{vm.money(budget.availableBudget)}}</td><td>{{vm.money(budget.lockedAmount)}}</td><td>{{vm.money(budget.netBalance)}}</td><td><button class="icon-btn" ng-if="vm.hasRole('Admin')" title="Edit budget" ng-click="vm.openBudget(budget)"><i data-lucide="pencil"></i></button></td></tr>
               <tr ng-if="!vm.visibleBudgets.length"><td colspan="9"><div class="empty inline-empty"><i data-lucide="landmark"></i><strong>No budget sources match the search.</strong></div></td></tr>
             </tbody>
           </table>
         </div>
         <div class="pagination" ng-if="vm.budgetPageCount>1"><button class="icon-btn" ng-disabled="vm.budgetPage===1" ng-click="vm.changeBudgetPage(vm.budgetPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.budgetPage}} of {{vm.budgetPageCount}}</span><button class="icon-btn" ng-disabled="vm.budgetPage===vm.budgetPageCount" ng-click="vm.changeBudgetPage(vm.budgetPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+        <article class="budget-source-detail" ng-if="vm.selectedBudgetUsageSource">
+          <div class="detail-title-row">
+            <div>
+              <h3>{{vm.selectedBudgetUsageSource.externalId}}</h3>
+              <span>{{vm.selectedBudgetUsageRows.length}} utilization record(s)</span>
+            </div>
+            <button type="button" class="icon-btn" title="Close details" ng-click="vm.closeBudgetSourceUsage()"><i data-lucide="x"></i></button>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table source-detail-table">
+              <thead><tr><th>Budget type</th><th>Project</th><th>PET reference</th><th>PET status</th><th>PET amount</th><th>Vendor</th><th>Cost</th><th>Funding</th><th>GL ID</th><th>GL name</th><th>CAM status</th><th>LPO status</th><th>Invoice no</th><th>Invoice amount</th><th>Action</th></tr></thead>
+              <tbody>
+                <tr ng-repeat="row in vm.selectedBudgetUsageRows track by $index"><td><span class="budget-type">{{row.budgetType||''}}</span></td><td title="{{row.projectName}}"><span class="truncate-cell wide-cell">{{row.projectName}}</span></td><td>{{row.petCode}}</td><td><span class="status" ng-class="vm.statusClass(row.petStatus)">{{row.petStatus||''}}</span></td><td>{{vm.money(row.petAmount||row.approvedAmount||row.amount)}}</td><td>{{row.vendor||''}}</td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.fundingSource||''}}</td><td>{{row.glId||''}}</td><td title="{{row.glName}}"><span class="truncate-cell">{{row.glName||''}}</span></td><td>{{row.camStatus||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.openBudgetUsageProject(row)"><i data-lucide="folder-open"></i>Open</button></td></tr>
+                <tr ng-if="!vm.selectedBudgetUsageRows.length"><td colspan="15"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No project utilization is recorded for this source.</strong></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </article>
       </section>
 
       <section ng-if="vm.tab==='currencies'" class="workspace currency-workspace">

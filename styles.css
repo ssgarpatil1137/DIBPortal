@@ -2192,6 +2192,47 @@ main {
   width: 72px;
   text-align: center;
 }
+.budget-source-link {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+.budget-register tr.selected-source-row > td {
+  background: #e9f2ec;
+}
+.budget-source-detail {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  overflow: hidden;
+}
+.budget-source-detail .detail-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: #f6faf7;
+}
+.budget-source-detail h3 {
+  margin: 0;
+  font-size: 14px;
+}
+.budget-source-detail .detail-title-row span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.source-detail-table {
+  min-width: 1680px;
+}
+.source-detail-table th,
+.source-detail-table td {
+  white-space: nowrap;
+}
 .currency-register th:nth-child(1),
 .currency-register td:nth-child(1) { width: 110px; }
 .currency-register th:nth-child(2),
