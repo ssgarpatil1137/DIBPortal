@@ -546,24 +546,6 @@
           </table>
         </div>
         <div class="pagination" ng-if="vm.budgetPageCount>1"><button class="icon-btn" ng-disabled="vm.budgetPage===1" ng-click="vm.changeBudgetPage(vm.budgetPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.budgetPage}} of {{vm.budgetPageCount}}</span><button class="icon-btn" ng-disabled="vm.budgetPage===vm.budgetPageCount" ng-click="vm.changeBudgetPage(vm.budgetPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
-        <article class="budget-source-detail" ng-if="vm.selectedBudgetUsageSource">
-          <div class="detail-title-row">
-            <div>
-              <h3>{{vm.selectedBudgetUsageSource.externalId}}</h3>
-              <span>{{vm.selectedBudgetUsageRows.length}} utilization record(s)</span>
-            </div>
-            <button type="button" class="icon-btn" title="Close details" ng-click="vm.closeBudgetSourceUsage()"><i data-lucide="x"></i></button>
-          </div>
-          <div class="table-scroll">
-            <table class="data-table source-detail-table">
-              <thead><tr><th>Budget type</th><th>Project</th><th>PET reference</th><th>PET status</th><th>PET amount</th><th>Vendor</th><th>Cost</th><th>Funding</th><th>GL ID</th><th>GL name</th><th>CAM status</th><th>LPO status</th><th>Invoice no</th><th>Invoice amount</th><th>Action</th></tr></thead>
-              <tbody>
-                <tr ng-repeat="row in vm.selectedBudgetUsageRows track by $index"><td><span class="budget-type">{{row.budgetType||''}}</span></td><td title="{{row.projectName}}"><span class="truncate-cell wide-cell">{{row.projectName}}</span></td><td>{{row.petCode}}</td><td><span class="status" ng-class="vm.statusClass(row.petStatus)">{{row.petStatus||''}}</span></td><td>{{vm.money(row.petAmount||row.approvedAmount||row.amount)}}</td><td>{{row.vendor||''}}</td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.fundingSource||''}}</td><td>{{row.glId||''}}</td><td title="{{row.glName}}"><span class="truncate-cell">{{row.glName||''}}</span></td><td>{{row.camStatus||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.openBudgetUsageProject(row)"><i data-lucide="folder-open"></i>Open</button></td></tr>
-                <tr ng-if="!vm.selectedBudgetUsageRows.length"><td colspan="15"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No project utilization is recorded for this source.</strong></div></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </article>
       </section>
 
       <section ng-if="vm.tab==='currencies'" class="workspace currency-workspace">
@@ -769,7 +751,7 @@
     >
       <section
         class="modal"
-        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'}"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='budgetUtilization'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'}"
         role="dialog"
         aria-modal="true"
       >
@@ -1541,6 +1523,27 @@
                 <strong>This GL is not utilized by any Budget Line.</strong>
               </div>
             </div>
+            <div ng-if="vm.modal.type==='budgetUtilization'">
+              <div class="detail-grid" style="grid-template-columns:repeat(5,1fr)">
+                <div><small>Type</small><strong>{{vm.selectedBudgetUsageSource.budgetType}}</strong></div>
+                <div><small>Source</small><strong>{{vm.selectedBudgetUsageSource.externalId}}</strong></div>
+                <div><small>Budget</small><strong>{{vm.money(vm.selectedBudgetUsageSource.budget)}}</strong></div>
+                <div><small>Utilized</small><strong>{{vm.money(vm.selectedBudgetUsageSource.utilization)}}</strong></div>
+                <div><small>Available</small><strong>{{vm.money(vm.selectedBudgetUsageSource.availableBudget)}}</strong></div>
+              </div>
+              <div class="table-scroll spend-preview" ng-if="vm.selectedBudgetUsageRows.length">
+                <table class="nested source-detail-table">
+                  <thead><tr><th>Budget type</th><th>Project</th><th>PET reference</th><th>PET status</th><th>PET amount</th><th>Vendor</th><th>Cost</th><th>Funding</th><th>GL ID</th><th>GL name</th><th>CAM status</th><th>LPO status</th><th>Invoice no</th><th>Invoice amount</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr ng-repeat="row in vm.selectedBudgetUsageRows track by $index"><td><span class="budget-type">{{row.budgetType||''}}</span></td><td title="{{row.projectName}}"><span class="truncate-cell wide-cell">{{row.projectName}}</span></td><td>{{row.petCode}}</td><td><span class="status" ng-class="vm.statusClass(row.petStatus)">{{row.petStatus||''}}</span></td><td>{{vm.money(row.petAmount||row.approvedAmount||row.amount)}}</td><td>{{row.vendor||''}}</td><td>{{row.cost!=null ? vm.money(row.cost) : ''}}</td><td>{{row.fundingSource||''}}</td><td>{{row.glId||''}}</td><td title="{{row.glName}}"><span class="truncate-cell">{{row.glName||''}}</span></td><td>{{row.camStatus||''}}</td><td>{{row.lpoStatus||''}}</td><td>{{row.invoiceNo||''}}</td><td>{{row.invoiceAmount!=null ? vm.money(row.invoiceAmount) : ''}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.openBudgetUsageProject(row)"><i data-lucide="folder-open"></i>Open</button></td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.selectedBudgetUsageRows.length">
+                <i data-lucide="landmark"></i>
+                <strong>This source is not utilized by any Project/PET.</strong>
+              </div>
+            </div>
             <div class="pet-row-dialog" ng-if="vm.petRowEditor">
               <div class="pet-row-card">
                 <header>
@@ -1575,7 +1578,7 @@
               </div>
             </div>
           </div>
-          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'">
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'&&vm.modal.type!=='budgetUtilization'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">

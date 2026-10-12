@@ -2164,6 +2164,11 @@
       vm.openBudgetSourceUsage = function (budget) {
         vm.selectedBudgetUsageSource = budget;
         refreshSelectedBudgetUsageRows();
+        vm.modal = {
+          type: "budgetUtilization",
+          kicker: "CAPEX/OPEX UTILIZATION",
+          title: "Utilization for " + budget.externalId,
+        };
         redraw();
       };
       vm.closeBudgetSourceUsage = function () {
@@ -2592,6 +2597,8 @@
         vm.budgetLineSelectedSpendItems = {};
         vm.glUtilizationRows = [];
         vm.selectedGlUtilization = null;
+        vm.selectedBudgetUsageSource = null;
+        vm.selectedBudgetUsageRows = [];
         vm.budgetLineDocumentFiles = {};
         vm.invoiceDocumentFile = null;
         redraw();
