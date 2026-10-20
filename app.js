@@ -458,6 +458,7 @@
       vm.authTitle = function () { return { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
+      vm.projects.forEach(function (project) { project.isSample = true; });
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
@@ -3324,7 +3325,7 @@
       // the user already had open.
       function mergeProjects(freshList) {
         var existingById = {};
-        vm.projects.forEach(function (p) { existingById[p.projectId] = p; });
+        vm.projects.forEach(function (p) { if (!p.isSample) existingById[p.projectId] = p; });
         vm.projects = freshList.map(function (fresh) {
           var existing = existingById[fresh.projectId];
           if (existing) { angular.extend(existing, fresh); return existing; }
