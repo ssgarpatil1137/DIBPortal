@@ -2557,6 +2557,7 @@
           pet: "templates/pet-upload-template.csv",
           budget: "templates/budget-upload-template.csv",
           invoice: "templates/invoice-upload-template.csv",
+          sources: "templates/sources-upload-template.csv",
         };
         vm.modal = {
           type: "upload",
@@ -2565,12 +2566,16 @@
           title:
             kind === "attachment"
               ? "Attach supporting files"
-              : "Upload " + kind + " records",
+              : kind === "sources"
+                ? "Synchronize CAPEX / OPEX"
+                : "Upload " + kind + " records",
           submit: kind === "pet" ? "Save PET rows" : "Upload files",
           template: templates[kind],
           help:
             kind === "attachment"
               ? "PDF, spreadsheet and image files up to 50 MB."
+              : kind === "sources"
+                ? "Columns: Budget Type (CAPEX/OPEX), External Id, Description, Budget, optional Locked Amount and Claim Amount. Existing sources are updated by Budget Type + External Id."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -3217,6 +3222,20 @@
           }
           runBulkImport(kind, parentId, function () {
             if (vm.selectedProject) refreshProjectPets(vm.selectedProject.projectId, true);
+          });
+          return;
+        }
+        if (type === "upload" && vm.modal.kind === "sources" && !vm.demo) {
+          var sourceFiles = vm.uploadFiles || (vm.uploadFile ? [vm.uploadFile] : []);
+          if (!sourceFiles.length) { noticeError("Choose the CAPEX/OPEX CSV or Excel file first."); return; }
+          var sourceData = new FormData();
+          sourceFiles.forEach(function (file) { sourceData.append("file", file); });
+          $http.post("api/portfolio/budgets/sync", sourceData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
+            notice(((response.data && response.data.imported) || 0) + " budget source(s) synchronized.");
+            vm.close();
+            loadDashboard();
+          }, function (response) {
+            noticeError(responseMessage(response, "Unable to synchronize the CAPEX/OPEX file."));
           });
           return;
         }

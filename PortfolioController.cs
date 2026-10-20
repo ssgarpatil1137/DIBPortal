@@ -836,6 +836,32 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             return Ok();
         }
 
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("budgets/sync")]
+        public async Task<IHttpActionResult> SyncBudgetSources()
+        {
+            try
+            {
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                if (files.Count == 0) return BadRequest("Choose the CAPEX/OPEX CSV or Excel file first.");
+                var imported = 0;
+                foreach (var file in files)
+                {
+                    var fileName = Path.GetFileName(file.Headers.ContentDisposition.FileName.Trim('"'));
+                    var extension = Path.GetExtension(fileName).ToLowerInvariant();
+                    if (extension != ".csv" && extension != ".xlsx" && extension != ".xlsm") return BadRequest(fileName + " is not a CSV or Excel file.");
+                    var rows = extension == ".csv"
+                        ? CsvBulkImporter.Parse(await file.ReadAsStringAsync())
+                        : SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+                    imported += CsvBulkImporter.ImportBudgetSources(rows, fileName, User.Identity.Name);
+                }
+                return Ok(new { imported = imported });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("attachments/{entityType}/{entityId:int}")]
         public async Task<IHttpActionResult> UploadAttachment(string entityType, int entityId)
         {

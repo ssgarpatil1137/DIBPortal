@@ -249,6 +249,70 @@ namespace DFM.Web.Infrastructure
             return imported;
         }
 
+        private static readonly string[] SourceIdAliases = { "externalid", "budgetsource", "sourceid", "source", "budgetcode", "budgetid", "code", "id" };
+        private static readonly string[] SourceBudgetAliases = { "budget", "budgetamount", "approvedbudget", "totalbudget", "amount" };
+
+        public static int ImportBudgetSources(List<List<string>> rows, string fileName, string user)
+        {
+            var headerIndex = rows.FindIndex(row => { var map = HeaderMap(row); return FirstHeader(map, SourceIdAliases) != null && FirstHeader(map, SourceBudgetAliases) != null; });
+            if (headerIndex < 0) throw new ArgumentException("Missing columns in " + fileName + ": Budget Type, External Id, Description, Budget.");
+            var headers = HeaderMap(rows[headerIndex]);
+            var idColumn = FirstHeader(headers, SourceIdAliases);
+            var budgetColumn = FirstHeader(headers, SourceBudgetAliases);
+            var typeColumn = FirstHeader(headers, "budgettype", "type", "category");
+            var descriptionColumn = FirstHeader(headers, "description", "budgetdescription", "details", "name");
+            var lockedColumn = FirstHeader(headers, "lockedamount", "locked");
+            var claimColumn = FirstHeader(headers, "claimamount", "claim");
+            var lowerName = (fileName ?? "").ToLowerInvariant();
+            var fileType = lowerName.Contains("capex") ? "CAPEX" : lowerName.Contains("opex") ? "OPEX" : null;
+
+            var items = new List<Tuple<string, string, string, decimal, decimal?, decimal?>>();
+            for (var index = headerIndex + 1; index < rows.Count; index++)
+            {
+                var row = rows[index]; if (Empty(row)) continue;
+                var line = "Row " + (index + 1) + " of " + fileName + ": ";
+                var externalId = Get(row, headers, idColumn);
+                if (externalId.Length == 0) continue;
+                if (externalId.Length > 100) throw new ArgumentException(line + "External Id cannot exceed 100 characters.");
+                var type = (typeColumn == null ? "" : Get(row, headers, typeColumn)).ToUpperInvariant();
+                if (type.Length == 0) type = fileType;
+                if (type != "CAPEX" && type != "OPEX") throw new ArgumentException(line + "Budget Type must be CAPEX or OPEX.");
+                var budget = SourceAmount(row, headers, budgetColumn);
+                if (!budget.HasValue || budget.Value < 0) throw new ArgumentException(line + "Budget must be a number zero or greater.");
+                var description = descriptionColumn == null ? "" : Get(row, headers, descriptionColumn);
+                if (description.Length > 1000) description = description.Substring(0, 1000);
+                items.Add(Tuple.Create(type, externalId, description, budget.Value, SourceAmount(row, headers, lockedColumn), SourceAmount(row, headers, claimColumn)));
+            }
+            if (items.Count == 0) throw new ArgumentException(fileName + " has no budget source rows.");
+
+            var sourceFile = (fileName ?? "").Length > 500 ? fileName.Substring(0, 500) : fileName;
+            foreach (var item in items)
+            {
+                Db.Execute(@"MERGE dbo.BudgetSources AS t
+USING (SELECT @Type BudgetType,@ExternalId ExternalId) AS s ON t.BudgetType=s.BudgetType AND t.ExternalId=s.ExternalId
+WHEN MATCHED THEN UPDATE SET Description=NULLIF(@Description,N''),
+ AvailableBudget=t.AvailableBudget+(@Budget-t.Budget), NetBalance=t.NetBalance+(@Budget-t.Budget), Budget=@Budget,
+ LockedAmount=ISNULL(@Locked,t.LockedAmount), BudgetAfterLocked=@Budget-ISNULL(@Locked,t.LockedAmount), ClaimAmount=ISNULL(@Claim,t.ClaimAmount),
+ SourceFile=@File, LastSyncUtc=SYSUTCDATETIME(), UpdatedUtc=SYSUTCDATETIME()
+WHEN NOT MATCHED THEN INSERT(BudgetType,ExternalId,Description,Budget,Utilization,AvailableBudget,LockedAmount,BudgetAfterLocked,ClaimAmount,NetBalance,SourceFile,LastSyncUtc)
+ VALUES(@Type,@ExternalId,NULLIF(@Description,N''),@Budget,0,@Budget,ISNULL(@Locked,0),@Budget-ISNULL(@Locked,0),ISNULL(@Claim,0),@Budget,@File,SYSUTCDATETIME());",
+                    P("@Type", item.Item1), P("@ExternalId", item.Item2), P("@Description", item.Item3), P("@Budget", item.Item4), P("@Locked", item.Item5), P("@Claim", item.Item6), P("@File", sourceFile));
+            }
+            Db.Execute("INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail) VALUES('BudgetSource',NULL,'CsvSync',@User,@Detail)", P("@User", user ?? "system"), P("@Detail", sourceFile + ": " + items.Count + " row(s)"));
+            return items.Count;
+        }
+
+        private static string FirstHeader(Dictionary<string, int> headers, params string[] names) { return names.FirstOrDefault(headers.ContainsKey); }
+
+        private static decimal? SourceAmount(List<string> row, Dictionary<string, int> headers, string column)
+        {
+            if (column == null) return null;
+            var text = Get(row, headers, column);
+            if (text.Length == 0) return null;
+            decimal value;
+            return decimal.TryParse(NumericText(text), NumberStyles.Number, CultureInfo.InvariantCulture, out value) ? (decimal?)value : null;
+        }
+
         private static bool HasInvoiceData(List<string> row, Dictionary<string, int> headers)
         {
             return HasAnyValue(row, headers, "vendorname", "vendor", "supplier", "invoicenumber", "invoice", "number", "invoiceamount", "amount");
