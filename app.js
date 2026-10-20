@@ -212,6 +212,11 @@
         vm.auth.email = normalizeAuthEmail(vm.auth.email);
         if (!vm.auth.email || vm.auth.email.indexOf("@") < 1 || vm.auth.email.indexOf("@") === vm.auth.email.length - 1) { vm.auth.error = "Enter a valid email ID."; return; }
         var mode = vm.auth.mode;
+        if (mode === "setup" || mode === "reset") {
+          vm.auth.securityQuestionId = Number(vm.auth.securityQuestionId) || null;
+          if (!vm.auth.securityQuestionId) { vm.auth.error = "Select a security question."; return; }
+          if (!String(vm.auth.securityAnswer || "").trim()) { vm.auth.error = "Enter the security answer."; return; }
+        }
         var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
         $http.post("api/auth/" + route, vm.auth).then(function (response) {
           if (mode === "login") {
