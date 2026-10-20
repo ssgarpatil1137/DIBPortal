@@ -261,12 +261,16 @@ namespace DFM.Web.Infrastructure
             var budgetColumn = FirstHeader(headers, SourceBudgetAliases);
             var typeColumn = FirstHeader(headers, "budgettype", "type", "category");
             var descriptionColumn = FirstHeader(headers, "description", "budgetdescription", "details", "name");
-            var lockedColumn = FirstHeader(headers, "lockedamount", "locked");
-            var claimColumn = FirstHeader(headers, "claimamount", "claim");
+            var utilizationColumn = FirstHeader(headers, "utilization", "utilisation", "utilized", "utilizedamount");
+            var availableColumn = FirstHeader(headers, "availablebudget", "available");
+            var lockedColumn = FirstHeader(headers, "lockedamt", "lockedamount", "locked");
+            var afterLockedColumn = FirstHeader(headers, "budgetafterlockedamt", "budgetafterlockedamount", "budgetafterlocked");
+            var claimColumn = FirstHeader(headers, "claimamt", "claimamount", "claim");
+            var netColumn = FirstHeader(headers, "netbalance", "net");
             var lowerName = (fileName ?? "").ToLowerInvariant();
             var fileType = lowerName.Contains("capex") ? "CAPEX" : lowerName.Contains("opex") ? "OPEX" : null;
 
-            var items = new List<Tuple<string, string, string, decimal, decimal?, decimal?>>();
+            var items = new List<BudgetSourceRow>();
             for (var index = headerIndex + 1; index < rows.Count; index++)
             {
                 var row = rows[index]; if (Empty(row)) continue;
@@ -281,7 +285,13 @@ namespace DFM.Web.Infrastructure
                 if (!budget.HasValue || budget.Value < 0) throw new ArgumentException(line + "Budget must be a number zero or greater.");
                 var description = descriptionColumn == null ? "" : Get(row, headers, descriptionColumn);
                 if (description.Length > 1000) description = description.Substring(0, 1000);
-                items.Add(Tuple.Create(type, externalId, description, budget.Value, SourceAmount(row, headers, lockedColumn), SourceAmount(row, headers, claimColumn)));
+                items.Add(new BudgetSourceRow
+                {
+                    Type = type, ExternalId = externalId, Description = description, Budget = budget.Value,
+                    Utilization = SourceAmount(row, headers, utilizationColumn), Available = SourceAmount(row, headers, availableColumn),
+                    Locked = SourceAmount(row, headers, lockedColumn), AfterLocked = SourceAmount(row, headers, afterLockedColumn),
+                    Claim = SourceAmount(row, headers, claimColumn), Net = SourceAmount(row, headers, netColumn)
+                });
             }
             if (items.Count == 0) throw new ArgumentException(fileName + " has no budget source rows.");
 
@@ -291,15 +301,29 @@ namespace DFM.Web.Infrastructure
                 Db.Execute(@"MERGE dbo.BudgetSources AS t
 USING (SELECT @Type BudgetType,@ExternalId ExternalId) AS s ON t.BudgetType=s.BudgetType AND t.ExternalId=s.ExternalId
 WHEN MATCHED THEN UPDATE SET Description=NULLIF(@Description,N''),
- AvailableBudget=t.AvailableBudget+(@Budget-t.Budget), NetBalance=t.NetBalance+(@Budget-t.Budget), Budget=@Budget,
- LockedAmount=ISNULL(@Locked,t.LockedAmount), BudgetAfterLocked=@Budget-ISNULL(@Locked,t.LockedAmount), ClaimAmount=ISNULL(@Claim,t.ClaimAmount),
- SourceFile=@File, LastSyncUtc=SYSUTCDATETIME(), UpdatedUtc=SYSUTCDATETIME()
+ Utilization=ISNULL(@Utilization,t.Utilization),
+ AvailableBudget=ISNULL(@Available,t.AvailableBudget+(@Budget-t.Budget)),
+ LockedAmount=ISNULL(@Locked,t.LockedAmount),
+ BudgetAfterLocked=ISNULL(@AfterLocked,@Budget-ISNULL(@Locked,t.LockedAmount)),
+ ClaimAmount=ISNULL(@Claim,t.ClaimAmount),
+ NetBalance=ISNULL(@Net,t.NetBalance+(@Budget-t.Budget)),
+ Budget=@Budget, SourceFile=@File, LastSyncUtc=SYSUTCDATETIME(), UpdatedUtc=SYSUTCDATETIME()
 WHEN NOT MATCHED THEN INSERT(BudgetType,ExternalId,Description,Budget,Utilization,AvailableBudget,LockedAmount,BudgetAfterLocked,ClaimAmount,NetBalance,SourceFile,LastSyncUtc)
- VALUES(@Type,@ExternalId,NULLIF(@Description,N''),@Budget,0,@Budget,ISNULL(@Locked,0),@Budget-ISNULL(@Locked,0),ISNULL(@Claim,0),@Budget,@File,SYSUTCDATETIME());",
-                    P("@Type", item.Item1), P("@ExternalId", item.Item2), P("@Description", item.Item3), P("@Budget", item.Item4), P("@Locked", item.Item5), P("@Claim", item.Item6), P("@File", sourceFile));
+ VALUES(@Type,@ExternalId,NULLIF(@Description,N''),@Budget,ISNULL(@Utilization,0),ISNULL(@Available,@Budget-ISNULL(@Utilization,0)),ISNULL(@Locked,0),
+  ISNULL(@AfterLocked,@Budget-ISNULL(@Utilization,0)-ISNULL(@Locked,0)),ISNULL(@Claim,0),ISNULL(@Net,@Budget-ISNULL(@Utilization,0)-ISNULL(@Locked,0)),@File,SYSUTCDATETIME());",
+                    P("@Type", item.Type), P("@ExternalId", item.ExternalId), P("@Description", item.Description), P("@Budget", item.Budget),
+                    P("@Utilization", item.Utilization), P("@Available", item.Available), P("@Locked", item.Locked), P("@AfterLocked", item.AfterLocked),
+                    P("@Claim", item.Claim), P("@Net", item.Net), P("@File", sourceFile));
             }
             Db.Execute("INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail) VALUES('BudgetSource',NULL,'CsvSync',@User,@Detail)", P("@User", user ?? "system"), P("@Detail", sourceFile + ": " + items.Count + " row(s)"));
             return items.Count;
+        }
+
+        private class BudgetSourceRow
+        {
+            public string Type, ExternalId, Description;
+            public decimal Budget;
+            public decimal? Utilization, Available, Locked, AfterLocked, Claim, Net;
         }
 
         private static string FirstHeader(Dictionary<string, int> headers, params string[] names) { return names.FirstOrDefault(headers.ContainsKey); }

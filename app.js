@@ -2575,7 +2575,7 @@
             kind === "attachment"
               ? "PDF, spreadsheet and image files up to 50 MB."
               : kind === "sources"
-                ? "Columns: Budget Type (CAPEX/OPEX), External Id, Description, Budget, optional Locked Amount and Claim Amount. Existing sources are updated by Budget Type + External Id."
+                ? "Columns: Type (Capex/Opex), ID, Description, Budget, Utilization, Available Budget, Locked Amt, Budget after Locked Amt, Claim Amt, Net Balance. Existing sources are updated by Type + ID."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -3296,7 +3296,7 @@
         if (window.lucide) window.lucide.createIcons({ attrs: { "stroke-width": 1.8 } });
       }
       function loadDashboard() {
-        return $http.get("api/portfolio/dashboard").then(function (response) {
+        return $http.get("api/portfolio/dashboard", { params: { _: Date.now() } }).then(function (response) {
           var data = response.data || {};
           vm.demo = false;
           vm.metrics = (data.metrics && data.metrics[0]) || vm.metrics;
