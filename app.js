@@ -118,9 +118,7 @@
       vm.vendorPageCount = 1;
       vm.vendorFilteredCount = 0;
       vm.visibleVendors = [];
-      vm.glFunds = [
-        { glFundId: 1, glNumber: "GL001", glName: "Strategic transformation GL", fundAmount: 1200000, reservedAmount: 400000, availableBalance: 800000, isActive: true, createdUtc: new Date(), createdBy: "preview" },
-      ];
+      vm.glFunds = [];
       vm.glSearch = "";
       vm.glPage = 1;
       vm.glPageSize = 20;
@@ -171,278 +169,24 @@
       vm.navTabs = [];
       vm.stages = ["ITA", "Design", "Develop", "UAT", "Staging", "Live"];
       vm.metrics = {
-        projectsRegistered: 4,
-        activeProjects: 3,
-        petsApproved: 3,
-        petsOnTrack: 2,
-        petsRejected: 1,
-        invoicesRaised: 5,
-        invoicesOutstanding: 3,
-        invoicesSettled: 2,
-        capexBudget: 5200000,
-        capexUtilized: 2117500,
-        opexBudget: 1750000,
-        opexUtilized: 638000,
+        projectsRegistered: 0,
+        activeProjects: 0,
+        petsApproved: 0,
+        petsOnTrack: 0,
+        petsRejected: 0,
+        invoicesRaised: 0,
+        invoicesOutstanding: 0,
+        invoicesSettled: 0,
+        capexBudget: 0,
+        capexUtilized: 0,
+        opexBudget: 0,
+        opexUtilized: 0,
       };
-      vm.budgets = [
-        {
-          budgetSourceId: 1,
-          budgetType: "CAPEX",
-          externalId: "IT_NP14_Sub_57_2025",
-          description:
-            "Core banking platform enhancements and security remediation",
-          budget: 1750000,
-          utilization: 1242630.78,
-          availableBudget: 507369.22,
-          requiresPet: true,
-        },
-        {
-          budgetSourceId: 2,
-          budgetType: "CAPEX",
-          externalId: "IT_NP12_Sub_11_2025",
-          description: "FinnOne delivery squad for risk and cards",
-          budget: 2140876,
-          utilization: 716217.25,
-          availableBudget: 1424658.75,
-        },
-        {
-          budgetSourceId: 3,
-          budgetType: "OPEX",
-          externalId: "OPEX-CET-0001",
-          description: "MDS procurement of VDI licenses 2026",
-          budget: 1200000,
-          utilization: 84000,
-          availableBudget: 1116000,
-          requiresPet: true,
-        },
-        {
-          budgetSourceId: 4,
-          budgetType: "OPEX",
-          externalId: "OPEX-CET-0002",
-          description: "ATM CDM platform operational support",
-          budget: 950000,
-          utilization: 0,
-          availableBudget: 950000,
-        },
-      ];
-      vm.currencies = [
-        { currencyId: 1, code: "AED", name: "UAE Dirham", rateToLocal: 1, isActive: true },
-        { currencyId: 2, code: "USD", name: "US Dollar", rateToLocal: 3.6725, isActive: true },
-        { currencyId: 3, code: "EUR", name: "Euro", rateToLocal: 4.05, isActive: true },
-        { currencyId: 4, code: "GBP", name: "British Pound", rateToLocal: 4.65, isActive: true },
-        { currencyId: 5, code: "INR", name: "Indian Rupee", rateToLocal: 0.044, isActive: true },
-        { currencyId: 6, code: "SAR", name: "Saudi Riyal", rateToLocal: 0.979, isActive: true },
-      ];
-      vm.vendors = [
-        { vendorId: 1, name: "Data Systems LLC", isActive: true },
-        { vendorId: 2, name: "MDS Computers", isActive: true },
-        { vendorId: 3, name: "Wipro", isActive: true },
-      ];
-      vm.jira = [
-        {
-          jiraKey: "DIBITP-27312",
-          summary:
-            "Card upgrade, product change and limit change for credit cards",
-          status: "Execution / Delivery",
-          projectType: "Project",
-          accountableExecLead: "Amit Saxena",
-          accountableExec: "Zahoor Ul Islam",
-          smeLead: "Amit Saxena",
-          assignedProjectManager: "Syeda Areeba Tariq",
-          projectRAG: "Green",
-          platform: "FinOne",
-          demandType: "Fast Track",
-          requirements:
-            "Automate contract communication and create a card upgrade workflow with product and limit-change controls.",
-          portfolioExecutiveSummary:
-            "Architecture design is complete. Integration discovery and delivery planning are in progress.",
-        },
-        {
-          jiraKey: "DMGT-1011",
-          summary: "Card upgrade",
-          status: "Execution / Delivery",
-          projectType: "Demand",
-          accountableExecLead: "Amit Saxena",
-          accountableExec: "Zahoor Ul Islam",
-          smeLead: "Amit Saxena",
-          assignedProjectManager: "Syeda Areeba Tariq",
-          projectRAG: "Green",
-          platform: "Cards",
-          demandType: "Fast Track",
-          requirements:
-            "Increase cards revenue and simplify the customer upgrade process.",
-          portfolioExecutiveSummary:
-            "Demand accepted and linked to the delivery project.",
-        },
-        {
-          jiraKey: "DMGT-433",
-          summary: "Eleveo Call Recording System Upgrade",
-          status: "Live",
-          projectType: "Enhancement",
-          accountableExecLead: "Wasim Akram",
-          accountableExec: "Zahoor Ul Islam",
-          smeLead: "Karthi Vasudevan",
-          assignedProjectManager: "Muhammad Yahya Abdul Hayu",
-          projectRAG: "Green",
-          platform: "Call Center / IVR Services",
-          demandType: "Strategic",
-          requirements:
-            "Upgrade obsolete RHEL and call recording components as part of OS remediation.",
-          portfolioExecutiveSummary:
-            "Development complete and service moved to live support.",
-        },
-      ];
-      var invoices = [
-        {
-          invoiceId: 1001,
-          vendorName: "Oracle LLC",
-          justification: "Annual license",
-          glNumber: "55001",
-          invoiceNumber: "INV-2026-001",
-          invoiceAmount: 15000,
-          invoiceStatus: "Paid",
-          paymentDate: new Date(2026, 7, 6),
-        },
-      ];
-      var lines = [
-        {
-          budgetLineId: 1,
-          vendor: "Oracle LLC",
-          justification: "Annual platform license",
-          cost: 150000,
-          currency: "AED",
-          glNumber: "55001",
-          petReference: "PET-100",
-          camId: "CAM-001",
-          camStatus: "Approved",
-          camComments: "Approved",
-          lpoRequest: "LPO-100",
-          lpoStatus: "Issued",
-          lpoComments: "Completed",
-          invoices: invoices,
-        },
-      ];
-      vm.projects = [
-        {
-          projectId: 1,
-          projectCode: "PRJ-000001",
-          jiraKey: "DIBITP-27312",
-          projectName: "Card upgrade and product change",
-          projectType: "Project",
-          accountableExecLead: "Amit Saxena",
-          accountableExec: "Zahoor Ul Islam",
-          smeLead: "Amit Saxena",
-          projectSize: "Large",
-          projectManager: "Syeda Areeba Tariq",
-          requestorEmail: "cards.requestor@dfm.ae",
-          requestorName: "Preview User",
-          status: "Approved",
-          createdUtc: new Date(2026, 7, 6),
-          budgetType: "CAPEX",
-          budgetSource: "IT_NP14_Sub_57_2025",
-          budgetSourceId: 1,
-          availableBudget: 507369.22,
-          pets: [
-            {
-              petId: 1,
-              code: "PET-2026-001",
-              status: "Approved",
-              requestedAmount: 150000,
-              reviewerEmail: "Amit Saxena",
-              approverEmail: "Zahoor Ul Islam",
-              createdUtc: new Date(2026, 7, 5),
-              spendItems: [],
-              budgetLines: lines,
-            },
-          ],
-        },
-        {
-          projectId: 2,
-          projectCode: "PRJ-000002",
-          jiraKey: "DMGT-433",
-          projectName: "Eleveo Call Recording System Upgrade",
-          projectType: "Enhancement",
-          accountableExecLead: "Wasim Akram",
-          accountableExec: "Ahmed Ali",
-          smeLead: "Karthi Vasudevan",
-          projectSize: "Medium",
-          projectManager: "Muhammad Yahya Abdul Hayu",
-          requestorEmail: "operations@dfm.ae",
-          requestorName: "Operations Change",
-          status: "Pending Approval",
-          createdUtc: new Date(2026, 7, 18),
-          budgetType: "OPEX",
-          budgetSource: "OPEX-CET-0001",
-          budgetSourceId: 3,
-          availableBudget: 1116000,
-          pets: [
-            {
-              petId: 2,
-              code: "PET-2026-014",
-              status: "Pending Approval",
-              requestedAmount: 280000,
-              reviewerEmail: "Wasim Akram",
-              createdUtc: new Date(2026, 7, 19),
-              spendItems: [],
-              budgetLines: [],
-            },
-          ],
-        },
-        {
-          projectId: 3,
-          projectCode: "PRJ-000003",
-          projectName: "Finance data retention controls",
-          projectType: "Regulatory",
-          accountableExecLead: "Nandi Kumar",
-          accountableExec: "Sara Khan",
-          smeLead: "Ravi Menon",
-          projectSize: "Small",
-          projectManager: "Hariprasath R",
-          requestorEmail: "finance.change@dfm.ae",
-          requestorName: "Finance Change",
-          status: "Pending Review",
-          createdUtc: new Date(2026, 7, 22),
-          budgetType: "CAPEX",
-          budgetSource: "IT_NP12_Sub_11_2025",
-          budgetSourceId: 2,
-          availableBudget: 1424658.75,
-          requiresPet: true,
-          pets: [
-            {
-              petId: 3,
-              code: "PET-2026-018",
-              status: "Pending Review",
-              requestedAmount: 92500,
-              createdUtc: new Date(2026, 7, 23),
-              spendItems: [
-                { spendItemId: 1, head: "Software", topic: "Retention controls", vendor: "Data Systems LLC", costType: "CAPEX", units: 5, unitPrice: 17500, currency: "AED", foreignAmount: 87500, aedAmount: 87500, contingencyPercent: 5, glNumber: "55001" },
-              ],
-              budgetLines: [],
-            },
-          ],
-        },
-        {
-          projectId: 4,
-          projectCode: "PRJ-000004",
-          projectName: "ATM settlement reconciliation",
-          projectType: "Operational",
-          accountableExecLead: "Farah Noor",
-          accountableExec: "Omar Salim",
-          smeLead: "Khalid Rahman",
-          projectSize: "Medium",
-          projectManager: "Leena George",
-          requestorEmail: "atm.ops@dfm.ae",
-          requestorName: "ATM Operations",
-          status: "Active",
-          createdUtc: new Date(2026, 7, 25),
-          budgetType: "OPEX",
-          budgetSource: "OPEX-CET-0002",
-          budgetSourceId: 4,
-          availableBudget: 950000,
-          requiresPet: false,
-          pets: [],
-        },
-      ];
+      vm.budgets = [];
+      vm.currencies = [];
+      vm.vendors = [];
+      vm.jira = [];
+      vm.projects = [];
 
       vm.pageTitle = function () {
         return {
@@ -458,7 +202,6 @@
       vm.authTitle = function () { return { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
-      vm.projects.forEach(function (project) { project.isSample = true; });
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
@@ -3325,7 +3068,7 @@
       // the user already had open.
       function mergeProjects(freshList) {
         var existingById = {};
-        vm.projects.forEach(function (p) { if (!p.isSample) existingById[p.projectId] = p; });
+        vm.projects.forEach(function (p) { existingById[p.projectId] = p; });
         vm.projects = freshList.map(function (fresh) {
           var existing = existingById[fresh.projectId];
           if (existing) { angular.extend(existing, fresh); return existing; }
@@ -3431,11 +3174,7 @@
         });
       }
       function previewRoleUsers() {
-        return normalizeRoleUsers([
-          { userId: 1, displayName: "Preview User", email: "cards.requestor@dfm.ae", isActive: true, roles: "Requestor,Admin" },
-          { userId: 2, displayName: "Amit Saxena", email: "amit.saxena@dfm.ae", isActive: true, roles: "Requestor,Reviewer" },
-          { userId: 3, displayName: "Zahoor Ul Islam", email: "zahoor.ul.islam@dfm.ae", isActive: true, roles: "Requestor,Approver" },
-        ]);
+        return normalizeRoleUsers([]);
       }
       vm.saveUserRoles = function (user) {
         var selected = user.elevatedRole ? [user.elevatedRole] : [];
