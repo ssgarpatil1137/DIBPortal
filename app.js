@@ -512,6 +512,8 @@
       }
       function applySession(session, token) {
         vm.session = session || {};
+        // Drop preview sample projects so their PETs/budget lines never merge into real projects with the same id.
+        if (vm.demo) vm.projects = [];
         vm.demo = false;
         vm.session.roles = vm.session.roles || [];
         vm.session.initials = (vm.session.displayName || vm.session.email || "U").split(/\s+/).slice(0,2).map(function (part) { return part.charAt(0); }).join("").toUpperCase();
