@@ -49,6 +49,7 @@ namespace DFM.Web.Controllers
             if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
             var users = Db.Query("SELECT UserId,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1", new SqlParameter("@email", email));
             if (users.Count == 0 || !Convert.ToBoolean(users[0]["RequiresPasswordSetup"])) return Content(HttpStatusCode.Conflict, "First-time setup is unavailable.");
+            if (!SecurityQuestionExists(request.SecurityQuestionId)) return BadRequest("Selected security question is not configured. Contact the administrator.");
             request.Email = email;
             SavePassword(Convert.ToInt32(users[0]["UserId"]), request);
             return Ok();
@@ -76,6 +77,7 @@ namespace DFM.Web.Controllers
             if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
             var rows = Db.Query("SELECT TOP 1 t.ResetTokenId,t.UserId FROM PasswordResetTokens t JOIN Users u ON u.UserId=t.UserId WHERE u.Email=@email AND t.TokenHash=HASHBYTES('SHA2_256',@token) AND t.UsedUtc IS NULL AND t.ExpiresUtc>GETUTCDATE()", new SqlParameter("@email", email), new SqlParameter("@token", request.ResetToken));
             if (rows.Count == 0) return Unauthorized();
+            if (!SecurityQuestionExists(request.SecurityQuestionId)) return BadRequest("Selected security question is not configured. Contact the administrator.");
             SavePassword(Convert.ToInt32(rows[0]["UserId"]), request);
             Db.Execute("UPDATE PasswordResetTokens SET UsedUtc=GETUTCDATE() WHERE ResetTokenId=@id", new SqlParameter("@id", rows[0]["ResetTokenId"]));
             return Ok();
@@ -92,6 +94,11 @@ namespace DFM.Web.Controllers
         private static string NormalizeEmail(string email)
         {
             return (email ?? "").Trim().TrimEnd(';', ',').Trim().ToLowerInvariant();
+        }
+
+        private static bool SecurityQuestionExists(int securityQuestionId)
+        {
+            return Db.Query("SELECT 1 X FROM SecurityQuestions WHERE SecurityQuestionId=@id AND IsActive=1", new SqlParameter("@id", securityQuestionId)).Count > 0;
         }
 
         private static void SavePassword(int userId, PasswordSetupRequest request)
