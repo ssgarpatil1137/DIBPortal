@@ -64,6 +64,8 @@
             <i data-lucide="refresh-cw"></i>{{vm.refreshing ? 'Refreshing' : 'Refresh'}}</button
           ><button class="btn secondary" ng-click="vm.download('pet')">
             <i data-lucide="download"></i>PET template</button
+          ><button class="btn secondary" ng-if="vm.can('request')" ng-click="vm.openUpload('nonProject')">
+            <i data-lucide="sheet"></i>Create Non-Project OPEX</button
           ><button
             class="btn primary"
             ng-if="vm.can('request')"
@@ -493,6 +495,22 @@
           </table>
         </div>
         <div class="pagination" ng-if="vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+        <div class="section-bar">
+          <div><h2>Non-Project OPEX</h2><span>{{vm.nonProjectOpex.length}} uploaded line items</span></div>
+          <button class="btn secondary" type="button" ng-if="vm.can('request')" ng-click="vm.openUpload('nonProject')"><i data-lucide="upload"></i>Upload OPEX file</button>
+        </div>
+        <div class="table-scroll" ng-if="vm.nonProjectOpex.length">
+          <table class="data-table">
+            <thead><tr><th>Initiative</th><th>Platform</th><th>Line Item</th><th>EPM ID</th><th>Budget Type</th><th>Capex ID/OPEX</th><th>GL #</th><th>Budget Apprd (AED)</th><th>Memo/CAM ID</th><th>Amount Apprd (AED)</th><th>Vendor</th><th>Date Raised</th><th>LPO/SO #</th><th>PO Date</th><th>AMS #</th><th>CAM Status</th><th>Description</th><th>Invoice Memo#</th><th>Invoice #</th><th>Invoice Amount (AED)</th><th>Invoice Date</th><th>Invoice Entry/Process Date</th><th>Invoice Status</th><th>Invoice Desc.</th><th>Folder</th><th>Handled By</th><th>Column1</th><th>Supporting Document</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="row in vm.nonProjectOpex track by row.nonProjectOpexLineId">
+                <td>{{row.initiative}}</td><td>{{row.platform}}</td><td>{{row.lineItem}}</td><td>{{row.epmId}}</td><td>{{row.budgetType}}</td><td>{{row.opexReference}}</td><td>{{row.glNumber}}</td><td>{{row.budgetApprovedAed!=null?vm.money(row.budgetApprovedAed):''}}</td><td>{{row.memoCamId}}</td><td>{{vm.money(row.amountApprovedAed)}}</td><td>{{row.vendor}}</td><td>{{row.dateRaised|date:'dd-MMM-yyyy'}}</td><td>{{row.lpoSoNumber}}</td><td>{{row.poDate|date:'dd-MMM-yyyy'}}</td><td>{{row.amsNumber}}</td><td>{{row.camStatus}}</td><td>{{row.description}}</td><td>{{row.invoiceMemoNumber}}</td><td>{{row.invoiceNumber}}</td><td>{{row.invoiceAmountAed!=null?vm.money(row.invoiceAmountAed):''}}</td><td>{{row.invoiceDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceEntryProcessDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceStatus}}</td><td>{{row.invoiceDescription}}</td><td>{{row.folder}}</td><td>{{row.handledBy}}</td><td>{{row.column1}}</td>
+                <td><button type="button" class="link-btn" ng-if="row.attachmentId" ng-click="vm.downloadAttachment({attachmentId:row.attachmentId,originalName:row.supportingDocumentName})">{{row.supportingDocumentName||'Download'}}</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="empty" ng-if="!vm.nonProjectOpex.length"><i data-lucide="sheet"></i><strong>No Non-Project OPEX rows have been uploaded.</strong></div>
       </section>
 
       <section ng-if="vm.tab==='approvals'" class="workspace approval-workspace">
@@ -1464,6 +1482,8 @@
               <input type="file" ng-if="vm.modal.kind==='attachment'" multiple file-change="vm.setUploadFiles($files)" />
               <input type="file" ng-if="vm.modal.kind==='sources'" multiple accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFiles($files)" />
               <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}<span ng-if="vm.uploadFiles.length>1"> + {{vm.uploadFiles.length-1}} more</span></p>
+              <label class="file-field" ng-if="vm.modal.kind==='nonProject'">Supporting document<input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg" file-change="vm.setNonProjectSupportingFile($file)" /><span><i data-lucide="paperclip"></i>{{vm.nonProjectSupportingFile ? vm.nonProjectSupportingFile.name : 'Choose required supporting document'}}</span></label>
+              <p class="full" ng-if="vm.modal.kind==='nonProject'&&vm.nonProjectSupportingFile">Supporting document: {{vm.nonProjectSupportingFile.name}}</p>
               <a
                 ng-if="vm.modal.template"
                 href="{{vm.modal.template}}"
@@ -1600,6 +1620,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=28"></script>
+    <script src="app/app.js?v=29"></script>
   </body>
 </html>

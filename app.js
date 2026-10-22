@@ -119,6 +119,7 @@
       vm.vendorFilteredCount = 0;
       vm.visibleVendors = [];
       vm.glFunds = [];
+      vm.nonProjectOpex = [];
       vm.glSearch = "";
       vm.glPage = 1;
       vm.glPageSize = 20;
@@ -772,6 +773,11 @@
         if (!validateUploadFiles(selectedFiles)) { vm.uploadFiles = []; vm.uploadFile = null; redraw(); return; }
         vm.uploadFiles = selectedFiles;
         vm.uploadFile = vm.uploadFiles[0] || null;
+        redraw();
+      };
+      vm.setNonProjectSupportingFile = function (file) {
+        if (file && !validateUploadFileSize(file)) { vm.nonProjectSupportingFile = null; redraw(); return; }
+        vm.nonProjectSupportingFile = file || null;
         redraw();
       };
       vm.importPetLines = function (file) {
@@ -2349,6 +2355,7 @@
           budget: "templates/budget-upload-template.csv",
           invoice: "templates/invoice-upload-template.csv",
           sources: "templates/sources-upload-template.csv",
+          nonProject: "templates/non-project-opex-upload-template.csv",
         };
         vm.modal = {
           type: "upload",
@@ -2357,16 +2364,20 @@
           title:
             kind === "attachment"
               ? "Attach supporting files"
+              : kind === "nonProject"
+                ? "Create Non-Project OPEX"
               : kind === "sources"
                 ? "Synchronize CAPEX / OPEX"
                 : "Upload " + kind + " records",
-          submit: kind === "pet" ? "Save PET rows" : "Upload files",
+          submit: kind === "pet" ? "Save PET rows" : kind === "nonProject" ? "Import OPEX rows" : "Upload files",
           template: templates[kind],
           help:
             kind === "attachment"
               ? "PDF, spreadsheet and image files up to 50 MB."
               : kind === "sources"
                 ? "Columns: Type (Capex/Opex), ID, Description, Budget, Utilization, Available Budget, Locked Amt, Budget after Locked Amt, Claim Amt, Net Balance. Existing sources are updated by Type + ID."
+                : kind === "nonProject"
+                  ? "Upload the completed Non-Project OPEX template and one supporting document. Budget Type must be Opex on every row."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -2374,6 +2385,7 @@
         vm.uploadFile = null;
         vm.uploadFiles = [];
         vm.uploadPreview = [];
+        vm.nonProjectSupportingFile = null;
         vm.form = { item: item };
         if (kind === "pet") ensurePetReferenceNo();
         redraw();
@@ -2385,6 +2397,7 @@
         vm.modal = null;
         vm.form = {};
         vm.uploadFile = null;
+        vm.nonProjectSupportingFile = null;
         vm.uploadPreview = [];
         vm.bulkDecisionItems = [];
         vm.decisionPetRows = [];
@@ -2410,6 +2423,20 @@
           loadDashboard().then(function () { if (onDone) onDone(); });
         }, function (response) {
           noticeError(responseMessage(response, "Import failed."));
+        });
+      }
+      function saveNonProjectOpexUpload() {
+        if (!vm.uploadFile) { noticeError("Choose the Non-Project OPEX CSV or Excel file first."); return; }
+        if (!vm.nonProjectSupportingFile) { noticeError("Choose a supporting document for this upload."); return; }
+        var formData = new FormData();
+        formData.append("dataFile", vm.uploadFile);
+        formData.append("supportingFile", vm.nonProjectSupportingFile);
+        $http.post("api/portfolio/non-project-opex/import", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
+          notice(((response.data && response.data.imported) || 0) + " non-project OPEX row(s) imported.");
+          vm.close();
+          loadDashboard();
+        }, function (response) {
+          noticeError(responseMessage(response, "Unable to import Non-Project OPEX rows."));
         });
       }
       function uploadAttachment(entityType, entityId, file) {
@@ -2525,6 +2552,7 @@
       }
       vm.saveModal = function () {
         var type = vm.modal.type;
+        if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
         if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.form.isEdit && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
         if (type === "project" && !vm.demo) {
@@ -3096,6 +3124,7 @@
           vm.budgets = data.budgets || [];
           vm.jira = data.jira || [];
           vm.budgetUsage = data.budgetUsage || [];
+          vm.nonProjectOpex = data.nonProjectOpex || [];
           refreshSelectedBudgetUsageRows();
           prepareProjects();
           vm.updateView(true);

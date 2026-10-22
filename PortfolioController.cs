@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Globalization;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http;
@@ -58,6 +59,14 @@ namespace DFM.Web.Controllers
                     ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
                 approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
+                nonProjectOpex = Db.Query(@"SELECT l.*, b.SourceFile, b.CreatedUtc BatchCreatedUtc,
+                    a.AttachmentId, a.OriginalName SupportingDocumentName, a.ContentType SupportingDocumentContentType
+                    FROM dbo.NonProjectOpexLines l
+                    JOIN dbo.NonProjectOpexBatches b ON b.NonProjectOpexBatchId=l.NonProjectOpexBatchId
+                    OUTER APPLY (SELECT TOP 1 AttachmentId,OriginalName,ContentType FROM dbo.Attachments
+                        WHERE EntityType='NonProjectOpexBatch' AND EntityId=b.NonProjectOpexBatchId ORDER BY AttachmentId DESC) a
+                    WHERE @includeAll=1 OR LOWER(LTRIM(RTRIM(l.CreatedBy)))=LOWER(LTRIM(RTRIM(@user)))
+                    ORDER BY l.CreatedUtc DESC", P("@includeAll", User.IsInRole("Admin") || User.IsInRole("Master")), P("@user", User.Identity.Name)),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
                 budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC")
             });
@@ -955,6 +964,185 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 Db.Execute(@"INSERT dbo.Attachments(EntityType,EntityId,OriginalName,StoredName,ContentType,FileSize,UploadedBy)
                     VALUES(@type,@id,@original,@stored,@content,@size,@user)", P("@type", entityType), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", fileSize), P("@user", uploadedBy));
             }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/import")]
+        public async Task<IHttpActionResult> ImportNonProjectOpex()
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                var dataFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("dataFile", StringComparison.OrdinalIgnoreCase));
+                var supportingFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("supportingFile", StringComparison.OrdinalIgnoreCase));
+                if (dataFile == null) return BadRequest("Choose the Non-Project OPEX CSV or Excel file first.");
+                if (supportingFile == null) return BadRequest("Choose a supporting document for this upload.");
+
+                var sourceFileName = Path.GetFileName(dataFile.Headers.ContentDisposition.FileName.Trim('"'));
+                var extension = Path.GetExtension(sourceFileName).ToLowerInvariant();
+                if (extension != ".csv" && extension != ".xlsx" && extension != ".xlsm") return BadRequest("The data file must be CSV, XLSX, or XLSM.");
+                var sourceBytes = await dataFile.ReadAsByteArrayAsync();
+                if (sourceBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The data file exceeds the 50 MB upload limit.");
+                var rows = extension == ".csv"
+                    ? CsvBulkImporter.Parse(System.Text.Encoding.UTF8.GetString(sourceBytes))
+                    : SpreadsheetTableReader.Read(new MemoryStream(sourceBytes));
+                var importRows = ParseNonProjectOpexRows(rows, sourceFileName);
+                if (importRows.Count == 0) return BadRequest("The upload has no Non-Project OPEX data rows.");
+
+                var supportingOriginalName = AttachmentColumnValue(Path.GetFileName(supportingFile.Headers.ContentDisposition.FileName.Trim('"')), 260, "supporting-document");
+                var supportingBytes = await supportingFile.ReadAsByteArrayAsync();
+                if (supportingBytes.Length == 0) return BadRequest("The supporting document is empty.");
+                if (supportingBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The supporting document exceeds the 50 MB upload limit.");
+                var storedName = AttachmentColumnValue(StoredAttachmentName(supportingOriginalName), 260, Guid.NewGuid().ToString("N"));
+                var contentType = AttachmentColumnValue(supportingFile.Headers.ContentType == null ? MimeMapping.GetMimeMapping(supportingOriginalName) : supportingFile.Headers.ContentType.MediaType, 150, "application/octet-stream");
+                WriteAttachmentFile(storedName, supportingBytes);
+
+                var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES(@source,@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@source", AttachmentColumnValue(sourceFileName, 260, "upload.csv")), P("@user", User.Identity.Name)).FirstOrDefault();
+                var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
+                SaveAttachmentRow("NonProjectOpexBatch", batchId, supportingOriginalName, storedName, contentType, supportingBytes.LongLength, User.Identity.Name);
+                foreach (var row in importRows) SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
+                return Ok(new { imported = importRows.Count });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest("Unable to import Non-Project OPEX rows. " + ex.Message); }
+        }
+
+        private static string MultipartFieldName(HttpContent content)
+        {
+            var name = content.Headers.ContentDisposition == null ? "" : content.Headers.ContentDisposition.Name;
+            return (name ?? "").Trim('"');
+        }
+
+        private static readonly string[] NonProjectOpexHeaders = {
+            "Initiative", "Platform", "Line Item", "EPM ID", "Budget Type", "Capex ID/OPEX", "GL #", "Budget Apprd(AED)",
+            "Memo/CAM ID", "Amount Apprd(AED)", "Vendor", "DATE RAISED", "LPO/SO #", "PO Date", "AMS #", "CAM Status",
+            "Description", "Invoice Memo#", "Invoice #", "Invoice Amount(AED)", "Invoice Date", "Invoice Entry/Process Date",
+            "Invoice Status", "Invoice Desc.", "Folder", "Handled By", "Column1"
+        };
+
+        private static List<Dictionary<string, object>> ParseNonProjectOpexRows(List<List<string>> rows, string sourceName)
+        {
+            var headerRow = -1;
+            var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var candidate = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var column = 0; column < rows[rowIndex].Count; column++)
+                {
+                    var key = NormalizeImportHeader(rows[rowIndex][column]);
+                    if (!string.IsNullOrEmpty(key) && !candidate.ContainsKey(key)) candidate.Add(key, column);
+                }
+                if (NonProjectOpexHeaders.All(header => candidate.ContainsKey(NormalizeImportHeader(header))))
+                {
+                    headerRow = rowIndex;
+                    headerMap = candidate;
+                    break;
+                }
+            }
+            if (headerRow < 0) throw new ArgumentException("The " + sourceName + " must contain all columns from the Non-Project OPEX template.");
+
+            var result = new List<Dictionary<string, object>>();
+            for (var rowIndex = headerRow + 1; rowIndex < rows.Count; rowIndex++)
+            {
+                var cells = rows[rowIndex];
+                if (cells.All(string.IsNullOrWhiteSpace)) continue;
+                var rowNumber = rowIndex + 1;
+                var initiative = ImportText(cells, headerMap, "Initiative", 500, true, rowNumber);
+                var lineItem = ImportText(cells, headerMap, "Line Item", 200, true, rowNumber);
+                var budgetType = ImportText(cells, headerMap, "Budget Type", 10, true, rowNumber);
+                if (!budgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase) && !budgetType.Equals("Opex", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Row " + rowNumber + ": Budget Type must be Opex. Non-Project records are OPEX only.");
+                var amountApproved = ImportDecimal(cells, headerMap, "Amount Apprd(AED)", false, rowNumber);
+                if (amountApproved.Value <= 0) throw new ArgumentException("Row " + rowNumber + ": Amount Apprd(AED) must be greater than zero.");
+                var vendor = ImportText(cells, headerMap, "Vendor", 300, true, rowNumber);
+                var record = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "Initiative", initiative }, { "Platform", ImportText(cells, headerMap, "Platform", 200, false, rowNumber) },
+                    { "LineItem", lineItem }, { "EpmId", ImportText(cells, headerMap, "EPM ID", 100, false, rowNumber) },
+                    { "BudgetType", "OPEX" }, { "OpexReference", ImportText(cells, headerMap, "Capex ID/OPEX", 100, false, rowNumber) },
+                    { "GlNumber", ImportText(cells, headerMap, "GL #", 50, false, rowNumber) },
+                    { "BudgetApprovedAed", ImportDecimal(cells, headerMap, "Budget Apprd(AED)", true, rowNumber) },
+                    { "MemoCamId", ImportText(cells, headerMap, "Memo/CAM ID", 100, false, rowNumber) },
+                    { "AmountApprovedAed", amountApproved.Value }, { "Vendor", vendor },
+                    { "DateRaised", ImportDate(cells, headerMap, "DATE RAISED", rowNumber) },
+                    { "LpoSoNumber", ImportText(cells, headerMap, "LPO/SO #", 100, false, rowNumber) },
+                    { "PoDate", ImportDate(cells, headerMap, "PO Date", rowNumber) },
+                    { "AmsNumber", ImportText(cells, headerMap, "AMS #", 100, false, rowNumber) },
+                    { "CamStatus", ImportText(cells, headerMap, "CAM Status", 100, false, rowNumber) },
+                    { "Description", ImportText(cells, headerMap, "Description", 1000, false, rowNumber) },
+                    { "InvoiceMemoNumber", ImportText(cells, headerMap, "Invoice Memo#", 100, false, rowNumber) },
+                    { "InvoiceNumber", ImportText(cells, headerMap, "Invoice #", 100, false, rowNumber) },
+                    { "InvoiceAmountAed", ImportDecimal(cells, headerMap, "Invoice Amount(AED)", true, rowNumber) },
+                    { "InvoiceDate", ImportDate(cells, headerMap, "Invoice Date", rowNumber) },
+                    { "InvoiceEntryProcessDate", ImportDate(cells, headerMap, "Invoice Entry/Process Date", rowNumber) },
+                    { "InvoiceStatus", ImportText(cells, headerMap, "Invoice Status", 100, false, rowNumber) },
+                    { "InvoiceDescription", ImportText(cells, headerMap, "Invoice Desc.", 1000, false, rowNumber) },
+                    { "Folder", ImportText(cells, headerMap, "Folder", 500, false, rowNumber) },
+                    { "HandledBy", ImportText(cells, headerMap, "Handled By", 254, false, rowNumber) },
+                    { "Column1", ImportText(cells, headerMap, "Column1", 500, false, rowNumber) }
+                };
+                result.Add(record);
+            }
+            return result;
+        }
+
+        private static string NormalizeImportHeader(string value)
+        {
+            return new string((value ?? "").ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+        }
+
+        private static string ImportText(List<string> cells, Dictionary<string, int> headers, string header, int maxLength, bool required, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var value = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (required && value.Length == 0) throw new ArgumentException("Row " + rowNumber + ": " + header + " is required.");
+            if (value.Length > maxLength) throw new ArgumentException("Row " + rowNumber + ": " + header + " exceeds " + maxLength + " characters.");
+            return value.Length == 0 ? null : value;
+        }
+
+        private static decimal? ImportDecimal(List<string> cells, Dictionary<string, int> headers, string header, bool optional, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var text = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (text.Length == 0 && optional) return null;
+            decimal value;
+            var cleaned = text.Replace(",", "").Replace("AED", "").Trim();
+            if (!decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol | NumberStyles.AllowParentheses, CultureInfo.InvariantCulture, out value))
+                throw new ArgumentException("Row " + rowNumber + ": " + header + " must be a valid amount.");
+            return value;
+        }
+
+        private static DateTime? ImportDate(List<string> cells, Dictionary<string, int> headers, string header, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var text = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (text.Length == 0) return null;
+            DateTime value;
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out value)) return value.Date;
+            var formats = new[] { "MMM-yy", "MMM-yyyy", "MMMM-yy", "MMMM-yyyy", "d-MMM-yy", "d-MMM-yyyy", "dd-MMM-yy", "dd-MMM-yyyy" };
+            if (DateTime.TryParseExact(text, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out value)) return value.Date;
+            double serial;
+            if (double.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out serial) && serial > 0)
+            {
+                try { return DateTime.FromOADate(serial).Date; }
+                catch (ArgumentException) { }
+            }
+            throw new ArgumentException("Row " + rowNumber + ": " + header + " must be a valid date.");
+        }
+
+        private static void SaveNonProjectOpexRow(int batchId, Dictionary<string, object> row, string userEmail)
+        {
+            Db.Execute(@"INSERT dbo.NonProjectOpexLines(NonProjectOpexBatchId,Initiative,Platform,LineItem,EpmId,BudgetType,OpexReference,GlNumber,BudgetApprovedAed,MemoCamId,AmountApprovedAed,Vendor,DateRaised,LpoSoNumber,PoDate,AmsNumber,CamStatus,Description,InvoiceMemoNumber,InvoiceNumber,InvoiceAmountAed,InvoiceDate,InvoiceEntryProcessDate,InvoiceStatus,InvoiceDescription,Folder,HandledBy,Column1,CreatedBy)
+                VALUES(@Batch,@Initiative,@Platform,@LineItem,@EpmId,@BudgetType,@OpexReference,@GlNumber,@BudgetApprovedAed,@MemoCamId,@AmountApprovedAed,@Vendor,@DateRaised,@LpoSoNumber,@PoDate,@AmsNumber,@CamStatus,@Description,@InvoiceMemoNumber,@InvoiceNumber,@InvoiceAmountAed,@InvoiceDate,@InvoiceEntryProcessDate,@InvoiceStatus,@InvoiceDescription,@Folder,@HandledBy,@Column1,@User)",
+                P("@Batch", batchId), P("@Initiative", row["Initiative"]), P("@Platform", row["Platform"]), P("@LineItem", row["LineItem"]), P("@EpmId", row["EpmId"]),
+                P("@BudgetType", row["BudgetType"]), P("@OpexReference", row["OpexReference"]), P("@GlNumber", row["GlNumber"]), P("@BudgetApprovedAed", row["BudgetApprovedAed"]), P("@MemoCamId", row["MemoCamId"]),
+                P("@AmountApprovedAed", row["AmountApprovedAed"]), P("@Vendor", row["Vendor"]), P("@DateRaised", row["DateRaised"]), P("@LpoSoNumber", row["LpoSoNumber"]), P("@PoDate", row["PoDate"]),
+                P("@AmsNumber", row["AmsNumber"]), P("@CamStatus", row["CamStatus"]), P("@Description", row["Description"]), P("@InvoiceMemoNumber", row["InvoiceMemoNumber"]), P("@InvoiceNumber", row["InvoiceNumber"]),
+                P("@InvoiceAmountAed", row["InvoiceAmountAed"]), P("@InvoiceDate", row["InvoiceDate"]), P("@InvoiceEntryProcessDate", row["InvoiceEntryProcessDate"]), P("@InvoiceStatus", row["InvoiceStatus"]), P("@InvoiceDescription", row["InvoiceDescription"]),
+                P("@Folder", row["Folder"]), P("@HandledBy", row["HandledBy"]), P("@Column1", row["Column1"]), P("@User", userEmail));
         }
 
         private static string AttachmentColumnValue(string value, int maxLength, string fallback)
