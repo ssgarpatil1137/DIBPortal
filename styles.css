@@ -1414,6 +1414,25 @@ textarea {
   color: var(--green-2);
   font-weight: 700;
 }
+.upload-zone.non-project-zone {
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: left;
+}
+.non-project-entry {
+  display: grid;
+  gap: 14px;
+}
+.non-project-entry .segmented {
+  justify-self: start;
+}
+.non-project-entry .file-field > span {
+  padding: 12px;
+}
+.upload-zone.non-project-zone a.template-link {
+  justify-content: flex-start;
+}
 .toast {
   position: fixed;
   right: 24px;
@@ -2203,7 +2222,7 @@ main {
   background: #e9f2ec;
 }
 .source-detail-table {
-  min-width: 1680px;
+  min-width: 920px;
 }
 .source-detail-table th,
 .source-detail-table td {

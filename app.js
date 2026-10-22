@@ -2370,7 +2370,7 @@
         vm.modal = {
           type: "upload",
           kind: kind,
-          kicker: "BULK IMPORT",
+          kicker: kind === "nonProject" ? "NON PROJECT" : "BULK IMPORT",
           title:
             kind === "attachment"
               ? "Attach supporting files"
@@ -2396,6 +2396,7 @@
         vm.uploadFiles = [];
         vm.uploadPreview = [];
         vm.nonProjectSupportingFile = null;
+        vm.nonProjectEditId = null;
         vm.nonProjectEntryMode = kind === "nonProject" ? "manual" : "upload";
         vm.form = kind === "nonProject" ? {
           budgetType: "OPEX", amountApprovedAed: null,
@@ -2410,11 +2411,34 @@
       vm.download = function (kind) {
         window.location.href = "templates/" + kind + "-upload-template.csv";
       };
+      vm.canChangeNonProjectOpex = function (row) {
+        return vm.can("request") && (vm.hasRole("Master") || createdByCurrentUser(row));
+      };
+      vm.editNonProjectOpex = function (row) {
+        vm.openUpload("nonProject");
+        vm.modal.title = "Edit Non Project";
+        vm.nonProjectEditId = row.nonProjectOpexLineId;
+        Object.keys(vm.form).forEach(function (key) {
+          if (row[key] !== undefined) vm.form[key] = row[key];
+        });
+        ["dateRaised", "poDate", "invoiceDate", "invoiceEntryProcessDate"].forEach(function (key) {
+          vm.form[key] = vm.form[key] ? new Date(vm.form[key]) : null;
+        });
+        redraw();
+      };
+      vm.deleteNonProjectOpex = function (row) {
+        if (!window.confirm("Delete Non Project record \"" + (row.lineItem || row.nonProjectOpexLineId) + "\"? This cannot be undone.")) return;
+        $http.post("api/portfolio/non-project-opex/" + row.nonProjectOpexLineId + "/delete").then(function () {
+          notice("Non Project record deleted.");
+          loadDashboard();
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete the Non Project record.")); });
+      };
       vm.close = function () {
         vm.modal = null;
         vm.form = {};
         vm.uploadFile = null;
         vm.nonProjectSupportingFile = null;
+        vm.nonProjectEditId = null;
         vm.uploadPreview = [];
         vm.bulkDecisionItems = [];
         vm.decisionPetRows = [];
@@ -2444,21 +2468,30 @@
       }
       function saveNonProjectOpexUpload() {
         if (vm.nonProjectEntryMode === "manual") {
-          if (!String(vm.form.initiative || "").trim() || !String(vm.form.lineItem || "").trim() || !String(vm.form.vendor || "").trim() || !(Number(vm.form.amountApprovedAed) > 0)) {
+          var payload = angular.extend({}, vm.form, { budgetType: "OPEX" });
+          var badNumber = ["budgetApprovedAed", "amountApprovedAed", "invoiceAmountAed"].some(function (key) {
+            var text = String(payload[key] == null ? "" : payload[key]).replace(/,/g, "").trim();
+            payload[key] = text === "" ? null : Number(text);
+            return text !== "" && !isFinite(payload[key]);
+          });
+          if (badNumber) { noticeError("Amounts must be valid numbers."); return; }
+          if (!String(payload.initiative || "").trim() || !String(payload.lineItem || "").trim() || !String(payload.vendor || "").trim() || !(payload.amountApprovedAed > 0)) {
             noticeError("Initiative, Line Item, Vendor, and a positive Amount Apprd(AED) are required."); return;
           }
-          if (!vm.form.opexReference) { noticeError("Select the OPEX source from CAPEX / OPEX."); return; }
-          vm.form.budgetType = "OPEX";
-          $http.post("api/portfolio/non-project-opex", vm.form).then(function (response) {
+          if (!payload.opexReference) { noticeError("Select the OPEX source from CAPEX / OPEX."); return; }
+          var isEdit = !!vm.nonProjectEditId;
+          var url = isEdit ? "api/portfolio/non-project-opex/" + vm.nonProjectEditId : "api/portfolio/non-project-opex";
+          $http.post(url, payload).then(function (response) {
             var batchId = response.data && response.data.batchId;
+            var savedMessage = isEdit ? "Non Project record updated." : "Non Project record saved.";
             if (!vm.nonProjectSupportingFile) {
-              notice("Non-Project OPEX record saved.");
+              notice(savedMessage);
               vm.close();
               loadDashboard();
               return;
             }
             uploadAttachment("NonProjectOpexBatch", batchId, vm.nonProjectSupportingFile).then(function () {
-              notice("Non-Project OPEX record and supporting document saved.");
+              notice(savedMessage + " Supporting document saved.");
               vm.close();
               loadDashboard();
             }, function (uploadResponse) {

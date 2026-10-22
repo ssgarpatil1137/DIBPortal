@@ -973,10 +973,8 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             try
             {
                 var row = NonProjectOpexRequestRow(value);
-                var opexReference = row["OpexReference"] as string;
-                if (string.IsNullOrEmpty(opexReference)) return BadRequest("Select the OPEX source from CAPEX / OPEX.");
-                if (!Db.Query("SELECT 1 Found FROM dbo.BudgetSources WHERE BudgetType='OPEX' AND ExternalId=@id", P("@id", opexReference)).Any())
-                    return BadRequest("The selected OPEX source does not exist in CAPEX / OPEX.");
+                var sourceError = NonProjectOpexSourceError(row);
+                if (sourceError != null) return BadRequest(sourceError);
                 var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES('Manual entry',@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@user", User.Identity.Name)).FirstOrDefault();
                 var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
                 SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
@@ -984,6 +982,69 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/{lineId:int}")]
+        public IHttpActionResult UpdateNonProjectOpex(int lineId, NonProjectOpexRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                var existing = EditableNonProjectOpexLine(lineId);
+                if (existing == null) return NotFound();
+                var row = NonProjectOpexRequestRow(value);
+                var sourceError = NonProjectOpexSourceError(row);
+                if (sourceError != null) return BadRequest(sourceError);
+                Db.Execute(@"UPDATE dbo.NonProjectOpexLines SET Initiative=@Initiative,Platform=@Platform,LineItem=@LineItem,EpmId=@EpmId,OpexReference=@OpexReference,GlNumber=@GlNumber,
+                    BudgetApprovedAed=@BudgetApprovedAed,MemoCamId=@MemoCamId,AmountApprovedAed=@AmountApprovedAed,Vendor=@Vendor,DateRaised=@DateRaised,LpoSoNumber=@LpoSoNumber,PoDate=@PoDate,
+                    AmsNumber=@AmsNumber,CamStatus=@CamStatus,Description=@Description,InvoiceMemoNumber=@InvoiceMemoNumber,InvoiceNumber=@InvoiceNumber,InvoiceAmountAed=@InvoiceAmountAed,
+                    InvoiceDate=@InvoiceDate,InvoiceEntryProcessDate=@InvoiceEntryProcessDate,InvoiceStatus=@InvoiceStatus,InvoiceDescription=@InvoiceDescription,Folder=@Folder,HandledBy=@HandledBy,Column1=@Column1
+                    WHERE NonProjectOpexLineId=@Id",
+                    P("@Id", lineId), P("@Initiative", row["Initiative"]), P("@Platform", row["Platform"]), P("@LineItem", row["LineItem"]), P("@EpmId", row["EpmId"]),
+                    P("@OpexReference", row["OpexReference"]), P("@GlNumber", row["GlNumber"]), P("@BudgetApprovedAed", row["BudgetApprovedAed"]), P("@MemoCamId", row["MemoCamId"]),
+                    P("@AmountApprovedAed", row["AmountApprovedAed"]), P("@Vendor", row["Vendor"]), P("@DateRaised", row["DateRaised"]), P("@LpoSoNumber", row["LpoSoNumber"]), P("@PoDate", row["PoDate"]),
+                    P("@AmsNumber", row["AmsNumber"]), P("@CamStatus", row["CamStatus"]), P("@Description", row["Description"]), P("@InvoiceMemoNumber", row["InvoiceMemoNumber"]), P("@InvoiceNumber", row["InvoiceNumber"]),
+                    P("@InvoiceAmountAed", row["InvoiceAmountAed"]), P("@InvoiceDate", row["InvoiceDate"]), P("@InvoiceEntryProcessDate", row["InvoiceEntryProcessDate"]), P("@InvoiceStatus", row["InvoiceStatus"]),
+                    P("@InvoiceDescription", row["InvoiceDescription"]), P("@Folder", row["Folder"]), P("@HandledBy", row["HandledBy"]), P("@Column1", row["Column1"]));
+                return Ok(new { batchId = Convert.ToInt32(existing["NonProjectOpexBatchId"]) });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/{lineId:int}/delete")]
+        public IHttpActionResult DeleteNonProjectOpex(int lineId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (EditableNonProjectOpexLine(lineId) == null) return NotFound();
+                Db.Execute(@"DECLARE @batch int=(SELECT NonProjectOpexBatchId FROM dbo.NonProjectOpexLines WHERE NonProjectOpexLineId=@Id);
+                    DELETE dbo.NonProjectOpexLines WHERE NonProjectOpexLineId=@Id;
+                    IF NOT EXISTS(SELECT 1 FROM dbo.NonProjectOpexLines WHERE NonProjectOpexBatchId=@batch)
+                    BEGIN
+                        DELETE dbo.Attachments WHERE EntityType='NonProjectOpexBatch' AND EntityId=@batch;
+                        DELETE dbo.NonProjectOpexBatches WHERE NonProjectOpexBatchId=@batch;
+                    END", P("@Id", lineId));
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        // Master/Admin can change any record; others only their own.
+        private Dictionary<string, object> EditableNonProjectOpexLine(int lineId)
+        {
+            return Db.Query(@"SELECT NonProjectOpexLineId,NonProjectOpexBatchId FROM dbo.NonProjectOpexLines
+                WHERE NonProjectOpexLineId=@Id AND (@isMaster=1 OR LOWER(LTRIM(RTRIM(CreatedBy)))=LOWER(LTRIM(RTRIM(@user))))",
+                P("@Id", lineId), P("@isMaster", User.IsInRole("Master") || User.IsInRole("Admin")), P("@user", User.Identity.Name)).FirstOrDefault();
+        }
+
+        private static string NonProjectOpexSourceError(Dictionary<string, object> row)
+        {
+            var opexReference = row["OpexReference"] as string;
+            if (string.IsNullOrEmpty(opexReference)) return "Select the OPEX source from CAPEX / OPEX.";
+            return Db.Query("SELECT 1 Found FROM dbo.BudgetSources WHERE BudgetType='OPEX' AND ExternalId=@id", P("@id", opexReference)).Any()
+                ? null : "The selected OPEX source does not exist in CAPEX / OPEX.";
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/import")]

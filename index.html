@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=28" />
+    <link rel="stylesheet" href="app/styles.css?v=29" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -500,11 +500,12 @@
         </div>
         <div class="table-scroll" ng-if="vm.visibleNonProjectOpex.length">
           <table class="data-table">
-            <thead><tr><th>Initiative</th><th>Platform</th><th>Line Item</th><th>EPM ID</th><th>Budget Type</th><th>Capex ID/OPEX</th><th>GL #</th><th>Budget Apprd (AED)</th><th>Memo/CAM ID</th><th>Amount Apprd (AED)</th><th>Vendor</th><th>Date Raised</th><th>LPO/SO #</th><th>PO Date</th><th>AMS #</th><th>CAM Status</th><th>Description</th><th>Invoice Memo#</th><th>Invoice #</th><th>Invoice Amount (AED)</th><th>Invoice Date</th><th>Invoice Entry/Process Date</th><th>Invoice Status</th><th>Invoice Desc.</th><th>Folder</th><th>Handled By</th><th>Column1</th><th>Supporting Document</th></tr></thead>
+            <thead><tr><th>Initiative</th><th>Platform</th><th>Line Item</th><th>EPM ID</th><th>Budget Type</th><th>Capex ID/OPEX</th><th>GL #</th><th>Budget Apprd (AED)</th><th>Memo/CAM ID</th><th>Amount Apprd (AED)</th><th>Vendor</th><th>Date Raised</th><th>LPO/SO #</th><th>PO Date</th><th>AMS #</th><th>CAM Status</th><th>Description</th><th>Invoice Memo#</th><th>Invoice #</th><th>Invoice Amount (AED)</th><th>Invoice Date</th><th>Invoice Entry/Process Date</th><th>Invoice Status</th><th>Invoice Desc.</th><th>Folder</th><th>Handled By</th><th>Column1</th><th>Supporting Document</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="row in vm.visibleNonProjectOpex track by row.nonProjectOpexLineId">
                 <td>{{row.initiative}}</td><td>{{row.platform}}</td><td>{{row.lineItem}}</td><td>{{row.epmId}}</td><td>{{row.budgetType}}</td><td>{{row.opexReference}}</td><td>{{row.glNumber}}</td><td>{{row.budgetApprovedAed!=null?vm.money(row.budgetApprovedAed):''}}</td><td>{{row.memoCamId}}</td><td>{{vm.money(row.amountApprovedAed)}}</td><td>{{row.vendor}}</td><td>{{row.dateRaised|date:'dd-MMM-yyyy'}}</td><td>{{row.lpoSoNumber}}</td><td>{{row.poDate|date:'dd-MMM-yyyy'}}</td><td>{{row.amsNumber}}</td><td>{{row.camStatus}}</td><td>{{row.description}}</td><td>{{row.invoiceMemoNumber}}</td><td>{{row.invoiceNumber}}</td><td>{{row.invoiceAmountAed!=null?vm.money(row.invoiceAmountAed):''}}</td><td>{{row.invoiceDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceEntryProcessDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceStatus}}</td><td>{{row.invoiceDescription}}</td><td>{{row.folder}}</td><td>{{row.handledBy}}</td><td>{{row.column1}}</td>
                 <td><button type="button" class="link-btn" ng-if="row.attachmentId" ng-click="vm.downloadAttachment({attachmentId:row.attachmentId,originalName:row.supportingDocumentName})">{{row.supportingDocumentName||'Download'}}</button></td>
+                <td><div class="row-actions" ng-if="vm.canChangeNonProjectOpex(row)"><button type="button" class="icon-btn" ng-click="vm.editNonProjectOpex(row)" title="Edit Non Project record"><i data-lucide="pencil"></i></button><button type="button" class="icon-btn danger" ng-click="vm.deleteNonProjectOpex(row)" title="Delete Non Project record"><i data-lucide="trash-2"></i></button></div></td>
               </tr>
             </tbody>
           </table>
@@ -1473,21 +1474,22 @@
                 <div><small>Created By</small><strong>{{vm.form.createdBy||'Not supplied'}}</strong></div>
               </div>
             </div>
-            <div ng-if="vm.modal.type==='upload'" class="upload-zone">
-              <i data-lucide="cloud-upload"></i>
-              <h3>Drop CSV, Excel, or attachments here</h3>
-              <p>{{vm.modal.help}}</p>
+            <div ng-if="vm.modal.type==='upload'" class="upload-zone" ng-class="{'non-project-zone':vm.modal.kind==='nonProject'}">
+              <i data-lucide="cloud-upload" ng-if="vm.modal.kind!=='nonProject'"></i>
+              <h3 ng-if="vm.modal.kind!=='nonProject'">Drop CSV, Excel, or attachments here</h3>
+              <p ng-if="vm.modal.kind!=='nonProject'">{{vm.modal.help}}</p>
               <input type="file" ng-if="vm.modal.kind!=='attachment'&&vm.modal.kind!=='sources'&&vm.modal.kind!=='nonProject'" accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFile($file)" />
               <input type="file" ng-if="vm.modal.kind==='attachment'" multiple file-change="vm.setUploadFiles($files)" />
               <input type="file" ng-if="vm.modal.kind==='sources'" multiple accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFiles($files)" />
-              <p ng-if="vm.uploadFile">Selected: {{vm.uploadFile.name}}<span ng-if="vm.uploadFiles.length>1"> + {{vm.uploadFiles.length-1}} more</span></p>
+              <p ng-if="vm.uploadFile&&vm.modal.kind!=='nonProject'">Selected: {{vm.uploadFile.name}}<span ng-if="vm.uploadFiles.length>1"> + {{vm.uploadFiles.length-1}} more</span></p>
               <div class="non-project-entry" ng-if="vm.modal.kind==='nonProject'">
-                <div class="segmented" role="group" aria-label="Non-Project OPEX entry mode">
+                <div class="segmented" role="group" aria-label="Non Project entry mode" ng-if="!vm.nonProjectEditId">
                   <button type="button" ng-class="{active:vm.nonProjectEntryMode==='manual'}" ng-click="vm.nonProjectEntryMode='manual'">Enter manually</button>
                   <button type="button" ng-class="{active:vm.nonProjectEntryMode==='upload'}" ng-click="vm.nonProjectEntryMode='upload'">Upload Excel / CSV</button>
                 </div>
                 <label class="file-field" ng-if="vm.nonProjectEntryMode==='upload'">Excel or CSV file<input type="file" accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFile($file)" /><span><i data-lucide="sheet"></i>{{vm.uploadFile ? vm.uploadFile.name : 'Choose CSV or Excel file'}}</span></label>
                 <label class="file-field">Supporting document (optional)<input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg" file-change="vm.setNonProjectSupportingFile($file)" /><span><i data-lucide="paperclip"></i>{{vm.nonProjectSupportingFile ? vm.nonProjectSupportingFile.name : 'Choose supporting document'}}</span></label>
+                <a class="template-link" ng-if="vm.nonProjectEntryMode==='upload'" href="{{vm.modal.template}}" download><i data-lucide="download"></i>Download template (Budget Type must be OPEX)</a>
                 <div class="form-grid" ng-if="vm.nonProjectEntryMode==='manual'">
                   <h3 class="form-section-title full">Non Project details</h3>
                   <label>Initiative<input ng-model="vm.form.initiative" maxlength="500" required /></label>
@@ -1497,9 +1499,9 @@
                   <label>Budget Type<input value="OPEX" readonly /></label>
                   <label>Capex ID/OPEX<select falcon-select2 data-placeholder="Search OPEX source" ng-model="vm.form.opexReference" ng-change="vm.selectNonProjectOpexSource()" ng-options="b.externalId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:'OPEX'}:true" required><option value="">Select OPEX source</option></select></label>
                   <label>GL #<input ng-model="vm.form.glNumber" maxlength="50" /></label>
-                  <label>Budget Apprd (AED)<input type="number" min="0" step="0.01" ng-model="vm.form.budgetApprovedAed" /></label>
+                  <label>Budget Apprd (AED)<input type="text" inputmode="decimal" ng-model="vm.form.budgetApprovedAed" /></label>
                   <label>Memo/CAM ID<input ng-model="vm.form.memoCamId" maxlength="100" /></label>
-                  <label>Amount Apprd (AED)<input type="number" min="0.01" step="0.01" ng-model="vm.form.amountApprovedAed" required /></label>
+                  <label>Amount Apprd (AED)<input type="text" inputmode="decimal" ng-model="vm.form.amountApprovedAed" required /></label>
                   <label>Vendor<input ng-model="vm.form.vendor" maxlength="300" required /></label>
                   <label>Date Raised<input type="date" ng-model="vm.form.dateRaised" /></label>
                   <label>LPO/SO #<input ng-model="vm.form.lpoSoNumber" maxlength="100" /></label>
@@ -1509,7 +1511,7 @@
                   <label class="full">Description<textarea ng-model="vm.form.description" maxlength="1000"></textarea></label>
                   <label>Invoice Memo#<input ng-model="vm.form.invoiceMemoNumber" maxlength="100" /></label>
                   <label>Invoice #<input ng-model="vm.form.invoiceNumber" maxlength="100" /></label>
-                  <label>Invoice Amount (AED)<input type="number" min="0" step="0.01" ng-model="vm.form.invoiceAmountAed" /></label>
+                  <label>Invoice Amount (AED)<input type="text" inputmode="decimal" ng-model="vm.form.invoiceAmountAed" /></label>
                   <label>Invoice Date<input type="date" ng-model="vm.form.invoiceDate" /></label>
                   <label>Invoice Entry/Process Date<input type="date" ng-model="vm.form.invoiceEntryProcessDate" /></label>
                   <label>Invoice Status<input ng-model="vm.form.invoiceStatus" maxlength="100" /></label>
@@ -1518,10 +1520,9 @@
                   <label>Handled By<input ng-model="vm.form.handledBy" maxlength="254" /></label>
                   <label>Column1<input ng-model="vm.form.column1" maxlength="500" /></label>
                 </div>
-                <p ng-if="vm.nonProjectEntryMode==='upload'">For multiple records, use the downloadable template. Budget Type must be OPEX on every row. A supporting document is optional.</p>
               </div>
               <a
-                ng-if="vm.modal.template"
+                ng-if="vm.modal.template&&vm.modal.kind!=='nonProject'"
                 href="{{vm.modal.template}}"
                 download
                 ><i data-lucide="download"></i>Download CSV template</a
@@ -1639,7 +1640,7 @@
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">
-              <i data-lucide="check"></i>{{vm.modal.kind==='nonProject'&&vm.nonProjectEntryMode==='manual'?'Save OPEX record':vm.modal.submit}}
+              <i data-lucide="check"></i>{{vm.modal.kind==='nonProject'&&vm.nonProjectEntryMode==='manual'?(vm.nonProjectEditId?'Update record':'Save OPEX record'):vm.modal.submit}}
             </button>
           </footer>
         </form>
@@ -1656,6 +1657,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=29"></script>
+    <script src="app/app.js?v=30"></script>
   </body>
 </html>
