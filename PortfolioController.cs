@@ -41,7 +41,12 @@ namespace DFM.Web.Controllers
                     ISNULL(petCounts.PendingReviewPetCount,0) PendingReviewPetCount,
                     ISNULL(petCounts.PendingApprovalPetCount,0) PendingApprovalPetCount,
                     ISNULL(petCounts.RejectedPetCount,0) RejectedPetCount,
-                    ISNULL(petCounts.SentBackPetCount,0) SentBackPetCount
+                    ISNULL(petCounts.SentBackPetCount,0) SentBackPetCount,
+                    CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(x.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests x ON x.PetId=s.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(s.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(bl.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord
                     FROM dbo.vw_ProjectPortfolio p
                     OUTER APPLY (SELECT
                         SUM(CASE WHEN x.Status='Approved' THEN 1 ELSE 0 END) ApprovedPetCount,
@@ -50,7 +55,7 @@ namespace DFM.Web.Controllers
                         SUM(CASE WHEN x.Status='Rejected' THEN 1 ELSE 0 END) RejectedPetCount,
                         SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
                         FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
-                    ORDER BY p.CreatedUtc DESC"),
+                    ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
                 approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
@@ -519,7 +524,7 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 }
                 var saved = SavePetRow(value, isSentBack).FirstOrDefault();
                 var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
-                if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems);
+                if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems, User.Identity.Name);
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -589,12 +594,12 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
             value.ExchangeRate = rate;
             var aedAmount = foreignAmount * rate;
-            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount)); }
+            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount, User.Identity.Name)); }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
         }
 
-        private static void SyncPetSpendItems(int petId, List<SpendItemRequest> items)
+        private static void SyncPetSpendItems(int petId, List<SpendItemRequest> items, string userEmail)
         {
             EnsureSpendLineIds(items);
             var ids = items.Where(item => item.SpendItemId.HasValue).Select(item => item.SpendItemId.Value).Distinct().ToList();
@@ -615,7 +620,7 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 var exchangeRate = CurrencyRateToLocal(item.Currency, item.ExchangeRate);
                 item.ExchangeRate = exchangeRate;
                 var aedAmount = foreignAmount * exchangeRate;
-                SaveSpendItemRow(item, foreignAmount, aedAmount);
+                SaveSpendItemRow(item, foreignAmount, aedAmount, userEmail);
             }
         }
 
@@ -658,11 +663,11 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             return lineId;
         }
 
-        private static Dictionary<string, object> SaveSpendItemRow(SpendItemRequest value, decimal foreignAmount, decimal aedAmount)
+        private static Dictionary<string, object> SaveSpendItemRow(SpendItemRequest value, decimal foreignAmount, decimal aedAmount, string userEmail)
         {
             try
             {
-                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence,@LineId,@SrNo,@LineDate", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence), P("@LineId", value.LineId), P("@SrNo", value.SerialNo), P("@LineDate", value.LineDate)).FirstOrDefault();
+            return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence,@LineId,@SrNo,@LineDate,@User", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence), P("@LineId", value.LineId), P("@SrNo", value.SerialNo), P("@LineDate", value.LineDate), P("@User", userEmail)).FirstOrDefault();
             }
             catch (SqlException ex)
             {

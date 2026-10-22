@@ -281,16 +281,16 @@
                         <span class="level-label">PET REQUESTS</span
                         ><strong>{{project.projectName}}</strong>
                       </div>
-                      <div class="child-total" ng-if="project.pets.length">
+                      <div class="child-total" ng-if="vm.visiblePets(project).length">
                         <span>Total amount</span>
                         <strong>{{vm.money(vm.projectPetRequestTotal(project))}}</strong>
                       </div>
                     </div>
-                    <div class="empty" ng-if="!project.pets.length">
+                    <div class="empty" ng-if="!vm.visiblePets(project).length">
                       <i data-lucide="file-plus-2"></i>
                       <strong>No PET requests yet for this project.</strong>
                     </div>
-                    <div class="child-grid-scroll" ng-if="project.pets.length">
+                    <div class="child-grid-scroll" ng-if="vm.visiblePets(project).length">
                       <table class="nested pet-request-table">
                         <thead>
                           <tr>
@@ -304,7 +304,7 @@
                             <th>Action</th>
                           </tr>
                         </thead>
-                        <tbody ng-repeat="pet in project.pets">
+                        <tbody ng-repeat="pet in vm.visiblePets(project)">
                           <tr>
                             <td><b>{{pet.code}}</b></td>
                             <td>
@@ -387,13 +387,13 @@
                         </tbody>
                       </table>
                     </div>
-                    <div class="child-title" ng-if="project.budgetLines.length">
+                    <div class="child-title" ng-if="vm.visibleBudgetLines(project).length">
                       <div>
                         <span class="level-label">BUDGET LINE REQUESTS</span
                         ><strong>{{project.projectName}}</strong>
                       </div>
                     </div>
-                    <div class="budget-wrap" ng-if="project.budgetLines.length">
+                    <div class="budget-wrap" ng-if="vm.visibleBudgetLines(project).length">
                       <table class="nested budget budget-line-request-table">
                         <thead>
                           <tr>
@@ -412,7 +412,7 @@
                             <th>Action</th>
                           </tr>
                         </thead>
-                        <tbody ng-repeat="line in project.budgetLines">
+                        <tbody ng-repeat="line in vm.visibleBudgetLines(project)">
                           <tr>
                             <td>{{$index+1}}</td>
                             <td>{{line.vendor}}</td>
@@ -431,7 +431,7 @@
                             </td>
                             <td>{{line.lpoRequest}}</td>
                             <td>{{line.lpoStatus}}</td>
-                            <td>{{line.invoices.length}}</td>
+                            <td>{{vm.visibleInvoices(line).length}}</td>
                             <td>
                               <div class="row-actions">
                                 <button
@@ -458,7 +458,7 @@
                                 </button
                                 ><button
                                   class="icon-btn"
-                                  ng-if="line.invoices&&line.invoices.length"
+                                  ng-if="vm.visibleInvoices(line).length"
                                   ng-click="vm.openInvoiceView(line)"
                                   title="View invoices"
                                 >
@@ -1036,13 +1036,13 @@
               >
             </div>
             <div ng-if="vm.modal.type==='spend'">
-              <div class="table-scroll spend-preview" ng-if="vm.selectedPet.spendItems.length">
+              <div class="table-scroll spend-preview" ng-if="vm.visibleSpendItems(vm.selectedPet).length">
                 <table class="nested pet-line-summary-grid spend-line-grid">
                   <thead><tr><th>Sr No</th><th>Date</th><th>ID</th><th>Head</th><th>Topic</th><th>Vendor</th><th>Cost type</th><th>Units</th><th>Unit price</th><th>CCY</th><th>FCY amt</th><th>AED amt</th><th>Cont.%</th><th>Final AED</th><th>GL#</th><th>Action</th></tr></thead>
-                  <tbody><tr ng-repeat="item in vm.selectedPet.spendItems"><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.costType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.amount(item.aedAmount*(1+item.contingencyPercent/100))}}</td><td>{{item.glNumber}}</td><td><button type="button" class="icon-btn" ng-if="vm.spendEditable" ng-click="vm.editSpend(item)" title="Edit PET line item"><i data-lucide="pencil"></i></button></td></tr></tbody>
+                  <tbody><tr ng-repeat="item in vm.visibleSpendItems(vm.selectedPet)"><td>{{item.serialNo}}</td><td>{{item.lineDate|date:'dd-MMM-yyyy'}}</td><td>{{item.lineId}}</td><td>{{item.head}}</td><td>{{item.topic}}</td><td>{{item.vendor}}</td><td>{{item.costType}}</td><td>{{item.units}}</td><td>{{vm.amount(item.unitPrice)}}</td><td>{{item.currency}}</td><td>{{vm.amount(item.foreignAmount)}}</td><td>{{vm.amount(item.aedAmount)}}</td><td>{{item.contingencyPercent}}%</td><td>{{vm.amount(item.aedAmount*(1+item.contingencyPercent/100))}}</td><td>{{item.glNumber}}</td><td><button type="button" class="icon-btn" ng-if="vm.spendEditable" ng-click="vm.editSpend(item)" title="Edit PET line item"><i data-lucide="pencil"></i></button></td></tr></tbody>
                 </table>
               </div>
-              <div class="empty" ng-if="!vm.selectedPet.spendItems.length&&!vm.spendFormVisible">
+              <div class="empty" ng-if="!vm.visibleSpendItems(vm.selectedPet).length&&!vm.spendFormVisible">
                 <i data-lucide="list-plus"></i>
                 <strong>No PET line items yet.</strong>
               </div>
@@ -1325,11 +1325,11 @@
                 <div><small>Budget Line</small><strong>{{vm.selectedLine.petReference||vm.selectedLine.petCode}}</strong></div>
                 <div><small>CAM ID</small><strong>{{vm.selectedLine.camId||'Not supplied'}}</strong></div>
               </div>
-              <div class="table-scroll spend-preview" ng-if="vm.invoices.length">
+              <div class="table-scroll spend-preview" ng-if="vm.visibleInvoices(vm.selectedLine).length">
                 <table class="nested">
                   <thead><tr><th>Invoice Number</th><th>Vendor Name</th><th>GL Number</th><th>Justification</th><th>Invoice Amount</th><th>Invoice Status</th><th>Payment Date</th><th>Created Date</th><th>Documents</th><th>Action</th></tr></thead>
                   <tbody>
-                    <tr ng-repeat="invoice in vm.invoices track by invoice.invoiceId">
+                    <tr ng-repeat="invoice in vm.visibleInvoices(vm.selectedLine) track by invoice.invoiceId">
                       <td>{{invoice.invoiceNumber}}</td>
                       <td>{{invoice.vendorName}}</td>
                       <td>{{invoice.glNumber}}</td>
@@ -1344,7 +1344,7 @@
                   </tbody>
                 </table>
               </div>
-              <div class="empty" ng-if="!vm.invoices.length">
+              <div class="empty" ng-if="!vm.visibleInvoices(vm.selectedLine).length">
                 <i data-lucide="receipt-text"></i>
                 <strong>No invoices available.</strong>
               </div>

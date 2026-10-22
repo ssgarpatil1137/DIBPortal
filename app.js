@@ -1530,16 +1530,56 @@
         if (sameStatus(status, "Sent Back")) return Number(project && project.sentBackPetCount) > 0;
         return false;
       }
+      function createdByCurrentUser(record) {
+        var currentEmail = (vm.session && vm.session.email || "").trim().toLowerCase();
+        return !!currentEmail && String(record && record.createdBy || "").trim().toLowerCase() === currentEmail;
+      }
+      function spendItemCreatedByCurrentUser(item, pet) {
+        if (createdByCurrentUser(item)) return true;
+        return !String(item && item.createdBy || "").trim() && createdByCurrentUser(pet);
+      }
+      function projectRequestorMatchesCurrentUser(project) {
+        var currentEmail = (vm.session && vm.session.email || "").trim().toLowerCase();
+        var currentName = (vm.session && vm.session.displayName || "").trim().toLowerCase();
+        return (project.requestorEmail || "").trim().toLowerCase() === currentEmail || (project.requestorName || "").trim().toLowerCase() === currentName;
+      }
+      function projectHasCurrentUserCreatedRecord(project) {
+        if (projectRequestorMatchesCurrentUser(project) || project.hasMyCreatedRecord === true || project.hasMyCreatedRecord === 1) return true;
+        return (project.pets || []).some(function (pet) {
+          return createdByCurrentUser(pet) || (pet.spendItems || []).some(function (item) { return spendItemCreatedByCurrentUser(item, pet); });
+        }) || (project.budgetLines || []).some(function (line) {
+          return createdByCurrentUser(line) || (line.invoices || []).some(createdByCurrentUser);
+        });
+      }
+      vm.visiblePets = function (project) {
+        return (project && project.pets || []).filter(function (pet) {
+          return vm.viewFilter !== "my" || createdByCurrentUser(pet) || (pet.spendItems || []).some(function (item) { return spendItemCreatedByCurrentUser(item, pet); });
+        });
+      };
+      vm.visibleSpendItems = function (pet) {
+        return (pet && pet.spendItems || []).filter(function (item) {
+          return vm.viewFilter !== "my" || spendItemCreatedByCurrentUser(item, pet);
+        });
+      };
+      vm.visibleBudgetLines = function (project) {
+        return (project && project.budgetLines || []).filter(function (line) {
+          return vm.viewFilter !== "my" || createdByCurrentUser(line) || (line.invoices || []).some(createdByCurrentUser);
+        });
+      };
+      vm.visibleInvoices = function (line) {
+        return (line && line.invoices || []).filter(function (invoice) {
+          return vm.viewFilter !== "my" || createdByCurrentUser(invoice);
+        });
+      };
       vm.updateView = function (keepPage) {
         var query = vm.search.toLowerCase();
         var currentEmail = (vm.session && vm.session.email || "").toLowerCase();
-        var currentName = (vm.session && vm.session.displayName || "").toLowerCase();
         var filtered = vm.projects.filter(function (p) {
           var pets = p.pets || [];
           var statusMatch = projectHasStatus(p, pets, vm.statusFilter);
-          var isMine = (p.requestorEmail || "").toLowerCase() === currentEmail || (p.requestorName || "").toLowerCase() === currentName;
+          var isMine = projectRequestorMatchesCurrentUser(p);
           var viewMatch = vm.viewFilter === "all" ||
-            (vm.viewFilter === "my" && isMine) ||
+            (vm.viewFilter === "my" && projectHasCurrentUserCreatedRecord(p)) ||
             (vm.viewFilter === "jira" && !!p.jiraKey) ||
             (vm.viewFilter === "nonJira" && !p.jiraKey) ||
             (vm.viewFilter === "pendingReview" && pets.some(function (pet) { return pet.status === "Pending Review"; })) ||
