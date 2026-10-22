@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Falcon | DIB Management Overview</title>
+  <style>
+    :root { --green:#0b4a36; --green2:#08764c; --gold:#bd8b22; --ink:#092a27; --muted:#53625b; --paper:#fff; --wash:#f1f5f2; --line:#d9e1dc; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:#17231e; color:var(--ink); font-family:"Segoe UI",Tahoma,sans-serif; }
+    .deck { min-height:100vh; display:grid; place-items:center; padding:24px; }
+    .slide { display:none; position:relative; width:min(96vw,1600px); aspect-ratio:16/9; overflow:hidden; background:var(--paper); box-shadow:0 24px 80px #0008; }
+    .slide.active { display:block; animation:arrive .32s ease-out; }
+    @keyframes arrive { from { opacity:.65; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+    .topline { height:12px; background:var(--gold); }
+    .masthead { height:68px; padding:0 5.5%; background:var(--green); color:white; display:flex; align-items:center; justify-content:space-between; }
+    .wordmark { display:flex; gap:12px; align-items:center; font-size:17px; font-weight:700; }
+    .wordmark img { width:39px; height:39px; }
+    .masthead small { color:#c4d7d0; font-size:12px; letter-spacing:1px; text-transform:uppercase; }
+    .cover { min-height:calc(100% - 80px); padding:7% 8% 5%; display:grid; grid-template-columns:1.15fr .85fr; gap:5%; align-items:center; background:linear-gradient(112deg,#fff 0%,#fff 64%,#f1f5f2 64%,#f1f5f2 100%); }
+    .eyebrow { margin:0 0 18px; color:var(--green2); font-weight:800; letter-spacing:2.2px; font-size:13px; text-transform:uppercase; }
+    h1 { max-width:850px; margin:0; color:var(--green); font-size:clamp(40px,5.2vw,78px); line-height:1.02; font-weight:750; letter-spacing:0; }
+    .cover-copy { max-width:680px; margin:24px 0 0; color:var(--muted); font-size:clamp(17px,1.65vw,24px); line-height:1.48; }
+    .cover-meta { margin-top:36px; display:flex; align-items:center; gap:12px; color:var(--ink); font-size:15px; font-weight:650; }
+    .cover-meta:before { content:""; height:3px; width:42px; background:var(--gold); }
+    .journey { position:relative; padding:12px 0 12px 28px; border-left:2px solid #c7d6ce; }
+    .journey:before { content:""; position:absolute; left:-6px; top:24px; height:calc(100% - 48px); width:10px; background:linear-gradient(var(--gold),var(--green2)); border-radius:8px; }
+    .stage { position:relative; margin:0 0 17px; padding:14px 17px; background:white; border:1px solid var(--line); border-left:4px solid var(--green); }
+    .stage:last-child { margin-bottom:0; border-left-color:var(--gold); }
+    .stage b { display:block; font-size:18px; color:var(--green); }
+    .stage span { display:block; margin-top:3px; color:var(--muted); font-size:13px; }
+    .slide-footer { position:absolute; left:5.5%; right:5.5%; bottom:20px; display:flex; justify-content:space-between; align-items:center; color:#718078; font-size:11px; }
+    .slide-footer strong { color:var(--green); letter-spacing:1px; }
+    .content { height:calc(100% - 80px); padding:4.2% 6% 5%; background:var(--wash); }
+    .content-head { display:flex; justify-content:space-between; align-items:flex-end; gap:28px; margin-bottom:28px; }
+    .content h2 { margin:0; color:var(--green); font-size:clamp(30px,3.1vw,46px); line-height:1.05; letter-spacing:0; }
+    .content-head p { max-width:490px; margin:0; color:var(--muted); font-size:16px; line-height:1.45; }
+    .benefits { display:grid; grid-template-columns:1fr 1fr; gap:15px 18px; }
+    .benefit { min-height:145px; display:grid; grid-template-columns:58px 1fr; gap:17px; padding:21px 23px; background:white; border:1px solid var(--line); border-top:4px solid var(--green); }
+    .benefit:nth-child(2),.benefit:nth-child(3) { border-top-color:var(--gold); }
+    .number { width:48px; height:48px; display:grid; place-items:center; color:white; background:var(--green); font-size:14px; font-weight:800; }
+    .benefit:nth-child(2) .number,.benefit:nth-child(3) .number { color:var(--ink); background:#f0d99e; }
+    .benefit h3 { margin:1px 0 7px; color:var(--green); font-size:19px; }
+    .benefit p { margin:0; color:var(--muted); font-size:14px; line-height:1.48; }
+    .outcome { margin-top:18px; padding:15px 19px; display:flex; align-items:center; gap:13px; background:var(--green); color:white; font-size:15px; line-height:1.4; }
+    .outcome i { display:block; width:4px; align-self:stretch; background:var(--gold); }
+    .controls { position:fixed; right:22px; bottom:18px; display:flex; gap:8px; z-index:4; }
+    .controls button { width:42px; height:42px; border:1px solid #ffffff55; background:var(--green); color:white; font-size:20px; cursor:pointer; }
+    .counter { position:fixed; left:22px; bottom:30px; color:white; font-size:12px; }
+    @media (max-width:760px) {
+      .deck { padding:0; }
+      .slide { width:100vw; min-height:100vh; aspect-ratio:auto; overflow:auto; }
+      .masthead { height:60px; padding:0 20px; }
+      .cover { min-height:calc(100vh - 72px); padding:50px 24px 80px; grid-template-columns:1fr; background:linear-gradient(180deg,#fff 0%,#fff 58%,var(--wash) 58%); }
+      h1 { font-size:46px; }
+      .journey { display:grid; grid-template-columns:1fr 1fr; gap:9px; padding:0; border:0; }
+      .journey:before { display:none; }
+      .stage { margin:0; padding:12px; }
+      .content { height:auto; min-height:calc(100vh - 72px); padding:38px 20px 80px; }
+      .content-head { display:block; margin-bottom:20px; }
+      .content-head p { margin-top:12px; }
+      .benefits { grid-template-columns:1fr; }
+      .benefit { min-height:auto; }
+      .slide-footer { bottom:18px; left:20px; right:20px; }
+      .controls { bottom:12px; right:12px; }
+      .counter { bottom:24px; left:14px; }
+    }
+    @media print {
+      @page { size:13.333in 7.5in; margin:0; }
+      body { background:white; }
+      .deck { display:block; padding:0; }
+      .slide,.slide.active { display:block !important; width:13.333in; height:7.5in; aspect-ratio:auto; box-shadow:none; page-break-after:always; animation:none; }
+      .slide:last-child { page-break-after:auto; }
+      .controls,.counter { display:none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="deck" aria-label="Falcon management presentation">
+    <section class="slide active" aria-label="Slide 1 of 2">
+      <div class="topline"></div>
+      <header class="masthead"><div class="wordmark"><img src="DFM.Web/assets/falcon-logo.svg" alt="" />FALCON</div><small>DIB Management Overview</small></header>
+      <div class="cover">
+        <div>
+          <p class="eyebrow">Finance portfolio control</p>
+          <h1>One governed view from demand to payment.</h1>
+          <p class="cover-copy">Falcon brings project registration, PET decisions, OPEX/CAPEX commitments and invoices into one controlled portfolio workspace.</p>
+          <div class="cover-meta">Falcon Finance Portfolio · Management Briefing</div>
+        </div>
+        <div class="journey" aria-label="Portfolio workflow">
+          <div class="stage"><b>Register</b><span>Projects and non-project OPEX</span></div>
+          <div class="stage"><b>Review &amp; approve</b><span>PET ownership and decision workflow</span></div>
+          <div class="stage"><b>Control commitments</b><span>Budget lines, vendors and funding</span></div>
+          <div class="stage"><b>Track settlement</b><span>Invoices, attachments and reporting</span></div>
+        </div>
+      </div>
+      <footer class="slide-footer"><strong>FALCON · DIB</strong><span>01 / 02</span></footer>
+    </section>
+    <section class="slide" aria-label="Slide 2 of 2">
+      <div class="topline"></div>
+      <header class="masthead"><div class="wordmark"><img src="DFM.Web/assets/falcon-logo.svg" alt="" />FALCON</div><small>Management Benefits</small></header>
+      <div class="content">
+        <div class="content-head"><div><p class="eyebrow">A shared operating picture</p><h2>Benefits for DIB Management</h2></div><p>Connect request ownership, financial controls and execution evidence in one portfolio view.</p></div>
+        <div class="benefits">
+          <article class="benefit"><div class="number">01</div><div><h3>Portfolio visibility</h3><p>See projects, PET status, budget lines and invoices together, with management reporting for portfolio review.</p></div></article>
+          <article class="benefit"><div class="number">02</div><div><h3>Clear accountability</h3><p>Route PETs through reviewer and approver stages, with assigned owners, decisions and workflow history.</p></div></article>
+          <article class="benefit"><div class="number">03</div><div><h3>Stronger financial control</h3><p>Maintain CAPEX/OPEX sources and monitor approved budgets, commitments, available balances and invoice activity.</p></div></article>
+          <article class="benefit"><div class="number">04</div><div><h3>Traceable records</h3><p>Keep supporting documents with requests and financial records; use role-based access for governed actions.</p></div></article>
+        </div>
+        <div class="outcome"><i></i><span><strong>Management outcome:</strong> a consistent view of demand, approval progress and financial exposure to support informed oversight.</span></div>
+      </div>
+      <footer class="slide-footer"><strong>FALCON · DIB</strong><span>02 / 02</span></footer>
+    </section>
+  </main>
+  <div class="counter" id="counter">1 / 2</div>
+  <div class="controls" aria-label="Presentation controls"><button type="button" id="previous" aria-label="Previous slide">&#8249;</button><button type="button" id="next" aria-label="Next slide">&#8250;</button><button type="button" id="print" aria-label="Print or save as PDF">&#9113;</button></div>
+  <script>
+    (function () {
+      var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+      var active = 0;
+      function show(index) {
+        active = Math.max(0, Math.min(slides.length - 1, index));
+        slides.forEach(function (slide, position) { slide.classList.toggle('active', position === active); });
+        document.getElementById('counter').textContent = (active + 1) + ' / ' + slides.length;
+      }
+      document.getElementById('previous').addEventListener('click', function () { show(active - 1); });
+      document.getElementById('next').addEventListener('click', function () { show(active + 1); });
+      document.getElementById('print').addEventListener('click', function () { window.print(); });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'ArrowRight' || event.key === 'PageDown' || event.key === ' ') show(active + 1);
+        if (event.key === 'ArrowLeft' || event.key === 'PageUp') show(active - 1);
+        if (event.key === 'Home') show(0);
+        if (event.key === 'End') show(slides.length - 1);
+      });
+    })();
+  </script>
+</body>
+</html>
