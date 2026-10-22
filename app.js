@@ -340,6 +340,12 @@
         }).format(Number(value) || 0);
       };
       vm.projectDisplayId = function (project) { return project && project.jiraKey ? project.jiraKey : project.projectCode; };
+      vm.selectNonProjectOpexSource = function () {
+        var source = (vm.budgets || []).filter(function (b) {
+          return b.budgetType === "OPEX" && b.externalId === vm.form.opexReference;
+        })[0];
+        if (source && vm.form.budgetApprovedAed == null) vm.form.budgetApprovedAed = source.budget;
+      };
       vm.selectedBudgetSource = function () {
         return (vm.budgets || []).filter(function (b) {
           return b.budgetSourceId === vm.form.budgetSourceId;
@@ -1584,14 +1590,14 @@
           var pets = p.pets || [];
           var statusMatch = projectHasStatus(p, pets, vm.statusFilter);
           var isMine = projectRequestorMatchesCurrentUser(p);
-          var viewMatch = vm.viewFilter === "all" ||
+          var viewMatch = vm.viewFilter !== "nonProject" && (vm.viewFilter === "all" ||
             (vm.viewFilter === "my" && projectHasCurrentUserCreatedRecord(p)) ||
             (vm.viewFilter === "jira" && !!p.jiraKey) ||
             (vm.viewFilter === "nonJira" && !p.jiraKey) ||
             (vm.viewFilter === "pendingReview" && pets.some(function (pet) { return pet.status === "Pending Review"; })) ||
             (vm.viewFilter === "pendingApproval" && pets.some(function (pet) { return pet.status === "Pending Approval"; })) ||
             (vm.viewFilter === "approved" && pets.some(function (pet) { return pet.status === "Approved" && (isMine || (pet.approverEmail || "").toLowerCase() === currentEmail); })) ||
-            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; }));
+            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; })));
           return (
             viewMatch &&
             statusMatch &&
@@ -1613,6 +1619,10 @@
         if (!keepPage || vm.page > vm.pageCount) vm.page = 1;
         var start = (vm.page - 1) * vm.pageSize;
         vm.visibleProjects = filtered.slice(start, start + vm.pageSize);
+        vm.visibleNonProjectOpex = (vm.nonProjectOpex || []).filter(function (row) {
+          return vm.viewFilter !== "nonProject" || !query || [row.initiative, row.platform, row.lineItem, row.opexReference, row.vendor, row.createdBy]
+            .join(" ").toLowerCase().indexOf(query) >= 0;
+        });
         vm.approvalItems = buildApprovalItems();
         vm.updateApprovalView(keepPage);
         vm.updateBudgetView(keepPage);
@@ -2365,7 +2375,7 @@
             kind === "attachment"
               ? "Attach supporting files"
               : kind === "nonProject"
-                ? "Create Non-Project OPEX"
+                ? "Non Project"
               : kind === "sources"
                 ? "Synchronize CAPEX / OPEX"
                 : "Upload " + kind + " records",
@@ -2377,7 +2387,7 @@
               : kind === "sources"
                 ? "Columns: Type (Capex/Opex), ID, Description, Budget, Utilization, Available Budget, Locked Amt, Budget after Locked Amt, Claim Amt, Net Balance. Existing sources are updated by Type + ID."
                 : kind === "nonProject"
-                  ? "Add a single Non-Project OPEX record manually or import multiple rows from the template. Supporting documents are optional."
+                  ? "Add a single Non Project OPEX record manually by selecting an OPEX source from CAPEX / OPEX, or import multiple rows from the template. Supporting documents are optional."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -2437,6 +2447,7 @@
           if (!String(vm.form.initiative || "").trim() || !String(vm.form.lineItem || "").trim() || !String(vm.form.vendor || "").trim() || !(Number(vm.form.amountApprovedAed) > 0)) {
             noticeError("Initiative, Line Item, Vendor, and a positive Amount Apprd(AED) are required."); return;
           }
+          if (!vm.form.opexReference) { noticeError("Select the OPEX source from CAPEX / OPEX."); return; }
           vm.form.budgetType = "OPEX";
           $http.post("api/portfolio/non-project-opex", vm.form).then(function (response) {
             var batchId = response.data && response.data.batchId;

@@ -973,6 +973,10 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             try
             {
                 var row = NonProjectOpexRequestRow(value);
+                var opexReference = row["OpexReference"] as string;
+                if (string.IsNullOrEmpty(opexReference)) return BadRequest("Select the OPEX source from CAPEX / OPEX.");
+                if (!Db.Query("SELECT 1 Found FROM dbo.BudgetSources WHERE BudgetType='OPEX' AND ExternalId=@id", P("@id", opexReference)).Any())
+                    return BadRequest("The selected OPEX source does not exist in CAPEX / OPEX.");
                 var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES('Manual entry',@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@user", User.Identity.Name)).FirstOrDefault();
                 var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
                 SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
