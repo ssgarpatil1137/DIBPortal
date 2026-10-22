@@ -19,4 +19,14 @@ namespace DFM.Web.Models
     public class DecisionRequest { public string Comments { get; set; } public bool Approve { get; set; } public string Decision { get; set; } public int? BudgetSourceId { get; set; } }
     public class BudgetLineRequest { public int? BudgetLineId { get; set; } public int PetId { get; set; } public string Vendor { get; set; } public List<int> SourceSpendItemIds { get; set; } public string Justification { get; set; } public decimal Cost { get; set; } public string Currency { get; set; } public string GlNumber { get; set; } public string PetReference { get; set; } public string CamId { get; set; } public string CamStatus { get; set; } public DateTime? CamCreatedDate { get; set; } public DateTime? CamApprovedDate { get; set; } public string CamComments { get; set; } public string LpoRequest { get; set; } public DateTime? LpoIssueDate { get; set; } public string LpoComments { get; set; } }
     public class InvoiceRequest { public int? InvoiceId { get; set; } public int BudgetLineId { get; set; } public string VendorName { get; set; } public string Justification { get; set; } public string GlNumber { get; set; } public string InvoiceNumber { get; set; } public decimal InvoiceAmount { get; set; } public string InvoiceStatus { get; set; } public DateTime? PaymentDate { get; set; } }
+    public class NonProjectOpexRequest
+    {
+        public string Initiative { get; set; } public string Platform { get; set; } public string LineItem { get; set; } public string EpmId { get; set; }
+        public string BudgetType { get; set; } public string OpexReference { get; set; } public string GlNumber { get; set; } public decimal? BudgetApprovedAed { get; set; }
+        public string MemoCamId { get; set; } public decimal AmountApprovedAed { get; set; } public string Vendor { get; set; } public DateTime? DateRaised { get; set; }
+        public string LpoSoNumber { get; set; } public DateTime? PoDate { get; set; } public string AmsNumber { get; set; } public string CamStatus { get; set; }
+        public string Description { get; set; } public string InvoiceMemoNumber { get; set; } public string InvoiceNumber { get; set; } public decimal? InvoiceAmountAed { get; set; }
+        public DateTime? InvoiceDate { get; set; } public DateTime? InvoiceEntryProcessDate { get; set; } public string InvoiceStatus { get; set; }
+        public string InvoiceDescription { get; set; } public string Folder { get; set; } public string HandledBy { get; set; } public string Column1 { get; set; }
+    }
 }

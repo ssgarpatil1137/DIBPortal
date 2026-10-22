@@ -2377,7 +2377,7 @@
               : kind === "sources"
                 ? "Columns: Type (Capex/Opex), ID, Description, Budget, Utilization, Available Budget, Locked Amt, Budget after Locked Amt, Claim Amt, Net Balance. Existing sources are updated by Type + ID."
                 : kind === "nonProject"
-                  ? "Upload the completed Non-Project OPEX template and one supporting document. Budget Type must be Opex on every row."
+                  ? "Add a single Non-Project OPEX record manually or import multiple rows from the template. Supporting documents are optional."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -2386,7 +2386,14 @@
         vm.uploadFiles = [];
         vm.uploadPreview = [];
         vm.nonProjectSupportingFile = null;
-        vm.form = { item: item };
+        vm.nonProjectEntryMode = kind === "nonProject" ? "manual" : "upload";
+        vm.form = kind === "nonProject" ? {
+          budgetType: "OPEX", amountApprovedAed: null,
+          initiative: "", platform: "", lineItem: "", epmId: "", opexReference: "", glNumber: "", budgetApprovedAed: null,
+          memoCamId: "", vendor: "", dateRaised: null, lpoSoNumber: "", poDate: null, amsNumber: "", camStatus: "", description: "",
+          invoiceMemoNumber: "", invoiceNumber: "", invoiceAmountAed: null, invoiceDate: null, invoiceEntryProcessDate: null,
+          invoiceStatus: "", invoiceDescription: "", folder: "", handledBy: "", column1: ""
+        } : { item: item };
         if (kind === "pet") ensurePetReferenceNo();
         redraw();
       };
@@ -2426,11 +2433,34 @@
         });
       }
       function saveNonProjectOpexUpload() {
+        if (vm.nonProjectEntryMode === "manual") {
+          if (!String(vm.form.initiative || "").trim() || !String(vm.form.lineItem || "").trim() || !String(vm.form.vendor || "").trim() || !(Number(vm.form.amountApprovedAed) > 0)) {
+            noticeError("Initiative, Line Item, Vendor, and a positive Amount Apprd(AED) are required."); return;
+          }
+          vm.form.budgetType = "OPEX";
+          $http.post("api/portfolio/non-project-opex", vm.form).then(function (response) {
+            var batchId = response.data && response.data.batchId;
+            if (!vm.nonProjectSupportingFile) {
+              notice("Non-Project OPEX record saved.");
+              vm.close();
+              loadDashboard();
+              return;
+            }
+            uploadAttachment("NonProjectOpexBatch", batchId, vm.nonProjectSupportingFile).then(function () {
+              notice("Non-Project OPEX record and supporting document saved.");
+              vm.close();
+              loadDashboard();
+            }, function (uploadResponse) {
+              noticeError("Record saved, but supporting document upload failed. " + responseMessage(uploadResponse, "Retry the document upload."));
+              loadDashboard();
+            });
+          }, function (response) { noticeError(responseMessage(response, "Unable to save the Non-Project OPEX record.")); });
+          return;
+        }
         if (!vm.uploadFile) { noticeError("Choose the Non-Project OPEX CSV or Excel file first."); return; }
-        if (!vm.nonProjectSupportingFile) { noticeError("Choose a supporting document for this upload."); return; }
         var formData = new FormData();
         formData.append("dataFile", vm.uploadFile);
-        formData.append("supportingFile", vm.nonProjectSupportingFile);
+        if (vm.nonProjectSupportingFile) formData.append("supportingFile", vm.nonProjectSupportingFile);
         $http.post("api/portfolio/non-project-opex/import", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
           notice(((response.data && response.data.imported) || 0) + " non-project OPEX row(s) imported.");
           vm.close();

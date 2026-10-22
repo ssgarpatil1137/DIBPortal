@@ -966,6 +966,22 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             }
         }
 
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex")]
+        public IHttpActionResult CreateNonProjectOpex(NonProjectOpexRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                var row = NonProjectOpexRequestRow(value);
+                var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES('Manual entry',@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@user", User.Identity.Name)).FirstOrDefault();
+                var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
+                SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
+                return Ok(new { imported = 1, batchId = batchId });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/import")]
         public async Task<IHttpActionResult> ImportNonProjectOpex()
         {
@@ -978,7 +994,6 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 var dataFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("dataFile", StringComparison.OrdinalIgnoreCase));
                 var supportingFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("supportingFile", StringComparison.OrdinalIgnoreCase));
                 if (dataFile == null) return BadRequest("Choose the Non-Project OPEX CSV or Excel file first.");
-                if (supportingFile == null) return BadRequest("Choose a supporting document for this upload.");
 
                 var sourceFileName = Path.GetFileName(dataFile.Headers.ContentDisposition.FileName.Trim('"'));
                 var extension = Path.GetExtension(sourceFileName).ToLowerInvariant();
@@ -991,23 +1006,64 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 var importRows = ParseNonProjectOpexRows(rows, sourceFileName);
                 if (importRows.Count == 0) return BadRequest("The upload has no Non-Project OPEX data rows.");
 
-                var supportingOriginalName = AttachmentColumnValue(Path.GetFileName(supportingFile.Headers.ContentDisposition.FileName.Trim('"')), 260, "supporting-document");
-                var supportingBytes = await supportingFile.ReadAsByteArrayAsync();
-                if (supportingBytes.Length == 0) return BadRequest("The supporting document is empty.");
-                if (supportingBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The supporting document exceeds the 50 MB upload limit.");
-                var storedName = AttachmentColumnValue(StoredAttachmentName(supportingOriginalName), 260, Guid.NewGuid().ToString("N"));
-                var contentType = AttachmentColumnValue(supportingFile.Headers.ContentType == null ? MimeMapping.GetMimeMapping(supportingOriginalName) : supportingFile.Headers.ContentType.MediaType, 150, "application/octet-stream");
-                WriteAttachmentFile(storedName, supportingBytes);
-
                 var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES(@source,@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@source", AttachmentColumnValue(sourceFileName, 260, "upload.csv")), P("@user", User.Identity.Name)).FirstOrDefault();
                 var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
-                SaveAttachmentRow("NonProjectOpexBatch", batchId, supportingOriginalName, storedName, contentType, supportingBytes.LongLength, User.Identity.Name);
+                if (supportingFile != null)
+                {
+                    var supportingOriginalName = AttachmentColumnValue(Path.GetFileName(supportingFile.Headers.ContentDisposition.FileName.Trim('"')), 260, "supporting-document");
+                    var supportingBytes = await supportingFile.ReadAsByteArrayAsync();
+                    if (supportingBytes.Length == 0) return BadRequest("The supporting document is empty.");
+                    if (supportingBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The supporting document exceeds the 50 MB upload limit.");
+                    var storedName = AttachmentColumnValue(StoredAttachmentName(supportingOriginalName), 260, Guid.NewGuid().ToString("N"));
+                    var contentType = AttachmentColumnValue(supportingFile.Headers.ContentType == null ? MimeMapping.GetMimeMapping(supportingOriginalName) : supportingFile.Headers.ContentType.MediaType, 150, "application/octet-stream");
+                    WriteAttachmentFile(storedName, supportingBytes);
+                    SaveAttachmentRow("NonProjectOpexBatch", batchId, supportingOriginalName, storedName, contentType, supportingBytes.LongLength, User.Identity.Name);
+                }
                 foreach (var row in importRows) SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
-                return Ok(new { imported = importRows.Count });
+                return Ok(new { imported = importRows.Count, batchId = batchId });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest("Unable to import Non-Project OPEX rows. " + ex.Message); }
+        }
+
+        private static Dictionary<string, object> NonProjectOpexRequestRow(NonProjectOpexRequest value)
+        {
+            if (value == null) throw new ArgumentException("Non-Project OPEX details are required.");
+            value.Initiative = RequiredImportText(value.Initiative, "Initiative", 500);
+            value.LineItem = RequiredImportText(value.LineItem, "Line Item", 200);
+            value.BudgetType = RequiredImportText(value.BudgetType, "Budget Type", 10);
+            if (!value.BudgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Budget Type must be OPEX. Non-Project records are OPEX only.");
+            value.Vendor = RequiredImportText(value.Vendor, "Vendor", 300);
+            if (value.AmountApprovedAed <= 0) throw new ArgumentException("Amount Apprd(AED) must be greater than zero.");
+            return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Initiative", value.Initiative }, { "Platform", OptionalImportText(value.Platform, "Platform", 200) }, { "LineItem", value.LineItem },
+                { "EpmId", OptionalImportText(value.EpmId, "EPM ID", 100) }, { "BudgetType", "OPEX" }, { "OpexReference", OptionalImportText(value.OpexReference, "Capex ID/OPEX", 100) },
+                { "GlNumber", OptionalImportText(value.GlNumber, "GL #", 50) }, { "BudgetApprovedAed", value.BudgetApprovedAed }, { "MemoCamId", OptionalImportText(value.MemoCamId, "Memo/CAM ID", 100) },
+                { "AmountApprovedAed", value.AmountApprovedAed }, { "Vendor", value.Vendor }, { "DateRaised", value.DateRaised }, { "LpoSoNumber", OptionalImportText(value.LpoSoNumber, "LPO/SO #", 100) },
+                { "PoDate", value.PoDate }, { "AmsNumber", OptionalImportText(value.AmsNumber, "AMS #", 100) }, { "CamStatus", OptionalImportText(value.CamStatus, "CAM Status", 100) },
+                { "Description", OptionalImportText(value.Description, "Description", 1000) }, { "InvoiceMemoNumber", OptionalImportText(value.InvoiceMemoNumber, "Invoice Memo#", 100) },
+                { "InvoiceNumber", OptionalImportText(value.InvoiceNumber, "Invoice #", 100) }, { "InvoiceAmountAed", value.InvoiceAmountAed }, { "InvoiceDate", value.InvoiceDate },
+                { "InvoiceEntryProcessDate", value.InvoiceEntryProcessDate }, { "InvoiceStatus", OptionalImportText(value.InvoiceStatus, "Invoice Status", 100) },
+                { "InvoiceDescription", OptionalImportText(value.InvoiceDescription, "Invoice Desc.", 1000) }, { "Folder", OptionalImportText(value.Folder, "Folder", 500) },
+                { "HandledBy", OptionalImportText(value.HandledBy, "Handled By", 254) }, { "Column1", OptionalImportText(value.Column1, "Column1", 500) }
+            };
+        }
+
+        private static string RequiredImportText(string value, string header, int maxLength)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length == 0) throw new ArgumentException(header + " is required.");
+            if (text.Length > maxLength) throw new ArgumentException(header + " exceeds " + maxLength + " characters.");
+            return text;
+        }
+
+        private static string OptionalImportText(string value, string header, int maxLength)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length > maxLength) throw new ArgumentException(header + " exceeds " + maxLength + " characters.");
+            return text.Length == 0 ? null : text;
         }
 
         private static string MultipartFieldName(HttpContent content)

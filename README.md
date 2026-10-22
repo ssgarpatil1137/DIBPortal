@@ -65,9 +65,10 @@ Bearer-protected portfolio routes:
 - `PUT /api/portfolio/budgets/{id}` (`Master` only)
 - `POST /api/portfolio/attachments/{entityType}/{entityId}`
 - `POST /api/portfolio/bulk/{pet|budget|invoice}/{parentId}` with raw `text/csv`
-- `POST /api/portfolio/non-project-opex/import` with a Non-Project OPEX CSV/Excel file and required supporting document
+- `POST /api/portfolio/non-project-opex` for one manually entered Non-Project OPEX row
+- `POST /api/portfolio/non-project-opex/import` with a Non-Project OPEX CSV/Excel file and an optional supporting document
 
-CSV templates are under `DFM.Web/templates` and are downloadable from the main page. Non-Project OPEX imports require every screenshot column, `Initiative`, `Line Item`, `Budget Type`, `Amount Apprd(AED)`, and `Vendor`; the budget type must be OPEX.
+CSV templates are under `DFM.Web/templates` and are downloadable from the main page. Non-Project OPEX entries can be created manually or imported from CSV/XLSX/XLSM. Imports require every screenshot column; both paths require `Initiative`, `Line Item`, `Budget Type`, `Amount Apprd(AED)`, and `Vendor`. The budget type must be OPEX. Supporting documents are optional.
 
 ## Workflow invariant
 
