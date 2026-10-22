@@ -1963,7 +1963,19 @@
       function budgetUsageRowsForSource(budget) {
         var id = String(budgetSourceId(budget) || "");
         if (!id) return [];
-        return (vm.budgetUsage || []).filter(function (row) { return String(budgetSourceId(row) || "") === id; });
+        var projectRows = (vm.budgetUsage || []).filter(function (row) { return String(budgetSourceId(row) || "") === id; });
+        var nonProjectRows = (vm.nonProjectBudgetUsage || []).filter(function (row) { return String(budgetSourceId(row) || "") === id; }).map(function (row) {
+          return {
+            isNonProject: true,
+            budgetType: row.budgetType,
+            projectDisplayId: "Non Project",
+            projectName: [row.initiative, row.lineItem, row.vendor].filter(Boolean).join(" · "),
+            petCode: row.memoCamId || row.invoiceNumber || "",
+            petStatus: row.invoiceStatus || "Recorded",
+            petAmount: row.amountApprovedAed
+          };
+        });
+        return projectRows.concat(nonProjectRows);
       }
       function refreshSelectedBudgetUsageRows() {
         vm.selectedBudgetUsageRows = vm.selectedBudgetUsageSource ? budgetUsageRowsForSource(vm.selectedBudgetUsageSource) : [];
@@ -3198,6 +3210,7 @@
           vm.budgets = data.budgets || [];
           vm.jira = data.jira || [];
           vm.budgetUsage = data.budgetUsage || [];
+          vm.nonProjectBudgetUsage = data.nonProjectBudgetUsage || [];
           vm.nonProjectOpex = data.nonProjectOpex || [];
           refreshSelectedBudgetUsageRows();
           prepareProjects();

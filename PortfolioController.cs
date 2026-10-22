@@ -68,7 +68,8 @@ namespace DFM.Web.Controllers
                     WHERE @includeAll=1 OR LOWER(LTRIM(RTRIM(l.CreatedBy)))=LOWER(LTRIM(RTRIM(@user)))
                     ORDER BY l.CreatedUtc DESC", P("@includeAll", User.IsInRole("Admin") || User.IsInRole("Master")), P("@user", User.Identity.Name)),
                 jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
-                budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC")
+                budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC"),
+                nonProjectBudgetUsage = Db.Query("SELECT * FROM dbo.vw_NonProjectOpexUtilization ORDER BY BudgetSource,CreatedUtc DESC")
             });
         }
 

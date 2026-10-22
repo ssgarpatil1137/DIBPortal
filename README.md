@@ -14,7 +14,7 @@ A Visual Studio 2012-compatible ASP.NET Web API 2 and AngularJS 1.x application 
 
 1. Open `DFM.sln` in Visual Studio 2012 with .NET Framework 4.5 and ASP.NET Web Tools installed.
 2. Enable NuGet package restore. The solution pins Web API `5.2.9` and Newtonsoft.Json `13.0.3`, both targeting .NET 4.5.
-3. Run `Database/001_DFM_Schema.sql`, then each higher-numbered migration against SQL Server, including `Database/045_Non_Project_OPEX.sql`.
+3. Run `Database/001_DFM_Schema.sql`, then each higher-numbered migration against SQL Server, including `Database/045_Non_Project_OPEX.sql` and `Database/046_Non_Project_OPEX_Utilization.sql`.
 4. Update the `DFM` connection string in `DFM.Web/Web.config`.
 5. Update LDAP settings and the connection string in `DFM.DirectorySync/App.config`.
 6. Verify source paths and the connection string in `DFM.OfflineSync/App.config`.
