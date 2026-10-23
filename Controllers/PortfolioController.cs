@@ -1,0 +1,1551 @@
+using System;
+using System.Collections.Generic;
+using System.Configuration;
+using System.Data.SqlClient;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Globalization;
+using System.Threading.Tasks;
+using System.Web;
+using System.Web.Http;
+using Newtonsoft.Json.Linq;
+using DFM.Web.Infrastructure;
+using DFM.Web.Models;
+
+namespace DFM.Web.Controllers
+{
+    [ApiAuthorize, RoutePrefix("api/portfolio")]
+    public class PortfolioController : ApiController
+    {
+        private static readonly string[] DepartmentOptions = { "Business", "CET", "CIO Office", "Core", "CRM", "CTO", "Data", "EA&I", "EIS", "Governance", "Risk", "RTB", "Test Gov." };
+        private static readonly string[] UnitTypeOptions = { "Nos", "Man Days", "Man Months", "Calender Months", "Fixed Scope" };
+        private static readonly string[] CostTypeOptions = {
+            "Hardware Purchase", "Hardware Rental", "Hardware AMC", "Software License Purchase", "Software License Subscription", "Software License AMC", "Escrow Agreement",
+            "Project Management Services", "Business Analysis", "Architecture /Design", "SME Consulting Services", "Training", "in Months", "Application/Interface Development",
+            "Software Customization", "Software Installation & Configuration", "Hardware Installation & Configuration", "Annual Support Operations", "QA Functional Testing",
+            "QA Integration Testing", "QA Performance Testing", "QA Load Testing", "QA Test Automation", "SEC Penetration Testing", "UAT Functional Testing",
+            "Professional Certification", "Quality Assurance (External)", "Travel & Accommodation", "Premises Rent", "Premises Fit out"
+        };
+
+        [HttpGet, Route("dashboard")]
+        public IHttpActionResult Dashboard(string projectKey = "DMGT", string accountableExec = "Zahoor Ul Islam (IT Dept)")
+        {
+            var canReview = User.IsInRole("Reviewer");
+            var canApprove = User.IsInRole("Approver");
+            return Ok(new {
+                metrics = Db.Query("SELECT * FROM vw_ManagementDashboard"),
+                projects = Db.Query(@"SELECT p.*,
+                    ISNULL(petCounts.ApprovedPetCount,0) ApprovedPetCount,
+                    ISNULL(petCounts.PendingReviewPetCount,0) PendingReviewPetCount,
+                    ISNULL(petCounts.PendingApprovalPetCount,0) PendingApprovalPetCount,
+                    ISNULL(petCounts.RejectedPetCount,0) RejectedPetCount,
+                    ISNULL(petCounts.SentBackPetCount,0) SentBackPetCount,
+                    CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(x.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests x ON x.PetId=s.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(s.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(bl.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord
+                    FROM dbo.vw_ProjectPortfolio p
+                    OUTER APPLY (SELECT
+                        SUM(CASE WHEN x.Status='Approved' THEN 1 ELSE 0 END) ApprovedPetCount,
+                        SUM(CASE WHEN x.Status='Pending Review' THEN 1 ELSE 0 END) PendingReviewPetCount,
+                        SUM(CASE WHEN x.Status='Pending Approval' THEN 1 ELSE 0 END) PendingApprovalPetCount,
+                        SUM(CASE WHEN x.Status='Rejected' THEN 1 ELSE 0 END) RejectedPetCount,
+                        SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
+                        FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
+                    ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
+                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
+                budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
+                nonProjectOpex = Db.Query(@"SELECT l.*, b.SourceFile, b.CreatedUtc BatchCreatedUtc,
+                    a.AttachmentId, a.OriginalName SupportingDocumentName, a.ContentType SupportingDocumentContentType
+                    FROM dbo.NonProjectOpexLines l
+                    JOIN dbo.NonProjectOpexBatches b ON b.NonProjectOpexBatchId=l.NonProjectOpexBatchId
+                    OUTER APPLY (SELECT TOP 1 AttachmentId,OriginalName,ContentType FROM dbo.Attachments
+                        WHERE EntityType='NonProjectOpexBatch' AND EntityId=b.NonProjectOpexBatchId ORDER BY AttachmentId DESC) a
+                    WHERE @includeAll=1 OR LOWER(LTRIM(RTRIM(l.CreatedBy)))=LOWER(LTRIM(RTRIM(@user)))
+                    ORDER BY l.CreatedUtc DESC", P("@includeAll", User.IsInRole("Admin") || User.IsInRole("Master")), P("@user", User.Identity.Name)),
+                jira = Db.Query("EXEC dbo.sp_GetJiraRegistrationCandidates @projectKey,@exec", P("@projectKey", projectKey), P("@exec", accountableExec)),
+                budgetUsage = Db.Query("SELECT * FROM vw_CapexProjectUtilization ORDER BY BudgetSource,ApprovedUtc DESC"),
+                nonProjectBudgetUsage = Db.Query("SELECT * FROM dbo.vw_NonProjectOpexUtilization ORDER BY BudgetSource,CreatedUtc DESC")
+            });
+        }
+
+        [HttpGet, Route("projects/{projectId:int}")]
+        public IHttpActionResult Project(int projectId)
+        {
+            var sets = Db.QueryMultiple("EXEC dbo.sp_GetProjectDetail @id", new SqlParameter("@id", projectId));
+            var budgetLines = sets[3];
+            AttachBudgetLineSourceSpendItems(budgetLines);
+            var attachments = sets[5];
+            attachments.AddRange(Db.Query(@"SELECT AttachmentId,EntityType,EntityId,OriginalName,ContentType,FileSize,UploadedUtc
+                FROM dbo.Attachments
+                                WHERE (EntityType IN ('BudgetLineCAM','BudgetLineLPO')
+                                    AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))
+                                    OR (EntityType='InvoiceDocument'
+                                    AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines b ON b.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))", P("@ProjectId", projectId)));
+            return Ok(new {
+                project = sets[0].FirstOrDefault(),
+                pets = sets[1],
+                spendItems = sets[2],
+                budgetLines = budgetLines,
+                invoices = sets[4],
+                attachments = attachments
+            });
+        }
+
+        [ApiAuthorize("Master"), HttpGet, Route("roles")]
+        public IHttpActionResult Roles()
+        {
+            var users = Db.Query(@"SELECT u.UserId,u.Email,u.DisplayName,u.IsActive,
+                STUFF((SELECT ',' + r.Name FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId FOR XML PATH('')),1,1,'') Roles
+                FROM dbo.Users u ORDER BY u.DisplayName,u.Email");
+            var roles = Db.Query("SELECT Name FROM dbo.Roles WHERE Name NOT IN ('Requestor','Master') ORDER BY CASE Name WHEN 'Reviewer' THEN 1 WHEN 'Approver' THEN 2 WHEN 'Admin' THEN 3 ELSE 4 END,Name");
+            return Ok(new { users = users, roles = roles.Select(row => Convert.ToString(row["Name"])).ToArray() });
+        }
+
+        [ApiAuthorize("Master"), HttpPost, Route("roles")]
+        public IHttpActionResult SaveRoles(RoleAssignmentRequest value)
+        {
+            if (value == null || value.UserId <= 0) return BadRequest("User is required.");
+            var requestedRoles = new HashSet<string>(value.Roles ?? new string[0], StringComparer.OrdinalIgnoreCase);
+            requestedRoles.Remove("Requestor");
+            requestedRoles.Remove("Master");
+            if (requestedRoles.Count > 1) return BadRequest("Select only one elevated role: Reviewer, Approver, or Admin.");
+            try
+            {
+                Db.Execute(@"DELETE ur FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@user AND r.Name IN ('Reviewer','Approver','Admin','Master');
+                    INSERT dbo.UserRoles(UserId,RoleId) SELECT @user,RoleId FROM dbo.Roles WHERE Name='Requestor' AND NOT EXISTS(SELECT 1 FROM dbo.UserRoles WHERE UserId=@user AND RoleId=dbo.Roles.RoleId);
+                    INSERT dbo.UserRoles(UserId,RoleId) SELECT @user,RoleId FROM dbo.Roles WHERE Name IN ('Reviewer','Approver','Admin') AND CHARINDEX(',' + Name + ',', @roles) > 0;",
+                    P("@user", value.UserId), P("@roles", "," + string.Join(",", requestedRoles.ToArray()) + ","));
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [HttpGet, Route("currencies")]
+        public IHttpActionResult Currencies()
+        {
+            try { return Ok(Db.Query("SELECT CurrencyID CurrencyId,Code,Name,RateToLocal,IsActive FROM dbo.Currencies ORDER BY Code")); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("currencies")]
+        public IHttpActionResult SaveCurrency(CurrencyRequest value)
+        {
+            if (value == null) return BadRequest("Currency details are required.");
+            value.Code = (value.Code ?? "").Trim().ToUpperInvariant();
+            value.Name = (value.Name ?? "").Trim();
+            if (value.Code.Length == 0) return BadRequest("Currency code is required.");
+            if (value.Name.Length == 0) return BadRequest("Currency name is required.");
+            if (value.RateToLocal <= 0) return BadRequest("Rate to local must be greater than zero.");
+            try
+            {
+                return Ok(Db.Query(@"DECLARE @SavedCurrencyId INT = NULLIF(@CurrencyId,0);
+                    IF @SavedCurrencyId IS NULL
+                    BEGIN INSERT dbo.Currencies(Code,Name,RateToLocal,IsActive) VALUES(@Code,@Name,@RateToLocal,@IsActive); SET @SavedCurrencyId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Currencies SET Code=@Code,Name=@Name,RateToLocal=@RateToLocal,IsActive=@IsActive WHERE CurrencyID=@SavedCurrencyId;
+                    SELECT CurrencyID CurrencyId,Code,Name,RateToLocal,IsActive FROM dbo.Currencies WHERE CurrencyID=@SavedCurrencyId",
+                    P("@CurrencyId", value.CurrencyId ?? 0), P("@Code", value.Code), P("@Name", value.Name), P("@RateToLocal", value.RateToLocal), P("@IsActive", value.IsActive)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [HttpGet, Route("vendors")]
+        public IHttpActionResult Vendors()
+        {
+            try
+            {
+                var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
+                return Ok(Db.Query("SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors WHERE @includeInactive=1 OR IsActive=1 ORDER BY Name", P("@includeInactive", includeInactive)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [HttpGet, Route("gl-funds")]
+        public IHttpActionResult GlFunds()
+        {
+            try
+            {
+                var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
+                return Ok(Db.Query("SELECT GlFundId,GlNumber,GlName,FundAmount,ReservedAmount,AvailableBalance,IsActive,CreatedUtc,CreatedBy,UpdatedUtc,UpdatedBy,IsUsed FROM dbo.vw_GLFundBalances WHERE @includeInactive=1 OR IsActive=1 ORDER BY GlNumber", P("@includeInactive", includeInactive)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("gl-funds/utilization")]
+        public IHttpActionResult GlFundUtilization(string glNumber)
+        {
+            glNumber = (glNumber ?? "").Trim();
+            if (glNumber.Length == 0) return BadRequest("GL Number is required.");
+            try
+            {
+                return Ok(Db.Query(@"SELECT
+                    p.ProjectId,
+                    p.ProjectCode,
+                    COALESCE(NULLIF(ji.DemandId,''),NULLIF(p.JiraKey,''),p.ProjectCode) DemandId,
+                    p.ProjectName,
+                    p.ProjectType,
+                    p.ProjectManager,
+                    p.BudgetType,
+                    bs.ExternalId BudgetSource,
+                    bs.Description BudgetSourceDescription,
+                    pet.PetId,
+                    pet.Code PetCode,
+                    pet.Status PetStatus,
+                    pet.RequestedAmount PetAmount,
+                    pet.Currency PetCurrency,
+                    pet.ApprovedUtc,
+                    bl.BudgetLineId,
+                    bl.PetReference,
+                    bl.Vendor,
+                    bl.Justification,
+                    bl.Cost BudgetLineCost,
+                    bl.Cost GLAmount,
+                    bl.Currency BudgetLineCurrency,
+                    bl.GlNumber,
+                    bl.CamId,
+                    bl.CamStatus,
+                    bl.LpoRequest,
+                    bl.LpoStatus,
+                    bl.CreatedUtc BudgetLineCreatedUtc
+                FROM dbo.BudgetLines bl
+                JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+                LEFT JOIN dbo.BudgetSources bs ON bs.BudgetSourceId=p.BudgetSourceId
+                LEFT JOIN dbo.JiraIssues ji ON ji.JiraKey=p.JiraKey
+                WHERE UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))
+                ORDER BY p.ProjectCode, pet.Code, bl.BudgetLineId", P("@GlNumber", glNumber)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("gl-funds")]
+        public IHttpActionResult SaveGlFund(GlFundRequest value)
+        {
+            if (value == null) return BadRequest("GL details are required.");
+            try
+            {
+                return Ok(Db.Query("EXEC dbo.sp_SaveGLFund @GLFundId,@GlNumber,@GlName,@FundAmount,@IsActive,@User", P("@GLFundId", value.GlFundId), P("@GlNumber", value.GlNumber), P("@GlName", value.GlName), P("@FundAmount", value.FundAmount), P("@IsActive", value.IsActive), P("@User", User.Identity.Name)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("vendors")]
+        public IHttpActionResult SaveVendor(VendorRequest value)
+        {
+            if (value == null) return BadRequest("Vendor details are required.");
+            value.Name = (value.Name ?? "").Trim();
+            if (value.Name.Length == 0) return BadRequest("Vendor name is required.");
+            try
+            {
+                return Ok(Db.Query(@"DECLARE @SavedVendorId INT = NULLIF(@VendorId,0);
+                    IF EXISTS(SELECT 1 FROM dbo.Vendors WHERE UPPER(LTRIM(RTRIM(Name)))=UPPER(@Name) AND (@SavedVendorId IS NULL OR VendorId<>@SavedVendorId)) THROW 50038,'Vendor already exists.',1;
+                    IF @SavedVendorId IS NULL
+                    BEGIN INSERT dbo.Vendors(Name,IsActive) VALUES(@Name,@IsActive); SET @SavedVendorId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Vendors SET Name=@Name,IsActive=@IsActive,UpdatedUtc=SYSUTCDATETIME() WHERE VendorId=@SavedVendorId;
+                    SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors WHERE VendorId=@SavedVendorId",
+                    P("@VendorId", value.VendorId ?? 0), P("@Name", value.Name), P("@IsActive", value.IsActive)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [HttpGet, Route("pets/{petId:int}/history")]
+        public IHttpActionResult History(int petId)
+        {
+            return Ok(Db.Query("EXEC dbo.sp_GetWorkflowHistory @id", new SqlParameter("@id", petId)));
+        }
+
+        private bool IsApproverOnly()
+        {
+            return User != null && User.IsInRole("Approver") && !User.IsInRole("Reviewer") && !User.IsInRole("Admin") && !User.IsInRole("Master");
+        }
+
+        private IHttpActionResult RejectApproverWrite()
+        {
+            return Content(HttpStatusCode.Forbidden, "Approver can view only.");
+        }
+
+        private static string NormalizeBudgetType(string value)
+        {
+            var budgetType = (value ?? "").Trim().ToUpperInvariant();
+            if (string.IsNullOrWhiteSpace(budgetType)) return null;
+            if (budgetType != "CAPEX" && budgetType != "OPEX") throw new ArgumentException("Select CAPEX or OPEX.");
+            return budgetType;
+        }
+
+        private static string PlainProjectSize(string value)
+        {
+            return Convert.ToString(value ?? "").Split('|')[0];
+        }
+
+        private static string ProjectSizeForLegacyDatabase(ProjectRequest value)
+        {
+            var size = PlainProjectSize(value.ProjectSize);
+            var scores = EncodedProjectSizingScores(value.ProjectSizingScores);
+            return string.IsNullOrWhiteSpace(scores) ? size : size + "|" + scores;
+        }
+
+        private static string EncodedProjectSizingScores(string json)
+        {
+            if (string.IsNullOrWhiteSpace(json)) return null;
+            try
+            {
+                var scores = JObject.Parse(json);
+                var keys = new[] { "technical", "regulatory", "stakeholder", "resource", "scale", "interdependencies", "budget" };
+                var values = keys.Select(key => Convert.ToInt32(scores[key] ?? 0)).ToArray();
+                return values.Any(value => value > 0) ? string.Join(",", values) : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static void ValidateBudgetSourceSelection(string budgetType, int? budgetSourceId)
+        {
+            if (string.IsNullOrWhiteSpace(budgetType) && !budgetSourceId.HasValue) return;
+            if (string.IsNullOrWhiteSpace(budgetType) || !budgetSourceId.HasValue) throw new ArgumentException("Select CAPEX or OPEX and a matching budget source.");
+            var source = Db.Query("SELECT BudgetSourceId FROM dbo.BudgetSources WHERE BudgetSourceId=@BudgetSourceId AND BudgetType=@BudgetType", P("@BudgetSourceId", budgetSourceId), P("@BudgetType", budgetType)).FirstOrDefault();
+            if (source == null) throw new ArgumentException("Budget source does not match CAPEX/OPEX selection.");
+        }
+
+        private static void EnsureProjectBudgetSelection(PetRequest value)
+        {
+            var project = Db.Query("SELECT BudgetType,BudgetSourceId FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            if (project == null) throw new ArgumentException("Project was not found.");
+            var currentType = Convert.ToString(project["BudgetType"]);
+            var currentSource = project["BudgetSourceId"] == null || project["BudgetSourceId"] == DBNull.Value ? (int?)null : Convert.ToInt32(project["BudgetSourceId"]);
+            if (!string.IsNullOrWhiteSpace(currentType) && currentSource.HasValue) return;
+            var budgetType = NormalizeBudgetType(value.BudgetType);
+            ValidateBudgetSourceSelection(budgetType, value.BudgetSourceId);
+            Db.Execute("UPDATE dbo.Projects SET BudgetType=@BudgetType,BudgetSourceId=@BudgetSourceId,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId AND (BudgetType IS NULL OR BudgetSourceId IS NULL)", P("@BudgetType", budgetType), P("@BudgetSourceId", value.BudgetSourceId), P("@ProjectId", value.ProjectId));
+        }
+
+        private static string DuplicateProjectRegistrationMessage(ProjectRequest value)
+        {
+            if (value == null || value.ProjectId.HasValue) return null;
+            Dictionary<string, object> existing;
+            if (value.IsJira && !string.IsNullOrWhiteSpace(value.JiraKey))
+            {
+                existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE UPPER(LTRIM(RTRIM(ISNULL(JiraKey,''))))=UPPER(LTRIM(RTRIM(@JiraKey)))", P("@JiraKey", value.JiraKey)).FirstOrDefault();
+            }
+            else
+            {
+                existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE LOWER(LTRIM(RTRIM(ProjectName)))=LOWER(LTRIM(RTRIM(@ProjectName)))", P("@ProjectName", value.ProjectName)).FirstOrDefault();
+            }
+            return existing == null ? null : "This project is already registered as " + Convert.ToString(existing["ProjectCode"]) + ".";
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("projects")]
+        public IHttpActionResult SaveProject(ProjectRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            if (value == null || string.IsNullOrWhiteSpace(value.ProjectName)) return BadRequest("Project name is required.");
+            try
+            {
+                PreserveRegisteredProjectIdentity(value);
+                var duplicate = DuplicateProjectRegistrationMessage(value);
+                if (duplicate != null) return BadRequest(duplicate);
+                value.BudgetType = NormalizeBudgetType(value.BudgetType);
+                ValidateBudgetSourceSelection(value.BudgetType, value.BudgetSourceId);
+                var requiresPet = true;
+                var skipReview = false;
+                var workflowFlags = Db.Query("SELECT CASE WHEN COL_LENGTH('dbo.Projects','RequiresPet') IS NOT NULL AND COL_LENGTH('dbo.Projects','SkipReview') IS NOT NULL THEN 1 ELSE 0 END HasWorkflowFlags").FirstOrDefault();
+                if (value.ProjectId.HasValue && workflowFlags != null && Convert.ToInt32(workflowFlags["HasWorkflowFlags"]) == 1)
+                {
+                    var existing = Db.Query("SELECT RequiresPet,SkipReview FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+                    if (existing != null && existing["RequiresPet"] != null) requiresPet = Convert.ToBoolean(existing["RequiresPet"]);
+                    if (existing != null && existing["SkipReview"] != null) skipReview = Convert.ToBoolean(existing["SkipReview"]);
+                }
+                List<Dictionary<string, object>> rows;
+                try
+                {
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@SizingScores,@Manager,@BudgetType,@BudgetSource,@RequiresPet,@SkipReview,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", PlainProjectSize(value.ProjectSize)), P("@SizingScores", value.ProjectSizingScores), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@RequiresPet", requiresPet), P("@SkipReview", skipReview), P("@User", User.Identity.Name));
+                }
+                catch (SqlException ex)
+                {
+                    if (!ProcedureParameterError(ex)) throw;
+                    rows = Db.Query("EXEC dbo.sp_SaveProject @ProjectId,@IsJira,@JiraKey,@Name,@Type,@Lead,@Executive,@Sme,@Size,@Manager,@BudgetType,@BudgetSource,@User", P("@ProjectId", value.ProjectId), P("@IsJira", value.IsJira), P("@JiraKey", value.JiraKey), P("@Name", value.ProjectName), P("@Type", value.ProjectType), P("@Lead", value.AccountableExecLead), P("@Executive", value.AccountableExec), P("@Sme", value.SmeLead), P("@Size", ProjectSizeForLegacyDatabase(value)), P("@Manager", value.ProjectManager), P("@BudgetType", value.BudgetType), P("@BudgetSource", value.BudgetSourceId), P("@User", User.Identity.Name));
+                }
+                var saved = rows.FirstOrDefault();
+                var projectId = SavedProjectId(saved, value.ProjectId);
+                PersistProjectSizing(projectId, value, User.Identity.Name);
+                return Ok(RefreshedProject(projectId) ?? saved);
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static int? SavedProjectId(Dictionary<string, object> saved, int? fallback)
+        {
+            if (saved != null && saved.ContainsKey("ProjectId") && saved["ProjectId"] != null && saved["ProjectId"] != DBNull.Value) return Convert.ToInt32(saved["ProjectId"]);
+            return fallback;
+        }
+
+        private static void PersistProjectSizing(int? projectId, ProjectRequest value, string userName)
+        {
+            if (!projectId.HasValue) return;
+            var result = Db.Query(@"DECLARE @Affected int;
+                IF COL_LENGTH('dbo.Projects','ProjectSizingScores') IS NULL
+                BEGIN
+                    UPDATE dbo.Projects SET ProjectSize=@LegacyProjectSize,UpdatedUtc=SYSUTCDATETIME()
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'));
+                    SET @Affected=@@ROWCOUNT;
+                END
+                ELSE
+                BEGIN
+                    UPDATE dbo.Projects SET ProjectSize=@LegacyProjectSize,ProjectSizingScores=@ProjectSizingScores,UpdatedUtc=SYSUTCDATETIME()
+                    WHERE ProjectId=@ProjectId AND (RequestorEmail=@User OR EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.Email=@User AND r.Name='Master'));
+                    SET @Affected=@@ROWCOUNT;
+                END
+                SELECT @Affected Affected;",
+                P("@ProjectId", projectId.Value), P("@ProjectSize", PlainProjectSize(value.ProjectSize)), P("@LegacyProjectSize", ProjectSizeForLegacyDatabase(value)), P("@ProjectSizingScores", value.ProjectSizingScores), P("@User", userName));
+            if (result.Count == 0 || Convert.ToInt32(result[0]["Affected"] ?? 0) == 0) throw new ArgumentException("Project was not updated. Refresh the dashboard and confirm you have permission to edit this project.");
+        }
+
+        private static Dictionary<string, object> RefreshedProject(int? projectId)
+        {
+            if (!projectId.HasValue) return null;
+            return Db.Query("SELECT TOP 1 * FROM dbo.vw_ProjectPortfolio WHERE ProjectId=@ProjectId", P("@ProjectId", projectId.Value)).FirstOrDefault();
+        }
+
+        private static void PreserveRegisteredProjectIdentity(ProjectRequest value)
+        {
+            if (value == null || !value.ProjectId.HasValue) return;
+            var existing = Db.Query("SELECT IsJira,JiraKey FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            if (existing == null) return;
+            value.IsJira = Convert.ToBoolean(existing["IsJira"]);
+            value.JiraKey = Convert.ToString(existing["JiraKey"]);
+        }
+
+        [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpDelete, Route("projects/{projectId:int}")]
+        public IHttpActionResult DeleteProject(int projectId)
+        {
+            return DeleteProjectCore(projectId);
+        }
+
+        [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpPost, Route("projects/{projectId:int}/delete")]
+        public IHttpActionResult DeleteProjectPost(int projectId)
+        {
+            return DeleteProjectCore(projectId);
+        }
+
+        private IHttpActionResult DeleteProjectCore(int projectId)
+        {
+            try { DeleteProjectRow(projectId); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("pets/{petId:int}")]
+        public IHttpActionResult DeletePet(int petId)
+        {
+            return DeletePetCore(petId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets/{petId:int}/delete")]
+        public IHttpActionResult DeletePetPost(int petId)
+        {
+            return DeletePetCore(petId);
+        }
+
+        private IHttpActionResult DeletePetCore(int petId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try { DeletePetRow(petId); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteProjectRow(int projectId)
+        {
+            Db.Execute(@"
+DECLARE @RequestorEmail nvarchar(254);
+SELECT @RequestorEmail=RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId;
+IF @RequestorEmail IS NULL BEGIN RAISERROR('Project not found.',16,1); RETURN; END;
+IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) BEGIN RAISERROR('This project has PET requests; delete them first.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this project.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
+DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;",
+                P("@ProjectId", projectId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master") || User.IsInRole("Reviewer") || User.IsInRole("Approver")));
+        }
+
+        private void DeletePetRow(int petId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254);
+SELECT @ProjectId=pet.ProjectId, @Status=pet.Status, @RequestorEmail=p.RequestorEmail
+FROM dbo.PETRequests pet
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE pet.PetId=@PetId;
+IF @ProjectId IS NULL BEGIN RAISERROR('PET not found.',16,1); RETURN; END;
+IF @Status NOT IN ('Draft','Pending Review','Sent Back') BEGIN RAISERROR('Only a PET that has not been approved yet can be deleted.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this PET.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='InvoiceDocument' AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId WHERE bl.PetId=@PetId);
+DELETE FROM dbo.Attachments WHERE EntityType IN ('BudgetLineCAM','BudgetLineLPO') AND EntityId IN (SELECT BudgetLineId FROM dbo.BudgetLines WHERE PetId=@PetId);
+DELETE FROM dbo.Attachments WHERE EntityType='PET' AND EntityId=@PetId;
+DELETE i FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId WHERE bl.PetId=@PetId;
+IF OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NOT NULL DELETE bsi FROM dbo.BudgetLineSpendItems bsi JOIN dbo.BudgetLines bl ON bl.BudgetLineId=bsi.BudgetLineId WHERE bl.PetId=@PetId;
+DELETE FROM dbo.BudgetLines WHERE PetId=@PetId;
+DELETE FROM dbo.SpendItems WHERE PetId=@PetId;
+DELETE FROM dbo.WorkflowHistory WHERE PetId=@PetId;
+DELETE FROM dbo.PETRequests WHERE PetId=@PetId;
+IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Status NOT IN('Rejected'))
+ UPDATE dbo.Projects SET Status=CASE WHEN RequiresPet=0 THEN 'Registered' ELSE 'Active' END, UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId;",
+                P("@PetId", petId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("pets")]
+        public IHttpActionResult SavePet(PetRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            if (value == null) return BadRequest("PET details are required.");
+            try
+            {
+                EnsureProjectBudgetSelection(value);
+                if (value.PetId.HasValue)
+                {
+                    var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
+                    if (existing == null) return BadRequest("PET request was not found.");
+                    var existingStatus = Convert.ToString(existing["Status"]).Trim();
+                    if (!EditablePetStatus(existingStatus)) return BadRequest("PET requests can be edited only while Pending Review or Sent Back.");
+                }
+                if (value.SpendItems != null && value.SpendItems.Count > 0)
+                {
+                    foreach (var item in value.SpendItems) ValidatePetRequiredDropdowns(item);
+                    value.RequestedAmount = value.SpendItems.Sum(item => item.FinalAed > 0 ? item.FinalAed : item.AedAmount * (1 + item.ContingencyPercent / 100));
+                }
+                VendorMaintenance.EnsureVendors(value.VendorName);
+                VendorMaintenance.EnsureVendors(value.SpendItems, item => item.Vendor);
+                AmountValidation.ValidatePetRequestAmount(value.ProjectId, value.PetId, value.RequestedAmount);
+                var isSentBack = false;
+                if (value.PetId.HasValue)
+                {
+                    var sentBack = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Sent Back'", P("@PetId", value.PetId)).FirstOrDefault();
+                    isSentBack = sentBack != null;
+                    if (isSentBack && string.IsNullOrWhiteSpace(value.Comments)) return BadRequest("Requester comments / amendment notes are required before resubmitting.");
+                }
+                var saved = SavePetRow(value, isSentBack).FirstOrDefault();
+                var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
+                if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems, User.Identity.Name);
+                return Ok(saved);
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private static decimal CurrencyRateToLocal(string code, decimal fallbackRate)
+        {
+            var currencyCode = string.IsNullOrWhiteSpace(code) ? "AED" : code.Trim().ToUpperInvariant();
+            var row = Db.Query("SELECT RateToLocal FROM dbo.Currencies WHERE UPPER(Code)=@Code", P("@Code", currencyCode)).FirstOrDefault();
+            if (row != null && row["RateToLocal"] != null)
+            {
+                var rate = Convert.ToDecimal(row["RateToLocal"]);
+                if (rate > 0) return rate;
+            }
+            return fallbackRate > 0 ? fallbackRate : 1;
+        }
+
+        private static void UpdateApprovedPetVendors(int petId, List<SpendItemRequest> items, string vendorName)
+        {
+            if (items != null && items.Count > 0)
+            {
+                foreach (var item in items)
+                {
+                    if (!item.SpendItemId.HasValue) continue;
+                    if (string.IsNullOrWhiteSpace(item.Vendor)) throw new ArgumentException("Vendor is required on each PET line.");
+                    VendorMaintenance.EnsureVendors(item.Vendor);
+                    Db.Execute("UPDATE dbo.SpendItems SET Vendor=@Vendor WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@Vendor", item.Vendor), P("@PetId", petId), P("@SpendItemId", item.SpendItemId));
+                }
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(vendorName)) throw new ArgumentException("Vendor is required.");
+            VendorMaintenance.EnsureVendors(vendorName);
+            Db.Execute("UPDATE dbo.SpendItems SET Vendor=@VendorName WHERE PetId=@PetId", P("@VendorName", vendorName), P("@PetId", petId));
+        }
+
+        private List<Dictionary<string, object>> SavePetRow(PetRequest value, bool isSentBack)
+        {
+            var sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments,@ReviewRequired" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,NULL,@ReviewRequired";
+            var parameters = isSentBack
+                ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments), P("@ReviewRequired", value.ReviewRequired) }
+                : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@ReviewRequired", value.ReviewRequired) };
+            try { return Db.Query(sql, parameters); }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                sql = isSentBack ? "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName,@Comments" : "EXEC dbo.sp_SavePet @PetId,@ProjectId,@Code,@Amount,@Currency,@User,@VendorName";
+                parameters = isSentBack
+                    ? new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName), P("@Comments", value.Comments) }
+                    : new[] { P("@PetId", value.PetId), P("@ProjectId", value.ProjectId), P("@Code", value.Code), P("@Amount", value.RequestedAmount), P("@Currency", value.Currency), P("@User", User.Identity.Name), P("@VendorName", value.VendorName) };
+                return Db.Query(sql, parameters);
+            }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("spend-items")]
+        public IHttpActionResult SaveSpendItem(SpendItemRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            if (value == null || string.IsNullOrWhiteSpace(value.Vendor)) return BadRequest("Vendor is required.");
+            try { RequireEditablePetStatus(value.PetId); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            try { ValidatePetRequiredDropdowns(value); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            EnsureSpendLineId(value);
+            VendorMaintenance.EnsureVendors(value.Vendor);
+            var foreignAmount = value.Units * value.UnitPrice;
+            var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
+            value.ExchangeRate = rate;
+            var aedAmount = foreignAmount * rate;
+            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount, User.Identity.Name)); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static void SyncPetSpendItems(int petId, List<SpendItemRequest> items, string userEmail)
+        {
+            EnsureSpendLineIds(items);
+            var ids = items.Where(item => item.SpendItemId.HasValue).Select(item => item.SpendItemId.Value).Distinct().ToList();
+            var parameters = new List<SqlParameter> { P("@PetId", petId) };
+            var keepClause = "";
+            if (ids.Count > 0)
+            {
+                var names = ids.Select((id, index) => "@Existing" + index).ToArray();
+                for (var index = 0; index < ids.Count; index++) parameters.Add(P(names[index], ids[index]));
+                keepClause = " AND s.SpendItemId NOT IN (" + string.Join(",", names) + ")";
+            }
+            Db.Execute("DELETE s FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE s.PetId=@PetId" + keepClause + " AND (pet.Status IN('Draft','Pending Review','Sent Back') OR (pet.Status='Pending Approval' AND p.SkipReview=1))", parameters.ToArray());
+            foreach (var item in items)
+            {
+                item.PetId = petId;
+                VendorMaintenance.EnsureVendors(item.Vendor);
+                var foreignAmount = item.Units * item.UnitPrice;
+                var exchangeRate = CurrencyRateToLocal(item.Currency, item.ExchangeRate);
+                item.ExchangeRate = exchangeRate;
+                var aedAmount = foreignAmount * exchangeRate;
+                SaveSpendItemRow(item, foreignAmount, aedAmount, userEmail);
+            }
+        }
+
+        private static void RequireEditablePetStatus(int petId)
+        {
+            var existing = Db.Query("SELECT Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
+            if (existing == null) throw new ArgumentException("PET request was not found.");
+            if (!EditablePetStatus(Convert.ToString(existing["Status"]))) throw new ArgumentException("PET requests can be edited only while Pending Review or Sent Back.");
+        }
+
+        private static bool EditablePetStatus(string status)
+        {
+            return string.Equals(status, "Pending Review", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "Sent Back", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static void EnsureSpendLineIds(IEnumerable<SpendItemRequest> items)
+        {
+            var usedLineIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items.Where(item => item != null))
+            {
+                var lineId = (item.LineId ?? "").Trim();
+                if (string.IsNullOrWhiteSpace(lineId) || usedLineIds.Contains(lineId)) lineId = GeneratedLineId(usedLineIds);
+                item.LineId = lineId;
+                usedLineIds.Add(lineId);
+            }
+        }
+
+        private static void EnsureSpendLineId(SpendItemRequest item)
+        {
+            if (item != null && string.IsNullOrWhiteSpace(item.LineId)) item.LineId = GeneratedLineId(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        }
+
+        private static string GeneratedLineId(HashSet<string> usedLineIds)
+        {
+            string lineId;
+            do
+            {
+                lineId = "LINE-" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" + Guid.NewGuid().ToString("N").Substring(0, 6).ToUpperInvariant();
+            } while (usedLineIds.Contains(lineId));
+            return lineId;
+        }
+
+        private static Dictionary<string, object> SaveSpendItemRow(SpendItemRequest value, decimal foreignAmount, decimal aedAmount, string userEmail)
+        {
+            try
+            {
+            return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl,@Department,@Description,@YearlyRecurrence,@LineId,@SrNo,@LineDate,@User", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber), P("@Department", value.Department), P("@Description", value.Description), P("@YearlyRecurrence", value.YearlyRecurrence), P("@LineId", value.LineId), P("@SrNo", value.SerialNo), P("@LineDate", value.LineDate), P("@User", userEmail)).FirstOrDefault();
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                return Db.Query("EXEC dbo.sp_SaveSpendItem @Id,@Pet,@Head,@Topic,@Vendor,@CostType,@UnitType,@Units,@UnitPrice,@Currency,@Foreign,@Aed,@Contingency,@Gl", P("@Id", value.SpendItemId), P("@Pet", value.PetId), P("@Head", value.Head), P("@Topic", value.Topic), P("@Vendor", value.Vendor), P("@CostType", value.CostType), P("@UnitType", value.UnitType), P("@Units", value.Units), P("@UnitPrice", value.UnitPrice), P("@Currency", value.Currency), P("@Foreign", foreignAmount), P("@Aed", aedAmount), P("@Contingency", value.ContingencyPercent), P("@Gl", value.GlNumber)).FirstOrDefault();
+            }
+        }
+
+        [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
+        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+
+        [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Approval", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
+        public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (value == null) return BadRequest("Budget Line details are required.");
+                if (!value.BudgetLineId.HasValue)
+                {
+                    var approvedPet = Db.Query("SELECT PetId FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Approved'", P("@PetId", value.PetId)).FirstOrDefault();
+                    if (approvedPet == null) return BadRequest("Budget Lines can be added only after the selected PET is approved.");
+                }
+                object lpoStatus = null;
+                if (value.BudgetLineId.HasValue)
+                {
+                    var existing = Db.Query("SELECT PetId,LpoStatus FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", value.BudgetLineId)).FirstOrDefault();
+                    if (existing != null)
+                    {
+                        value.PetId = Convert.ToInt32(existing["PetId"]);
+                        lpoStatus = existing["LpoStatus"];
+                    }
+                }
+                var sourceSpendItemIds = BudgetLineSourceSpendItemIds(value);
+                if (sourceSpendItemIds.Count > 0)
+                {
+                    ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
+                }
+                value.Vendor = NormalizeEditableVendor(value.Vendor);
+                ValidateBudgetLineVendorSelection(value.PetId, sourceSpendItemIds, value.Vendor);
+                VendorMaintenance.EnsureVendors(value.Vendor);
+                AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds, value.GlNumber);
+                var saved = SaveBudgetLineRow(value, lpoStatus);
+                var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
+                if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
+                return Ok(saved);
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private Dictionary<string, object> SaveBudgetLineRow(BudgetLineRequest value, object lpoStatus)
+        {
+            try
+            {
+                return Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User,@CamCreatedDate,@CamApprovedDate,@LpoIssueDate", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name), P("@CamCreatedDate", value.CamCreatedDate), P("@CamApprovedDate", value.CamApprovedDate), P("@LpoIssueDate", value.LpoIssueDate)).FirstOrDefault();
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex)) throw;
+                return Db.Query("EXEC dbo.sp_SaveBudgetLine @Id,@Pet,@Vendor,@Justification,@Cost,@Currency,@Gl,@PetRef,@CamId,@CamStatus,@CamComments,@LpoRequest,@LpoStatus,@LpoComments,@User", P("@Id", value.BudgetLineId), P("@Pet", value.PetId), P("@Vendor", value.Vendor), P("@Justification", value.Justification), P("@Cost", value.Cost), P("@Currency", value.Currency), P("@Gl", value.GlNumber), P("@PetRef", value.PetReference), P("@CamId", value.CamId), P("@CamStatus", value.CamStatus), P("@CamComments", value.CamComments), P("@LpoRequest", value.LpoRequest), P("@LpoStatus", lpoStatus), P("@LpoComments", value.LpoComments), P("@User", User.Identity.Name)).FirstOrDefault();
+            }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("budget-lines/{budgetLineId:int}")]
+        public IHttpActionResult DeleteBudgetLine(int budgetLineId)
+        {
+            return DeleteBudgetLineCore(budgetLineId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines/{budgetLineId:int}/delete")]
+        public IHttpActionResult DeleteBudgetLinePost(int budgetLineId)
+        {
+            return DeleteBudgetLineCore(budgetLineId);
+        }
+
+        private IHttpActionResult DeleteBudgetLineCore(int budgetLineId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try { DeleteBudgetLineRow(budgetLineId); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteBudgetLineRow(int budgetLineId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @RequestorEmail nvarchar(254);
+SELECT @ProjectId=p.ProjectId, @RequestorEmail=p.RequestorEmail
+FROM dbo.BudgetLines bl
+JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE bl.BudgetLineId=@BudgetLineId;
+IF @ProjectId IS NULL BEGIN RAISERROR('Budget Line not found.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this Budget Line.',16,1); RETURN; END;
+IF EXISTS(SELECT 1 FROM dbo.Invoices WHERE BudgetLineId=@BudgetLineId) BEGIN RAISERROR('Budget Line cannot be deleted because it has Invoice(s). Delete the Invoice(s) first.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType IN ('BudgetLineCAM','BudgetLineLPO') AND EntityId=@BudgetLineId;
+IF OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NOT NULL DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId;
+DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
+                P("@BudgetLineId", budgetLineId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices")]
+        public IHttpActionResult SaveInvoice(InvoiceRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try { AmountValidation.ValidateInvoiceAmount(value.BudgetLineId, value.InvoiceId, value.InvoiceAmount); return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault()); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpDelete, Route("invoices/{invoiceId:int}")]
+        public IHttpActionResult DeleteInvoice(int invoiceId)
+        {
+            return DeleteInvoiceCore(invoiceId);
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("invoices/{invoiceId:int}/delete")]
+        public IHttpActionResult DeleteInvoicePost(int invoiceId)
+        {
+            return DeleteInvoiceCore(invoiceId);
+        }
+
+        private IHttpActionResult DeleteInvoiceCore(int invoiceId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try { DeleteInvoiceRow(invoiceId); return Ok(); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private void DeleteInvoiceRow(int invoiceId)
+        {
+            Db.Execute(@"
+DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254);
+SELECT @ProjectId=p.ProjectId, @Status=i.InvoiceStatus, @RequestorEmail=p.RequestorEmail
+FROM dbo.Invoices i
+JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+WHERE i.InvoiceId=@InvoiceId;
+IF @ProjectId IS NULL BEGIN RAISERROR('Invoice not found.',16,1); RETURN; END;
+IF UPPER(LTRIM(RTRIM(ISNULL(@Status,'')))) IN ('SETTLED','PAID') BEGIN RAISERROR('Settled or Paid invoices cannot be deleted.',16,1); RETURN; END;
+IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this Invoice.',16,1); RETURN; END;
+DELETE FROM dbo.Attachments WHERE EntityType='InvoiceDocument' AND EntityId=@InvoiceId;
+DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
+                P("@InvoiceId", invoiceId),
+                P("@User", User.Identity.Name),
+                P("@IsElevated", User.IsInRole("Admin") || User.IsInRole("Master")));
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPut, Route("budgets/{budgetSourceId:int}")]
+        public IHttpActionResult UpdateBudget(int budgetSourceId, BudgetSourceRequest value)
+        {
+            if (value == null) return BadRequest("Budget source details are required.");
+            var description = (value.Description ?? "").Trim();
+            if (description.Length == 0) return BadRequest("Description is required.");
+            if (value.Budget < 0) return BadRequest("Budget must be zero or greater.");
+            var current = Db.Query("SELECT Budget,Utilization,AvailableBudget FROM dbo.BudgetSources WHERE BudgetSourceId=@Id", P("@Id", budgetSourceId)).FirstOrDefault();
+            if (current == null) return NotFound();
+            var oldBudget = Convert.ToDecimal(current["Budget"]);
+            var utilization = Convert.ToDecimal(current["Utilization"]);
+            var available = Convert.ToDecimal(current["AvailableBudget"]) + (value.Budget - oldBudget);
+            if (available < 0) return BadRequest("Budget cannot be below the amount already utilized or reserved.");
+            Db.Execute("EXEC dbo.sp_UpdateBudget @Id,@Description,@Budget,@Utilization,@Available,@User", P("@Id", budgetSourceId), P("@Description", description), P("@Budget", value.Budget), P("@Utilization", utilization), P("@Available", available), P("@User", User.Identity.Name));
+            return Ok();
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("budgets/sync")]
+        public async Task<IHttpActionResult> SyncBudgetSources()
+        {
+            try
+            {
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                if (files.Count == 0) return BadRequest("Choose the CAPEX/OPEX CSV or Excel file first.");
+                var imported = 0;
+                foreach (var file in files)
+                {
+                    var fileName = Path.GetFileName(file.Headers.ContentDisposition.FileName.Trim('"'));
+                    var extension = Path.GetExtension(fileName).ToLowerInvariant();
+                    if (extension != ".csv" && extension != ".xlsx" && extension != ".xlsm") return BadRequest(fileName + " is not a CSV or Excel file.");
+                    var rows = extension == ".csv"
+                        ? CsvBulkImporter.Parse(await file.ReadAsStringAsync())
+                        : SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+                    imported += CsvBulkImporter.ImportBudgetSources(rows, fileName, User.Identity.Name);
+                }
+                return Ok(new { imported = imported });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("attachments/{entityType}/{entityId:int}")]
+        public async Task<IHttpActionResult> UploadAttachment(string entityType, int entityId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                if (files.Count == 0) return BadRequest("Choose at least one supporting document first.");
+                foreach (var file in files)
+                {
+                    var original = file.Headers.ContentDisposition == null ? null : file.Headers.ContentDisposition.FileName;
+                    var originalName = AttachmentColumnValue(Path.GetFileName((original ?? "").Trim('"')), 260, "supporting-document");
+                    var storedName = AttachmentColumnValue(StoredAttachmentName(originalName), 260, Guid.NewGuid().ToString("N"));
+                    var contentType = AttachmentColumnValue(file.Headers.ContentType == null ? MimeMapping.GetMimeMapping(originalName) : file.Headers.ContentType.MediaType, 150, "application/octet-stream");
+                    var bytes = await file.ReadAsByteArrayAsync();
+                    WriteAttachmentFile(storedName, bytes);
+                    SaveAttachmentRow(AttachmentColumnValue(AttachmentEntityType(entityType), 30, "PET"), entityId, originalName, storedName, contentType, bytes.LongLength, AttachmentColumnValue(User.Identity.Name, 254, "system"));
+                }
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (IOException ex) { return BadRequest(ex.Message); }
+            catch (UnauthorizedAccessException ex) { return BadRequest(ex.Message); }
+            catch (HttpException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest("Unable to upload supporting document. " + ex.Message); }
+        }
+
+        private static string AttachmentEntityType(string entityType)
+        {
+            if (entityType != null && entityType.Equals("pet", StringComparison.OrdinalIgnoreCase)) return "PET";
+            return entityType;
+        }
+
+        private static string PrimaryAttachmentRoot()
+        {
+            var configuredRoot = ConfigurationManager.AppSettings["AttachmentRoot"];
+            if (!string.IsNullOrWhiteSpace(configuredRoot))
+                return Path.IsPathRooted(configuredRoot) ? configuredRoot : HttpContext.Current.Server.MapPath(configuredRoot);
+            return HttpContext.Current.Server.MapPath("~/App_Data/Attachments");
+        }
+
+        private static string FallbackAttachmentRoot()
+        {
+            return Path.Combine(Path.GetTempPath(), "DFM", "Attachments");
+        }
+
+        private static string EnsureAttachmentRoot(string root)
+        {
+            Directory.CreateDirectory(root);
+            return root;
+        }
+
+        private static string StoredAttachmentName(string originalName)
+        {
+            var extension = Path.GetExtension(originalName ?? "");
+            if (extension.Length > 20) extension = extension.Substring(0, 20);
+            return Guid.NewGuid().ToString("N") + extension;
+        }
+
+        private static void WriteAttachmentFile(string storedName, byte[] bytes)
+        {
+            try { WriteAttachmentFileToRoot(PrimaryAttachmentRoot(), storedName, bytes); }
+            catch (Exception ex)
+            {
+                if (!(ex is IOException) && !(ex is UnauthorizedAccessException) && !(ex is HttpException)) throw;
+                WriteAttachmentFileToRoot(FallbackAttachmentRoot(), storedName, bytes);
+            }
+        }
+
+        private static void WriteAttachmentFileToRoot(string root, string storedName, byte[] bytes)
+        {
+            var path = Path.Combine(EnsureAttachmentRoot(root), storedName);
+            File.WriteAllBytes(path, bytes);
+        }
+
+        private static void SaveAttachmentRow(string entityType, int entityId, string originalName, string storedName, string contentType, long fileSize, string uploadedBy)
+        {
+            try
+            {
+                Db.Execute("EXEC dbo.sp_InsertAttachment @type,@id,@original,@stored,@content,@size,@user", P("@type", entityType), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", fileSize), P("@user", uploadedBy));
+            }
+            catch (SqlException)
+            {
+                Db.Execute(@"INSERT dbo.Attachments(EntityType,EntityId,OriginalName,StoredName,ContentType,FileSize,UploadedBy)
+                    VALUES(@type,@id,@original,@stored,@content,@size,@user)", P("@type", entityType), P("@id", entityId), P("@original", originalName), P("@stored", storedName), P("@content", contentType), P("@size", fileSize), P("@user", uploadedBy));
+            }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex")]
+        public IHttpActionResult CreateNonProjectOpex(NonProjectOpexRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                var row = NonProjectOpexRequestRow(value);
+                var sourceError = NonProjectOpexSourceError(row);
+                if (sourceError != null) return BadRequest(sourceError);
+                var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES('Manual entry',@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@user", User.Identity.Name)).FirstOrDefault();
+                var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
+                SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
+                return Ok(new { imported = 1, batchId = batchId });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/{lineId:int}")]
+        public IHttpActionResult UpdateNonProjectOpex(int lineId, NonProjectOpexRequest value)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                var existing = EditableNonProjectOpexLine(lineId);
+                if (existing == null) return NotFound();
+                var row = NonProjectOpexRequestRow(value);
+                var sourceError = NonProjectOpexSourceError(row);
+                if (sourceError != null) return BadRequest(sourceError);
+                Db.Execute(@"UPDATE dbo.NonProjectOpexLines SET Initiative=@Initiative,Platform=@Platform,LineItem=@LineItem,EpmId=@EpmId,OpexReference=@OpexReference,GlNumber=@GlNumber,
+                    BudgetApprovedAed=@BudgetApprovedAed,MemoCamId=@MemoCamId,AmountApprovedAed=@AmountApprovedAed,Vendor=@Vendor,DateRaised=@DateRaised,LpoSoNumber=@LpoSoNumber,PoDate=@PoDate,
+                    AmsNumber=@AmsNumber,CamStatus=@CamStatus,Description=@Description,InvoiceMemoNumber=@InvoiceMemoNumber,InvoiceNumber=@InvoiceNumber,InvoiceAmountAed=@InvoiceAmountAed,
+                    InvoiceDate=@InvoiceDate,InvoiceEntryProcessDate=@InvoiceEntryProcessDate,InvoiceStatus=@InvoiceStatus,InvoiceDescription=@InvoiceDescription,Folder=@Folder,HandledBy=@HandledBy,Column1=@Column1
+                    WHERE NonProjectOpexLineId=@Id",
+                    P("@Id", lineId), P("@Initiative", row["Initiative"]), P("@Platform", row["Platform"]), P("@LineItem", row["LineItem"]), P("@EpmId", row["EpmId"]),
+                    P("@OpexReference", row["OpexReference"]), P("@GlNumber", row["GlNumber"]), P("@BudgetApprovedAed", row["BudgetApprovedAed"]), P("@MemoCamId", row["MemoCamId"]),
+                    P("@AmountApprovedAed", row["AmountApprovedAed"]), P("@Vendor", row["Vendor"]), P("@DateRaised", row["DateRaised"]), P("@LpoSoNumber", row["LpoSoNumber"]), P("@PoDate", row["PoDate"]),
+                    P("@AmsNumber", row["AmsNumber"]), P("@CamStatus", row["CamStatus"]), P("@Description", row["Description"]), P("@InvoiceMemoNumber", row["InvoiceMemoNumber"]), P("@InvoiceNumber", row["InvoiceNumber"]),
+                    P("@InvoiceAmountAed", row["InvoiceAmountAed"]), P("@InvoiceDate", row["InvoiceDate"]), P("@InvoiceEntryProcessDate", row["InvoiceEntryProcessDate"]), P("@InvoiceStatus", row["InvoiceStatus"]),
+                    P("@InvoiceDescription", row["InvoiceDescription"]), P("@Folder", row["Folder"]), P("@HandledBy", row["HandledBy"]), P("@Column1", row["Column1"]));
+                return Ok(new { batchId = Convert.ToInt32(existing["NonProjectOpexBatchId"]) });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/{lineId:int}/delete")]
+        public IHttpActionResult DeleteNonProjectOpex(int lineId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (EditableNonProjectOpexLine(lineId) == null) return NotFound();
+                Db.Execute(@"DECLARE @batch int=(SELECT NonProjectOpexBatchId FROM dbo.NonProjectOpexLines WHERE NonProjectOpexLineId=@Id);
+                    DELETE dbo.NonProjectOpexLines WHERE NonProjectOpexLineId=@Id;
+                    IF NOT EXISTS(SELECT 1 FROM dbo.NonProjectOpexLines WHERE NonProjectOpexBatchId=@batch)
+                    BEGIN
+                        DELETE dbo.Attachments WHERE EntityType='NonProjectOpexBatch' AND EntityId=@batch;
+                        DELETE dbo.NonProjectOpexBatches WHERE NonProjectOpexBatchId=@batch;
+                    END", P("@Id", lineId));
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        // Master/Admin can change any record; others only their own.
+        private Dictionary<string, object> EditableNonProjectOpexLine(int lineId)
+        {
+            return Db.Query(@"SELECT NonProjectOpexLineId,NonProjectOpexBatchId FROM dbo.NonProjectOpexLines
+                WHERE NonProjectOpexLineId=@Id AND (@isMaster=1 OR LOWER(LTRIM(RTRIM(CreatedBy)))=LOWER(LTRIM(RTRIM(@user))))",
+                P("@Id", lineId), P("@isMaster", User.IsInRole("Master") || User.IsInRole("Admin")), P("@user", User.Identity.Name)).FirstOrDefault();
+        }
+
+        private static string NonProjectOpexSourceError(Dictionary<string, object> row)
+        {
+            var opexReference = row["OpexReference"] as string;
+            if (string.IsNullOrEmpty(opexReference)) return "Select the OPEX source from CAPEX / OPEX.";
+            return Db.Query("SELECT 1 Found FROM dbo.BudgetSources WHERE BudgetType='OPEX' AND ExternalId=@id", P("@id", opexReference)).Any()
+                ? null : "The selected OPEX source does not exist in CAPEX / OPEX.";
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("non-project-opex/import")]
+        public async Task<IHttpActionResult> ImportNonProjectOpex()
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
+                var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
+                var dataFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("dataFile", StringComparison.OrdinalIgnoreCase));
+                var supportingFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("supportingFile", StringComparison.OrdinalIgnoreCase));
+                if (dataFile == null) return BadRequest("Choose the Non-Project OPEX CSV or Excel file first.");
+
+                var sourceFileName = Path.GetFileName(dataFile.Headers.ContentDisposition.FileName.Trim('"'));
+                var extension = Path.GetExtension(sourceFileName).ToLowerInvariant();
+                if (extension != ".csv" && extension != ".xlsx" && extension != ".xlsm") return BadRequest("The data file must be CSV, XLSX, or XLSM.");
+                var sourceBytes = await dataFile.ReadAsByteArrayAsync();
+                if (sourceBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The data file exceeds the 50 MB upload limit.");
+                var rows = extension == ".csv"
+                    ? CsvBulkImporter.Parse(System.Text.Encoding.UTF8.GetString(sourceBytes))
+                    : SpreadsheetTableReader.Read(new MemoryStream(sourceBytes));
+                var importRows = ParseNonProjectOpexRows(rows, sourceFileName);
+                if (importRows.Count == 0) return BadRequest("The upload has no Non-Project OPEX data rows.");
+
+                var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES(@source,@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@source", AttachmentColumnValue(sourceFileName, 260, "upload.csv")), P("@user", User.Identity.Name)).FirstOrDefault();
+                var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
+                if (supportingFile != null)
+                {
+                    var supportingOriginalName = AttachmentColumnValue(Path.GetFileName(supportingFile.Headers.ContentDisposition.FileName.Trim('"')), 260, "supporting-document");
+                    var supportingBytes = await supportingFile.ReadAsByteArrayAsync();
+                    if (supportingBytes.Length == 0) return BadRequest("The supporting document is empty.");
+                    if (supportingBytes.LongLength > 50L * 1024 * 1024) return BadRequest("The supporting document exceeds the 50 MB upload limit.");
+                    var storedName = AttachmentColumnValue(StoredAttachmentName(supportingOriginalName), 260, Guid.NewGuid().ToString("N"));
+                    var contentType = AttachmentColumnValue(supportingFile.Headers.ContentType == null ? MimeMapping.GetMimeMapping(supportingOriginalName) : supportingFile.Headers.ContentType.MediaType, 150, "application/octet-stream");
+                    WriteAttachmentFile(storedName, supportingBytes);
+                    SaveAttachmentRow("NonProjectOpexBatch", batchId, supportingOriginalName, storedName, contentType, supportingBytes.LongLength, User.Identity.Name);
+                }
+                foreach (var row in importRows) SaveNonProjectOpexRow(batchId, row, User.Identity.Name);
+                return Ok(new { imported = importRows.Count, batchId = batchId });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest("Unable to import Non-Project OPEX rows. " + ex.Message); }
+        }
+
+        private static Dictionary<string, object> NonProjectOpexRequestRow(NonProjectOpexRequest value)
+        {
+            if (value == null) throw new ArgumentException("Non-Project OPEX details are required.");
+            value.Initiative = RequiredImportText(value.Initiative, "Initiative", 500);
+            value.LineItem = RequiredImportText(value.LineItem, "Line Item", 200);
+            value.BudgetType = RequiredImportText(value.BudgetType, "Budget Type", 10);
+            if (!value.BudgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Budget Type must be OPEX. Non-Project records are OPEX only.");
+            value.Vendor = RequiredImportText(value.Vendor, "Vendor", 300);
+            if (value.AmountApprovedAed <= 0) throw new ArgumentException("Amount Apprd(AED) must be greater than zero.");
+            return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+            {
+                { "Initiative", value.Initiative }, { "Platform", OptionalImportText(value.Platform, "Platform", 200) }, { "LineItem", value.LineItem },
+                { "EpmId", OptionalImportText(value.EpmId, "EPM ID", 100) }, { "BudgetType", "OPEX" }, { "OpexReference", OptionalImportText(value.OpexReference, "Capex ID/OPEX", 100) },
+                { "GlNumber", OptionalImportText(value.GlNumber, "GL #", 50) }, { "BudgetApprovedAed", value.BudgetApprovedAed }, { "MemoCamId", OptionalImportText(value.MemoCamId, "Memo/CAM ID", 100) },
+                { "AmountApprovedAed", value.AmountApprovedAed }, { "Vendor", value.Vendor }, { "DateRaised", value.DateRaised }, { "LpoSoNumber", OptionalImportText(value.LpoSoNumber, "LPO/SO #", 100) },
+                { "PoDate", value.PoDate }, { "AmsNumber", OptionalImportText(value.AmsNumber, "AMS #", 100) }, { "CamStatus", OptionalImportText(value.CamStatus, "CAM Status", 100) },
+                { "Description", OptionalImportText(value.Description, "Description", 1000) }, { "InvoiceMemoNumber", OptionalImportText(value.InvoiceMemoNumber, "Invoice Memo#", 100) },
+                { "InvoiceNumber", OptionalImportText(value.InvoiceNumber, "Invoice #", 100) }, { "InvoiceAmountAed", value.InvoiceAmountAed }, { "InvoiceDate", value.InvoiceDate },
+                { "InvoiceEntryProcessDate", value.InvoiceEntryProcessDate }, { "InvoiceStatus", OptionalImportText(value.InvoiceStatus, "Invoice Status", 100) },
+                { "InvoiceDescription", OptionalImportText(value.InvoiceDescription, "Invoice Desc.", 1000) }, { "Folder", OptionalImportText(value.Folder, "Folder", 500) },
+                { "HandledBy", OptionalImportText(value.HandledBy, "Handled By", 254) }, { "Column1", OptionalImportText(value.Column1, "Column1", 500) }
+            };
+        }
+
+        private static string RequiredImportText(string value, string header, int maxLength)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length == 0) throw new ArgumentException(header + " is required.");
+            if (text.Length > maxLength) throw new ArgumentException(header + " exceeds " + maxLength + " characters.");
+            return text;
+        }
+
+        private static string OptionalImportText(string value, string header, int maxLength)
+        {
+            var text = (value ?? "").Trim();
+            if (text.Length > maxLength) throw new ArgumentException(header + " exceeds " + maxLength + " characters.");
+            return text.Length == 0 ? null : text;
+        }
+
+        private static string MultipartFieldName(HttpContent content)
+        {
+            var name = content.Headers.ContentDisposition == null ? "" : content.Headers.ContentDisposition.Name;
+            return (name ?? "").Trim('"');
+        }
+
+        private static readonly string[] NonProjectOpexHeaders = {
+            "Initiative", "Platform", "Line Item", "EPM ID", "Budget Type", "Capex ID/OPEX", "GL #", "Budget Apprd(AED)",
+            "Memo/CAM ID", "Amount Apprd(AED)", "Vendor", "DATE RAISED", "LPO/SO #", "PO Date", "AMS #", "CAM Status",
+            "Description", "Invoice Memo#", "Invoice #", "Invoice Amount(AED)", "Invoice Date", "Invoice Entry/Process Date",
+            "Invoice Status", "Invoice Desc.", "Folder", "Handled By", "Column1"
+        };
+
+        private static List<Dictionary<string, object>> ParseNonProjectOpexRows(List<List<string>> rows, string sourceName)
+        {
+            var headerRow = -1;
+            var headerMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++)
+            {
+                var candidate = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                for (var column = 0; column < rows[rowIndex].Count; column++)
+                {
+                    var key = NormalizeImportHeader(rows[rowIndex][column]);
+                    if (!string.IsNullOrEmpty(key) && !candidate.ContainsKey(key)) candidate.Add(key, column);
+                }
+                if (NonProjectOpexHeaders.All(header => candidate.ContainsKey(NormalizeImportHeader(header))))
+                {
+                    headerRow = rowIndex;
+                    headerMap = candidate;
+                    break;
+                }
+            }
+            if (headerRow < 0) throw new ArgumentException("The " + sourceName + " must contain all columns from the Non-Project OPEX template.");
+
+            var result = new List<Dictionary<string, object>>();
+            for (var rowIndex = headerRow + 1; rowIndex < rows.Count; rowIndex++)
+            {
+                var cells = rows[rowIndex];
+                if (cells.All(string.IsNullOrWhiteSpace)) continue;
+                var rowNumber = rowIndex + 1;
+                var initiative = ImportText(cells, headerMap, "Initiative", 500, true, rowNumber);
+                var lineItem = ImportText(cells, headerMap, "Line Item", 200, true, rowNumber);
+                var budgetType = ImportText(cells, headerMap, "Budget Type", 10, true, rowNumber);
+                if (!budgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase) && !budgetType.Equals("Opex", StringComparison.OrdinalIgnoreCase))
+                    throw new ArgumentException("Row " + rowNumber + ": Budget Type must be Opex. Non-Project records are OPEX only.");
+                var amountApproved = ImportDecimal(cells, headerMap, "Amount Apprd(AED)", false, rowNumber);
+                if (amountApproved.Value <= 0) throw new ArgumentException("Row " + rowNumber + ": Amount Apprd(AED) must be greater than zero.");
+                var vendor = ImportText(cells, headerMap, "Vendor", 300, true, rowNumber);
+                var record = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
+                {
+                    { "Initiative", initiative }, { "Platform", ImportText(cells, headerMap, "Platform", 200, false, rowNumber) },
+                    { "LineItem", lineItem }, { "EpmId", ImportText(cells, headerMap, "EPM ID", 100, false, rowNumber) },
+                    { "BudgetType", "OPEX" }, { "OpexReference", ImportText(cells, headerMap, "Capex ID/OPEX", 100, false, rowNumber) },
+                    { "GlNumber", ImportText(cells, headerMap, "GL #", 50, false, rowNumber) },
+                    { "BudgetApprovedAed", ImportDecimal(cells, headerMap, "Budget Apprd(AED)", true, rowNumber) },
+                    { "MemoCamId", ImportText(cells, headerMap, "Memo/CAM ID", 100, false, rowNumber) },
+                    { "AmountApprovedAed", amountApproved.Value }, { "Vendor", vendor },
+                    { "DateRaised", ImportDate(cells, headerMap, "DATE RAISED", rowNumber) },
+                    { "LpoSoNumber", ImportText(cells, headerMap, "LPO/SO #", 100, false, rowNumber) },
+                    { "PoDate", ImportDate(cells, headerMap, "PO Date", rowNumber) },
+                    { "AmsNumber", ImportText(cells, headerMap, "AMS #", 100, false, rowNumber) },
+                    { "CamStatus", ImportText(cells, headerMap, "CAM Status", 100, false, rowNumber) },
+                    { "Description", ImportText(cells, headerMap, "Description", 1000, false, rowNumber) },
+                    { "InvoiceMemoNumber", ImportText(cells, headerMap, "Invoice Memo#", 100, false, rowNumber) },
+                    { "InvoiceNumber", ImportText(cells, headerMap, "Invoice #", 100, false, rowNumber) },
+                    { "InvoiceAmountAed", ImportDecimal(cells, headerMap, "Invoice Amount(AED)", true, rowNumber) },
+                    { "InvoiceDate", ImportDate(cells, headerMap, "Invoice Date", rowNumber) },
+                    { "InvoiceEntryProcessDate", ImportDate(cells, headerMap, "Invoice Entry/Process Date", rowNumber) },
+                    { "InvoiceStatus", ImportText(cells, headerMap, "Invoice Status", 100, false, rowNumber) },
+                    { "InvoiceDescription", ImportText(cells, headerMap, "Invoice Desc.", 1000, false, rowNumber) },
+                    { "Folder", ImportText(cells, headerMap, "Folder", 500, false, rowNumber) },
+                    { "HandledBy", ImportText(cells, headerMap, "Handled By", 254, false, rowNumber) },
+                    { "Column1", ImportText(cells, headerMap, "Column1", 500, false, rowNumber) }
+                };
+                result.Add(record);
+            }
+            return result;
+        }
+
+        private static string NormalizeImportHeader(string value)
+        {
+            return new string((value ?? "").ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+        }
+
+        private static string ImportText(List<string> cells, Dictionary<string, int> headers, string header, int maxLength, bool required, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var value = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (required && value.Length == 0) throw new ArgumentException("Row " + rowNumber + ": " + header + " is required.");
+            if (value.Length > maxLength) throw new ArgumentException("Row " + rowNumber + ": " + header + " exceeds " + maxLength + " characters.");
+            return value.Length == 0 ? null : value;
+        }
+
+        private static decimal? ImportDecimal(List<string> cells, Dictionary<string, int> headers, string header, bool optional, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var text = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (text.Length == 0 && optional) return null;
+            decimal value;
+            var cleaned = text.Replace(",", "").Replace("AED", "").Trim();
+            if (!decimal.TryParse(cleaned, NumberStyles.Number | NumberStyles.AllowCurrencySymbol | NumberStyles.AllowParentheses, CultureInfo.InvariantCulture, out value))
+                throw new ArgumentException("Row " + rowNumber + ": " + header + " must be a valid amount.");
+            return value;
+        }
+
+        private static DateTime? ImportDate(List<string> cells, Dictionary<string, int> headers, string header, int rowNumber)
+        {
+            var index = headers[NormalizeImportHeader(header)];
+            var text = index < cells.Count ? (cells[index] ?? "").Trim() : "";
+            if (text.Length == 0) return null;
+            DateTime value;
+            if (DateTime.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.None, out value)) return value.Date;
+            var formats = new[] { "MMM-yy", "MMM-yyyy", "MMMM-yy", "MMMM-yyyy", "d-MMM-yy", "d-MMM-yyyy", "dd-MMM-yy", "dd-MMM-yyyy" };
+            if (DateTime.TryParseExact(text, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out value)) return value.Date;
+            double serial;
+            if (double.TryParse(text, NumberStyles.Number, CultureInfo.InvariantCulture, out serial) && serial > 0)
+            {
+                try { return DateTime.FromOADate(serial).Date; }
+                catch (ArgumentException) { }
+            }
+            throw new ArgumentException("Row " + rowNumber + ": " + header + " must be a valid date.");
+        }
+
+        private static void SaveNonProjectOpexRow(int batchId, Dictionary<string, object> row, string userEmail)
+        {
+            Db.Execute(@"INSERT dbo.NonProjectOpexLines(NonProjectOpexBatchId,Initiative,Platform,LineItem,EpmId,BudgetType,OpexReference,GlNumber,BudgetApprovedAed,MemoCamId,AmountApprovedAed,Vendor,DateRaised,LpoSoNumber,PoDate,AmsNumber,CamStatus,Description,InvoiceMemoNumber,InvoiceNumber,InvoiceAmountAed,InvoiceDate,InvoiceEntryProcessDate,InvoiceStatus,InvoiceDescription,Folder,HandledBy,Column1,CreatedBy)
+                VALUES(@Batch,@Initiative,@Platform,@LineItem,@EpmId,@BudgetType,@OpexReference,@GlNumber,@BudgetApprovedAed,@MemoCamId,@AmountApprovedAed,@Vendor,@DateRaised,@LpoSoNumber,@PoDate,@AmsNumber,@CamStatus,@Description,@InvoiceMemoNumber,@InvoiceNumber,@InvoiceAmountAed,@InvoiceDate,@InvoiceEntryProcessDate,@InvoiceStatus,@InvoiceDescription,@Folder,@HandledBy,@Column1,@User)",
+                P("@Batch", batchId), P("@Initiative", row["Initiative"]), P("@Platform", row["Platform"]), P("@LineItem", row["LineItem"]), P("@EpmId", row["EpmId"]),
+                P("@BudgetType", row["BudgetType"]), P("@OpexReference", row["OpexReference"]), P("@GlNumber", row["GlNumber"]), P("@BudgetApprovedAed", row["BudgetApprovedAed"]), P("@MemoCamId", row["MemoCamId"]),
+                P("@AmountApprovedAed", row["AmountApprovedAed"]), P("@Vendor", row["Vendor"]), P("@DateRaised", row["DateRaised"]), P("@LpoSoNumber", row["LpoSoNumber"]), P("@PoDate", row["PoDate"]),
+                P("@AmsNumber", row["AmsNumber"]), P("@CamStatus", row["CamStatus"]), P("@Description", row["Description"]), P("@InvoiceMemoNumber", row["InvoiceMemoNumber"]), P("@InvoiceNumber", row["InvoiceNumber"]),
+                P("@InvoiceAmountAed", row["InvoiceAmountAed"]), P("@InvoiceDate", row["InvoiceDate"]), P("@InvoiceEntryProcessDate", row["InvoiceEntryProcessDate"]), P("@InvoiceStatus", row["InvoiceStatus"]), P("@InvoiceDescription", row["InvoiceDescription"]),
+                P("@Folder", row["Folder"]), P("@HandledBy", row["HandledBy"]), P("@Column1", row["Column1"]), P("@User", userEmail));
+        }
+
+        private static string AttachmentColumnValue(string value, int maxLength, string fallback)
+        {
+            var text = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+            return text.Length <= maxLength ? text : text.Substring(0, maxLength);
+        }
+
+        [HttpGet, Route("attachments/{attachmentId:long}")]
+        public IHttpActionResult DownloadAttachment(long attachmentId, bool inline = false)
+        {
+            var row = Db.Query("SELECT OriginalName,StoredName,ContentType FROM dbo.Attachments WHERE AttachmentId=@AttachmentId", P("@AttachmentId", attachmentId)).FirstOrDefault();
+            if (row == null) return NotFound();
+            var path = AttachmentPath(Convert.ToString(row["StoredName"]));
+            if (!File.Exists(path)) return NotFound();
+            var originalName = Convert.ToString(row["OriginalName"]);
+            var response = Request.CreateResponse(HttpStatusCode.OK);
+            response.Content = new StreamContent(File.OpenRead(path));
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue(AttachmentContentType(row["ContentType"], originalName));
+            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue(inline ? "inline" : "attachment") { FileName = originalName };
+            return ResponseMessage(response);
+        }
+
+        private static string AttachmentPath(string storedName)
+        {
+            var roots = new[] { PrimaryAttachmentRoot(), FallbackAttachmentRoot() };
+            foreach (var root in roots)
+            {
+                var path = Path.Combine(root, storedName);
+                if (File.Exists(path)) return path;
+            }
+            return Path.Combine(roots[0], storedName);
+        }
+
+        private static string AttachmentContentType(object storedContentType, string originalName)
+        {
+            var contentType = Convert.ToString(storedContentType);
+            if (!string.IsNullOrWhiteSpace(contentType) && !contentType.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase)) return contentType;
+            return MimeMapping.GetMimeMapping(originalName ?? "attachment");
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/preview")]
+        public async Task<IHttpActionResult> PreviewPetBulk(int projectId)
+        {
+            try
+            {
+                return Ok(new { rows = await ReadPetPreviewRows() });
+            }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/pet/{projectId:int}/rows")]
+        public IHttpActionResult BulkPetRows(int projectId, List<PetUploadRowRequest> rows)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            try
+            {
+                var imported = CsvBulkImporter.ImportPetRows(projectId, rows, User.Identity.Name);
+                return Ok(new { imported = imported });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Requestor", "Master"), HttpPost, Route("bulk/{kind}/{parentId:int}")]
+        public async Task<IHttpActionResult> Bulk(string kind, int parentId)
+        {
+            if (IsApproverOnly()) return RejectApproverWrite();
+            if (!new[] { "pet", "budget", "invoice" }.Contains(kind, StringComparer.OrdinalIgnoreCase)) return BadRequest("Unknown template type.");
+            try
+            {
+                int imported;
+                if (Request.Content.IsMimeMultipartContent())
+                {
+                    var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+                    var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+                    if (file == null) return BadRequest("Choose a file to import.");
+                    var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+                    var extension = Path.GetExtension(fileName).ToLowerInvariant();
+                    if (extension == ".xlsx" || extension == ".xlsm")
+                    {
+                        var rows = SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+                        imported = CsvBulkImporter.ImportRows(kind, parentId, rows, User.Identity.Name, "Excel workbook");
+                    }
+                    else
+                    {
+                        imported = CsvBulkImporter.Import(kind, parentId, await file.ReadAsStringAsync(), User.Identity.Name);
+                    }
+                }
+                else
+                {
+                    var csv = await Request.Content.ReadAsStringAsync();
+                    imported = CsvBulkImporter.Import(kind, parentId, csv, User.Identity.Name);
+                }
+                return Ok(new { imported = imported });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private async Task<List<List<string>>> ReadImportRows()
+        {
+            if (!Request.Content.IsMimeMultipartContent()) return CsvBulkImporter.Parse(await Request.Content.ReadAsStringAsync());
+            var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+            var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+            if (file == null) throw new ArgumentException("Choose a file to import.");
+            var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (extension == ".xlsx" || extension == ".xlsm") return SpreadsheetTableReader.Read(await file.ReadAsStreamAsync());
+            return CsvBulkImporter.Parse(await file.ReadAsStringAsync());
+        }
+
+        private async Task<List<PetUploadRowRequest>> ReadPetPreviewRows()
+        {
+            if (!Request.Content.IsMimeMultipartContent()) return CsvBulkImporter.PreviewPetRows(CsvBulkImporter.Parse(await Request.Content.ReadAsStringAsync()), "uploaded file");
+            var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
+            var file = provider.Contents.FirstOrDefault(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName));
+            if (file == null) throw new ArgumentException("Choose a file to import.");
+            var fileName = file.Headers.ContentDisposition.FileName.Trim('"');
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            if (extension != ".xlsx" && extension != ".xlsm") return CsvBulkImporter.PreviewPetRows(CsvBulkImporter.Parse(await file.ReadAsStringAsync()), fileName);
+            Exception lastError = null;
+            foreach (var worksheetRows in SpreadsheetTableReader.ReadWorksheets(await file.ReadAsStreamAsync()))
+            {
+                try { return CsvBulkImporter.PreviewPetRows(worksheetRows, fileName); }
+                catch (Exception ex) { lastError = ex; }
+            }
+            throw lastError ?? new ArgumentException("The Excel workbook does not contain PET template rows.");
+        }
+
+        private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
+
+        private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
+        {
+            if (value == null) throw new ArgumentException("PET line item details are required.");
+            var department = NormalizeDepartment(value.Department);
+            if (department == null) throw new ArgumentException("Department is required.");
+            var unitType = MatchOption(value.UnitType, UnitTypeOptions);
+            if (unitType == null) throw new ArgumentException("Unit Type is required.");
+            var costType = MatchOption(value.CostType, CostTypeOptions);
+            if (costType == null) throw new ArgumentException("Cost Type is required.");
+            if (value.YearlyRecurrence.HasValue && (value.YearlyRecurrence.Value < 1 || value.YearlyRecurrence.Value > 5)) value.YearlyRecurrence = null;
+            value.Department = department;
+            value.UnitType = unitType;
+            value.CostType = costType;
+        }
+
+        private static string NormalizeDepartment(string value)
+        {
+            var department = MatchOption(value, DepartmentOptions);
+            var trimmed = (value ?? "").Trim();
+            return department ?? (string.IsNullOrWhiteSpace(trimmed) ? null : trimmed);
+        }
+
+        private static string MatchOption(string value, IEnumerable<string> options)
+        {
+            var key = OptionKey(value);
+            return options.FirstOrDefault(option => OptionKey(option) == key);
+        }
+
+        private static string OptionKey(string value)
+        {
+            var key = new string((value ?? "").Trim().ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
+            return key == "eal" ? "eai" : key;
+        }
+
+        private static string NormalizeEditableVendor(string vendor)
+        {
+            var selected = (vendor ?? "").Trim();
+            if (selected.Length == 0) throw new ArgumentException("Vendor Name is required.");
+            return selected;
+        }
+
+        private static List<int> BudgetLineSourceSpendItemIds(BudgetLineRequest value)
+        {
+            var ids = (value.SourceSpendItemIds ?? new List<int>()).Where(id => id > 0).Distinct().ToList();
+            if (ids.Count > 1) throw new ArgumentException("Select only one PET line for this Budget Line.");
+            return ids;
+        }
+
+        private static void ValidateBudgetLineSourceSpendItems(int petId, List<int> sourceSpendItemIds)
+        {
+            var parameters = new List<SqlParameter> { P("@PetId", petId) };
+            var names = sourceSpendItemIds.Select((id, index) => "@SpendItem" + index).ToArray();
+            for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
+            var row = Db.Query("SELECT COUNT(1) SelectedCount FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId IN (" + string.Join(",", names) + ")", parameters.ToArray()).FirstOrDefault();
+            if (row == null || Convert.ToInt32(row["SelectedCount"]) != sourceSpendItemIds.Count) throw new ArgumentException("Selected PET line must belong to the selected PET Request.");
+        }
+
+        private static void ValidateBudgetLineVendorSelection(int petId, List<int> sourceSpendItemIds, string vendor)
+        {
+            if (sourceSpendItemIds == null || sourceSpendItemIds.Count == 0) return;
+            var row = Db.Query("SELECT Vendor FROM dbo.SpendItems WHERE PetId=@PetId AND SpendItemId=@SpendItemId", P("@PetId", petId), P("@SpendItemId", sourceSpendItemIds[0])).FirstOrDefault();
+            if (row == null) return;
+            var allowedVendors = SplitVendorNames(Convert.ToString(row["Vendor"])).ToList();
+            if (allowedVendors.Count == 0) return;
+            var selectedVendors = SplitVendorNames(vendor).ToList();
+            var isAllowedSubset = selectedVendors.Count > 0 && selectedVendors.All(selected => allowedVendors.Any(allowed => string.Equals(allowed, selected, StringComparison.OrdinalIgnoreCase)));
+            if (!isAllowedSubset) throw new ArgumentException("Budget Line Vendor Name must match vendor(s) on the selected PET line.");
+        }
+
+        private static IEnumerable<string> SplitVendorNames(string value)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var part in (value ?? "").Split(','))
+            {
+                var vendor = part.Trim();
+                if (vendor.Length == 0 || !seen.Add(vendor)) continue;
+                yield return vendor;
+            }
+        }
+
+        private static bool BudgetLineSpendItemSelectionAvailable()
+        {
+            var row = Db.Query("SELECT CASE WHEN OBJECT_ID('dbo.BudgetLineSpendItems','U') IS NULL THEN 0 ELSE 1 END HasTable").FirstOrDefault();
+            return row != null && Convert.ToInt32(row["HasTable"]) == 1;
+        }
+
+        private static void SyncBudgetLineSourceSpendItems(int budgetLineId, List<int> sourceSpendItemIds)
+        {
+            if (!BudgetLineSpendItemSelectionAvailable()) return;
+            var parameters = new List<SqlParameter> { P("@BudgetLineId", budgetLineId) };
+            var names = sourceSpendItemIds.Select((id, index) => "@SpendItem" + index).ToArray();
+            for (var index = 0; index < sourceSpendItemIds.Count; index++) parameters.Add(P(names[index], sourceSpendItemIds[index]));
+            var sql = "DELETE FROM dbo.BudgetLineSpendItems WHERE BudgetLineId=@BudgetLineId";
+            if (sourceSpendItemIds.Count > 0) sql += "; INSERT dbo.BudgetLineSpendItems(BudgetLineId,SpendItemId) SELECT @BudgetLineId,s.SpendItemId FROM dbo.SpendItems s JOIN dbo.BudgetLines b ON b.BudgetLineId=@BudgetLineId AND b.PetId=s.PetId WHERE s.SpendItemId IN (" + string.Join(",", names) + ")";
+            Db.Execute(sql, parameters.ToArray());
+        }
+
+        private static void AttachBudgetLineSourceSpendItems(List<Dictionary<string, object>> budgetLines)
+        {
+            if (budgetLines == null || budgetLines.Count == 0 || !BudgetLineSpendItemSelectionAvailable()) return;
+            var budgetLineIds = budgetLines.Select(row => Convert.ToInt32(row["BudgetLineId"])).Distinct().ToList();
+            var parameters = new List<SqlParameter>();
+            var names = budgetLineIds.Select((id, index) => "@BudgetLine" + index).ToArray();
+            for (var index = 0; index < budgetLineIds.Count; index++) parameters.Add(P(names[index], budgetLineIds[index]));
+            var rows = Db.Query(@"SELECT bsi.BudgetLineId,
+                STUFF((SELECT ',' + CONVERT(nvarchar(20), innerBsi.SpendItemId)
+                    FROM dbo.BudgetLineSpendItems innerBsi
+                    WHERE innerBsi.BudgetLineId=bsi.BudgetLineId
+                    ORDER BY innerBsi.SpendItemId
+                    FOR XML PATH(''), TYPE).value('.','nvarchar(max)'),1,1,'') SourceSpendItemIds
+                FROM dbo.BudgetLineSpendItems bsi
+                WHERE bsi.BudgetLineId IN (" + string.Join(",", names) + @")
+                GROUP BY bsi.BudgetLineId", parameters.ToArray());
+            foreach (var row in rows)
+            {
+                var budgetLineId = Convert.ToInt32(row["BudgetLineId"]);
+                var line = budgetLines.FirstOrDefault(item => Convert.ToInt32(item["BudgetLineId"]) == budgetLineId);
+                if (line != null) line["SourceSpendItemIds"] = row["SourceSpendItemIds"];
+            }
+        }
+
+        private static void ExecutePetDecision(int petId, string stage, DecisionRequest value, string user)
+        {
+            try
+            {
+                Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId,@Decision", P("@PetId", petId), P("@Stage", stage), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", user), P("@BudgetSourceId", value.BudgetSourceId), P("@Decision", value.Decision));
+            }
+            catch (SqlException ex)
+            {
+                if (!ProcedureParameterError(ex) || value.Decision.Equals("SendBack", StringComparison.OrdinalIgnoreCase)) throw;
+                Db.Execute("EXEC dbo.sp_PetDecision @PetId,@Stage,@Approve,@Comments,@User,@BudgetSourceId", P("@PetId", petId), P("@Stage", stage), P("@Approve", value.Approve), P("@Comments", value.Comments), P("@User", user), P("@BudgetSourceId", value.BudgetSourceId));
+            }
+        }
+
+        private static bool ProcedureParameterError(SqlException ex)
+        {
+            return ex.Errors.Cast<SqlError>().Any(error => error.Number == 8144 || error.Number == 201);
+        }
+
+        private static string ValidateDecision(DecisionRequest value, bool finalApproval)
+        {
+            if (value == null) return "Decision details are required.";
+            var decision = string.IsNullOrWhiteSpace(value.Decision) ? (value.Approve ? "Approve" : "RejectCancel") : value.Decision;
+            if (!new[] { "Approve", "SendBack", "RejectCancel" }.Contains(decision, StringComparer.OrdinalIgnoreCase)) return "Select a valid decision.";
+            if ((decision.Equals("SendBack", StringComparison.OrdinalIgnoreCase) || decision.Equals("RejectCancel", StringComparison.OrdinalIgnoreCase)) && string.IsNullOrWhiteSpace(value.Comments)) return "Comments / reason is required for this decision.";
+            if (finalApproval && decision.Equals("Approve", StringComparison.OrdinalIgnoreCase) && !value.BudgetSourceId.HasValue) return "Select a CapEx source before approval.";
+            value.Decision = decision;
+            value.Approve = decision.Equals("Approve", StringComparison.OrdinalIgnoreCase);
+            return null;
+        }
+    }
+}

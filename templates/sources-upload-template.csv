@@ -1,0 +1,3 @@
+Type,ID,Description,Budget,Utilization,Available Budget,Locked Amt,Budget after Locked Amt,Claim Amt,Net Balance
+Capex,IT_NP14_Sub_101_2025,PF FINNONE,"22,40,000.00","13,60,367.00","8,79,633.00",0,"8,79,633.00",0,"8,79,633.00"
+Opex,IT_OPEX_Sub_1_2026,Annual software subscriptions,"2,50,000.00",0,"2,50,000.00",0,"2,50,000.00",0,"2,50,000.00"
