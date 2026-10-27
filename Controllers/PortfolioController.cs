@@ -73,6 +73,22 @@ namespace DFM.Web.Controllers
             });
         }
 
+        [HttpGet, Route("approval-monitoring")]
+        public IHttpActionResult ApprovalMonitoring()
+        {
+            try
+            {
+                return Ok(Db.Query(@"SELECT bl.BudgetLineId,bl.PetId,pet.ProjectId,pet.Code PetCode,pet.Status PetStatus,pet.RequestedAmount PetAmount,
+                    bl.Vendor,bl.Justification,bl.Cost,bl.Currency,bl.GlNumber,bl.PetReference,
+                    bl.CamId,bl.CamStatus,bl.CamCreatedDate,bl.CamApprovedDate,bl.LpoRequest,bl.LpoStatus,bl.LpoIssueDate,bl.CreatedUtc
+                    FROM dbo.BudgetLines bl
+                    JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                    WHERE pet.Status='Approved'
+                    ORDER BY bl.BudgetLineId"));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet, Route("projects/{projectId:int}")]
         public IHttpActionResult Project(int projectId)
         {

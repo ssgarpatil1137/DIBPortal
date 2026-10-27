@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=29" />
+    <link rel="stylesheet" href="app/styles.css?v=30" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -738,6 +738,51 @@
               </tr>
             </table>
           </article>
+        </div>
+        <div class="approval-monitoring" id="approval-monitoring">
+          <div class="section-bar">
+            <div>
+              <h2>Approval monitoring</h2>
+              <span>Budget lines on approved PETs awaiting CAM or LPO approval</span>
+            </div>
+          </div>
+          <div class="approval-monitor-error" ng-if="vm.approvalMonitorError" role="alert"><i data-lucide="alert-triangle"></i><span>{{vm.approvalMonitorError}}</span></div>
+          <div class="approval-monitor-cards" aria-busy="{{vm.approvalMonitorLoading}}">
+            <button type="button" class="approval-card" ng-repeat="key in ['cam','lpo']" ng-class="{active:vm.approvalMonitorFilter===key, lpo:key==='lpo'}" ng-click="vm.openApprovalMonitor(key)" aria-controls="approval-monitor-list" aria-pressed="{{vm.approvalMonitorFilter===key}}" title="View {{vm.approvalMonitorStages[key].label}} records">
+              <span class="approval-card-head">
+                <span class="metric-icon" ng-class="key==='lpo'?'blue':'gold'"><i data-lucide="file-clock" ng-if="key==='cam'"></i><i data-lucide="scroll-text" ng-if="key==='lpo'"></i></span>
+                <span class="approval-card-title"><b>{{vm.approvalMonitorStages[key].label}}</b><small>Status: {{vm.approvalMonitorStages[key].statuses.join(' / ')}}</small></span>
+                <span class="approval-card-link">View records<i data-lucide="chevron-right"></i></span>
+              </span>
+              <span class="approval-card-stats">
+                <span><small>Pending records</small><strong>{{vm.approvalMonitorReady() ? vm.approvalMonitorSummary[key].count : '—'}}</strong></span>
+                <span><small>Total value</small><strong>{{vm.approvalMonitorReady() ? vm.money(vm.approvalMonitorSummary[key].total) : '—'}}</strong></span>
+                <span><small>Oldest pending</small><strong>{{!vm.approvalMonitorReady() || vm.approvalMonitorSummary[key].oldestDays==null ? '—' : vm.approvalMonitorSummary[key].oldestDays + (vm.approvalMonitorSummary[key].oldestDays===1 ? ' day' : ' days')}}</strong></span>
+              </span>
+            </button>
+          </div>
+          <div class="approval-monitor-list" id="approval-monitor-list" ng-if="vm.approvalMonitorFilter">
+            <div class="section-bar">
+              <div>
+                <h2>{{vm.approvalMonitorStages[vm.approvalMonitorFilter].label}} records</h2>
+                <span>{{vm.approvalMonitorFilteredCount}} records in view · {{vm.money(vm.approvalMonitorFilteredTotal)}}</span>
+              </div>
+              <div class="filters">
+                <label class="search"><i data-lucide="search"></i><input ng-model="vm.approvalMonitorSearch" ng-change="vm.updateApprovalMonitorView()" placeholder="Search project, PET, vendor, CAM ID" aria-label="Search pending records" /></label>
+                <button type="button" class="btn secondary" ng-click="vm.closeApprovalMonitor()"><i data-lucide="arrow-left"></i>Back to dashboard</button>
+              </div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table approval-monitor-table">
+                <thead><tr><th>Project ID</th><th>Project name</th><th>Budget type</th><th>Budget source</th><th>PET reference</th><th>Vendor</th><th>Justification</th><th>Cost</th><th>CCY</th><th>GL</th><th>CAM ID</th><th>Status</th><th>LPO Request</th><th>Pending since</th><th>Days pending</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="row in vm.visibleApprovalMonitorRows track by row.line.budgetLineId"><td>{{vm.projectDisplayId(row.project)}}</td><td title="{{row.project.projectName}}"><span class="truncate-cell wide-cell">{{row.project.projectName}}</span></td><td><span class="budget-type">{{row.project.budgetType||'Not supplied'}}</span></td><td title="{{row.project.budgetSource}}"><span class="truncate-cell">{{row.project.budgetSource||'Not supplied'}}</span></td><td>{{row.line.petReference||row.line.petCode}}</td><td title="{{row.line.vendor}}"><span class="truncate-cell">{{row.line.vendor}}</span></td><td title="{{row.line.justification}}"><span class="truncate-cell wide-cell">{{row.line.justification}}</span></td><td>{{vm.money(row.amount)}}</td><td>{{row.line.currency}}</td><td>{{row.line.glNumber}}</td><td>{{row.line.camId}}</td><td><span class="status" ng-class="vm.statusClass(row.line.camStatus)">{{row.line.camStatus}}</span></td><td>{{row.line.lpoRequest}}</td><td title="{{row.pendingSinceLabel}}">{{row.pendingSince ? (row.pendingSince|date:'dd-MMM-yyyy') : 'Not available'}}<small class="pending-source" ng-if="row.pendingSince">{{row.pendingSinceLabel}}</small></td><td><span class="count-chip">{{row.pendingDays==null ? '—' : row.pendingDays}}</span></td><td><div class="row-actions"><button type="button" class="btn compact primary" ng-click="vm.openReportProjectDetails(row.project)"><i data-lucide="bar-chart-3"></i>View Report</button><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editApprovalMonitorLine(row)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></div></td></tr>
+                  <tr ng-if="!vm.visibleApprovalMonitorRows.length"><td colspan="16"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>{{vm.approvalMonitorError ? 'Pending records could not be loaded.' : 'No ' + vm.approvalMonitorStages[vm.approvalMonitorFilter].label + ' records match.'}}</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination" ng-if="vm.approvalMonitorPageCount>1"><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===1" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.approvalMonitorPage}} of {{vm.approvalMonitorPageCount}}</span><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===vm.approvalMonitorPageCount" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+          </div>
         </div>
         <div class="section-bar report-project-bar">
           <div>
@@ -1657,6 +1702,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=31"></script>
+    <script src="app/app.js?v=32"></script>
   </body>
 </html>

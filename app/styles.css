@@ -3326,3 +3326,125 @@ textarea {
   top: auto;
   z-index: auto;
 }
+.approval-monitoring {
+  margin: 16px 0;
+}
+.approval-monitor-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.approval-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--gold);
+  border-radius: 7px;
+  padding: 14px;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+.approval-card.lpo {
+  border-left-color: var(--blue);
+}
+.approval-card:hover,
+.approval-card:focus-visible {
+  border-color: var(--green-2);
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.approval-card.active {
+  border-color: var(--green-2);
+  background: var(--mint);
+}
+.approval-card-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.approval-card-title {
+  flex: 1;
+  min-width: 0;
+}
+.approval-card-title b,
+.approval-card-title small {
+  display: block;
+}
+.approval-card-title b {
+  font-size: 15px;
+}
+.approval-card-title small {
+  font-size: 10px;
+  color: #78867f;
+}
+.approval-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--green-2);
+  white-space: nowrap;
+}
+.approval-card-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.approval-card-stats small,
+.approval-card-stats strong {
+  display: block;
+}
+.approval-card-stats small {
+  font-size: 11px;
+  color: var(--muted);
+}
+.approval-card-stats strong {
+  font: 700 20px/1.2 "Segoe UI", Tahoma, sans-serif;
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.approval-monitor-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  padding: 9px 12px;
+  border-radius: 5px;
+  background: #fbe8e8;
+  color: var(--red);
+  font-size: 12px;
+}
+.approval-monitor-list {
+  margin-top: 14px;
+}
+.approval-monitor-list .filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.approval-monitor-table {
+  width: max-content;
+  min-width: 100%;
+}
+.approval-monitor-table td {
+  white-space: nowrap;
+}
+.approval-monitor-table .pending-source {
+  display: block;
+  font-size: 10px;
+  color: #78867f;
+}
+@media (max-width: 760px) {
+  .approval-monitor-cards,
+  .approval-card-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .approval-card-link {
+    display: none;
+  }
+}

@@ -96,6 +96,19 @@
       vm.reportDetailProject = null;
       vm.reportDetailBudgetUsage = [];
       vm.reportDetailSummary = {};
+      vm.approvalMonitorSource = [];
+      vm.approvalMonitorLoading = false;
+      vm.approvalMonitorLoaded = false;
+      vm.approvalMonitorError = "";
+      vm.approvalMonitorSummary = {};
+      vm.approvalMonitorFilter = "";
+      vm.approvalMonitorSearch = "";
+      vm.approvalMonitorPage = 1;
+      vm.approvalMonitorPageSize = 10;
+      vm.approvalMonitorPageCount = 1;
+      vm.approvalMonitorFilteredCount = 0;
+      vm.approvalMonitorFilteredTotal = 0;
+      vm.visibleApprovalMonitorRows = [];
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
@@ -1530,6 +1543,138 @@
         var start = (vm.reportProjectPage - 1) * vm.reportProjectPageSize;
         vm.visibleReportProjects = filtered.slice(start, start + vm.reportProjectPageSize);
       };
+      // Budget line Status (stored in BudgetLines.CamStatus) lifecycle: Raised to Vendor > Memo in Progress > Memo Approved > LPO in Progress > LPO Approved > Completed.
+      vm.approvalMonitorStages = {
+        cam: { key: "cam", label: "CAM Pending", statuses: ["Raised to Vendor", "Memo in Progress"], dateField: "camCreatedDate", dateLabel: "CAM created" },
+        lpo: { key: "lpo", label: "LPO Pending", statuses: ["Memo Approved", "LPO in Progress"], dateField: "camApprovedDate", dateLabel: "CAM approved" },
+      };
+      function approvalMonitorStageFor(status) {
+        return ["cam", "lpo"].filter(function (key) {
+          return vm.approvalMonitorStages[key].statuses.some(function (item) { return sameStatus(status, item); });
+        })[0] || "";
+      }
+      function localDateOnly(value) {
+        if (!value) return null;
+        if (angular.isDate(value)) return isNaN(value.getTime()) ? null : new Date(value.getFullYear(), value.getMonth(), value.getDate());
+        var match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+        if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+        var parsed = new Date(value);
+        return isNaN(parsed.getTime()) ? null : new Date(parsed.getFullYear(), parsed.getMonth(), parsed.getDate());
+      }
+      function approvalMonitorSourceLines() {
+        if (!vm.demo) return vm.approvalMonitorSource || [];
+        var lines = [];
+        (vm.projects || []).forEach(function (project) {
+          (project.pets || []).forEach(function (pet) {
+            if (!sameStatus(pet.status, "Approved")) return;
+            (pet.budgetLines || []).forEach(function (line) {
+              lines.push(angular.extend({}, line, { projectId: project.projectId, petId: pet.petId, petCode: pet.code, petStatus: pet.status, petAmount: pet.requestedAmount }));
+            });
+          });
+        });
+        return lines;
+      }
+      function buildApprovalMonitorRows() {
+        var projectsById = {};
+        var seen = {};
+        var today = localDateOnly(new Date());
+        (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
+        return approvalMonitorSourceLines().reduce(function (rows, line) {
+          var stageKey = approvalMonitorStageFor(line.camStatus);
+          var project = projectsById[String(line.projectId)];
+          var key = String(line.budgetLineId);
+          if (!stageKey || !project || !sameStatus(line.petStatus, "Approved") || seen[key]) return rows;
+          seen[key] = true;
+          var stage = vm.approvalMonitorStages[stageKey];
+          var stageDate = localDateOnly(line[stage.dateField]);
+          var pendingSince = stageDate || localDateOnly(line.createdUtc);
+          rows.push({
+            stage: stageKey,
+            line: line,
+            project: project,
+            amount: parseNumericInput(line.cost),
+            pendingSince: pendingSince,
+            pendingSinceLabel: stageDate ? stage.dateLabel : "Budget line created",
+            pendingDays: pendingSince ? Math.max(0, Math.round((today - pendingSince) / 86400000)) : null,
+          });
+          return rows;
+        }, []);
+      }
+      vm.updateApprovalMonitorView = function (keepPage) {
+        var rows = buildApprovalMonitorRows();
+        var summary = {};
+        Object.keys(vm.approvalMonitorStages).forEach(function (key) {
+          var stageRows = rows.filter(function (row) { return row.stage === key; });
+          var ages = stageRows.map(function (row) { return row.pendingDays; }).filter(function (days) { return days !== null; });
+          summary[key] = {
+            count: stageRows.length,
+            total: stageRows.reduce(function (total, row) { return total + row.amount; }, 0),
+            oldestDays: ages.length ? Math.max.apply(null, ages) : null,
+          };
+        });
+        vm.approvalMonitorSummary = summary;
+        var query = (vm.approvalMonitorSearch || "").toLowerCase();
+        var filtered = rows.filter(function (row) {
+          if (row.stage !== vm.approvalMonitorFilter) return false;
+          var line = row.line;
+          var project = row.project;
+          return !query || [vm.projectDisplayId(project), project.projectName, project.projectType, project.budgetType, project.budgetSource, project.projectManager, line.petCode, line.petReference, line.vendor, line.justification, line.glNumber, line.camId, line.camStatus, line.lpoRequest].join(" ").toLowerCase().indexOf(query) >= 0;
+        }).sort(function (a, b) { return (b.pendingDays || 0) - (a.pendingDays || 0) || Number(a.line.budgetLineId) - Number(b.line.budgetLineId); });
+        vm.approvalMonitorFilteredCount = filtered.length;
+        vm.approvalMonitorFilteredTotal = filtered.reduce(function (total, row) { return total + row.amount; }, 0);
+        vm.approvalMonitorPageCount = Math.max(1, Math.ceil(filtered.length / vm.approvalMonitorPageSize));
+        if (!keepPage || vm.approvalMonitorPage > vm.approvalMonitorPageCount) vm.approvalMonitorPage = 1;
+        var start = (vm.approvalMonitorPage - 1) * vm.approvalMonitorPageSize;
+        vm.visibleApprovalMonitorRows = filtered.slice(start, start + vm.approvalMonitorPageSize);
+      };
+      vm.approvalMonitorReady = function () { return vm.demo || (vm.approvalMonitorLoaded && !vm.approvalMonitorError); };
+      vm.changeApprovalMonitorPage = function (page) { vm.approvalMonitorPage = Math.max(1, Math.min(vm.approvalMonitorPageCount, page)); vm.updateApprovalMonitorView(true); redraw(); };
+      function scrollToReportElement(id) {
+        $timeout(function () {
+          var element = document.getElementById(id);
+          if (element && element.scrollIntoView) element.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 0, false);
+      }
+      vm.openApprovalMonitor = function (stageKey) {
+        if (!vm.approvalMonitorStages[stageKey]) return;
+        if (vm.approvalMonitorFilter !== stageKey) vm.approvalMonitorSearch = "";
+        vm.approvalMonitorFilter = stageKey;
+        vm.updateApprovalMonitorView();
+        redraw();
+        scrollToReportElement("approval-monitor-list");
+      };
+      vm.closeApprovalMonitor = function () {
+        vm.approvalMonitorFilter = "";
+        vm.updateApprovalMonitorView();
+        redraw();
+        scrollToReportElement("approval-monitoring");
+      };
+      vm.editApprovalMonitorLine = function (row) {
+        if (!row || !vm.can("request")) return;
+        function openLine() {
+          var pet = projectPetById(row.project, row.line.petId);
+          var line = pet && (pet.budgetLines || []).filter(function (item) { return Number(item.budgetLineId) === Number(row.line.budgetLineId); })[0];
+          if (!line) { noticeError("This budget line is no longer available. Refresh to see the latest records."); return; }
+          vm.openBudgetLine(pet, line);
+        }
+        if (!vm.demo) return refreshProjectPets(row.project.projectId, false, true).then(openLine);
+        openLine();
+      };
+      function loadApprovalMonitoring() {
+        vm.approvalMonitorLoading = true;
+        return $http.get("api/portfolio/approval-monitoring", { params: { _: Date.now() } }).then(function (response) {
+          vm.approvalMonitorSource = angular.isArray(response.data) ? response.data : [];
+          vm.approvalMonitorError = "";
+        }, function (response) {
+          vm.approvalMonitorSource = [];
+          vm.approvalMonitorError = responseMessage(response, "Unable to load approval monitoring.");
+        }).then(function () {
+          vm.approvalMonitorLoading = false;
+          vm.approvalMonitorLoaded = true;
+          vm.updateApprovalMonitorView(true);
+          redraw();
+        });
+      }
       function projectHasStatus(project, pets, status) {
         if (!status) return true;
         if (sameStatus(status, "Active")) return projectIsActive(project);
@@ -1631,6 +1776,7 @@
         vm.updateGlView(keepPage);
         vm.updateReportView();
         vm.updateReportProjectView(keepPage);
+        vm.updateApprovalMonitorView(keepPage);
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); redraw(); };
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); redraw(); };
@@ -3216,6 +3362,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();
+          loadApprovalMonitoring();
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();
