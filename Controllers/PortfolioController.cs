@@ -89,6 +89,21 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [HttpGet, Route("vendor-invoices")]
+        public IHttpActionResult VendorInvoices()
+        {
+            try
+            {
+                return Ok(Db.Query(@"SELECT i.InvoiceId,i.BudgetLineId,bl.PetId,pet.ProjectId,i.VendorName,i.InvoiceNumber,i.InvoiceAmount,i.InvoiceStatus,i.PaymentDate,i.CreatedUtc
+                    FROM dbo.Invoices i
+                    JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+                    JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                    WHERE pet.Status='Approved'
+                    ORDER BY i.InvoiceId"));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet, Route("projects/{projectId:int}")]
         public IHttpActionResult Project(int projectId)
         {

@@ -109,6 +109,22 @@
       vm.approvalMonitorFilteredCount = 0;
       vm.approvalMonitorFilteredTotal = 0;
       vm.visibleApprovalMonitorRows = [];
+      vm.vendorInvoiceSource = [];
+      vm.vendorInvoicesLoaded = false;
+      vm.vendorInvoiceError = "";
+      vm.vendorSpendRows = [];
+      vm.vendorSpendSummary = {};
+      vm.vendorSpendSearch = "";
+      vm.vendorPendingFilter = "";
+      vm.vendorSort = { key: "rank", desc: false };
+      vm.vendorSpendPage = 1;
+      vm.vendorSpendPageSize = 10;
+      vm.vendorSpendPageCount = 1;
+      vm.vendorSpendFilteredCount = 0;
+      vm.visibleVendorSpendRows = [];
+      vm.selectedVendorKey = "";
+      vm.vendor360 = null;
+      vm.vendor360Tab = "projects";
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
@@ -1675,6 +1691,205 @@
           redraw();
         });
       }
+      // Existing business statuses: invoice "outstanding" set (vw_ManagementDashboard), GL exclusions (sp_SaveBudgetLine), budget line Status dropdown.
+      var pendingInvoiceStatuses = ["Raised", "Received", "Outstanding"];
+      var excludedBudgetLineStatuses = ["Rejected", "Cancelled"];
+      var lpoStageStatuses = ["LPO in Progress", "LPO Approved", "Completed"];
+      function statusIn(status, list) {
+        return list.some(function (item) { return sameStatus(status, item); });
+      }
+      function daysSince(value) {
+        var date = localDateOnly(value);
+        return date ? Math.max(0, Math.round((localDateOnly(new Date()) - date) / 86400000)) : null;
+      }
+      function vendorKey(name) {
+        return String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
+      }
+      function vendorInvoiceSourceRows() {
+        if (!vm.demo) return vm.vendorInvoiceSource || [];
+        var rows = [];
+        approvalMonitorSourceLines().forEach(function (line) {
+          (line.invoices || []).forEach(function (invoice) { rows.push(angular.extend({}, invoice, { budgetLineId: line.budgetLineId })); });
+        });
+        return rows;
+      }
+      function notePendingItem(target, item) {
+        if (item.days === null) return;
+        if (!target.oldest || item.days > target.oldest.days) target.oldest = item;
+      }
+      function buildVendorSpendRows() {
+        var projectsById = {};
+        var pendingByLine = {};
+        var vendors = {};
+        var lineIndex = {};
+        var seenInvoices = {};
+        (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
+        buildApprovalMonitorRows().forEach(function (row) { pendingByLine[String(row.line.budgetLineId)] = row; });
+        approvalMonitorSourceLines().forEach(function (line) {
+          var id = String(line.budgetLineId);
+          var project = projectsById[String(line.projectId)];
+          if (!project || !sameStatus(line.petStatus, "Approved") || statusIn(line.camStatus, excludedBudgetLineStatuses) || lineIndex[id]) return;
+          var key = vendorKey(line.vendor);
+          var vendor = vendors[key] || (vendors[key] = { key: key, name: String(line.vendor || "").trim() || "Not supplied", lines: [], invoices: [], projectMap: {}, projects: [], awarded: 0, utilized: 0, camPendingCount: 0, lpoPendingCount: 0, invoicePendingCount: 0, pendingValue: 0, oldest: null });
+          var pending = pendingByLine[id] || null;
+          var entry = {
+            line: line,
+            project: project,
+            vendor: vendor,
+            amount: parseNumericInput(line.cost),
+            invoiced: 0,
+            pending: pending,
+            isLpo: !!String(line.lpoRequest || "").trim() || !!line.lpoIssueDate || statusIn(line.camStatus, lpoStageStatuses) || sameStatus(line.lpoStatus, "Issued") || !!(pending && pending.stage === "lpo"),
+            isActiveContract: !sameStatus(line.camStatus, "Completed") && (sameStatus(line.camStatus, "LPO Approved") || sameStatus(line.lpoStatus, "Issued")),
+          };
+          lineIndex[id] = entry;
+          vendor.lines.push(entry);
+          vendor.awarded += entry.amount;
+          var projectKey = String(project.projectId);
+          var projectEntry = vendor.projectMap[projectKey];
+          if (!projectEntry) {
+            projectEntry = vendor.projectMap[projectKey] = { project: project, lineCount: 0, awarded: 0, utilized: 0, pendingValue: 0 };
+            vendor.projects.push(projectEntry);
+          }
+          projectEntry.lineCount++;
+          projectEntry.awarded += entry.amount;
+          if (!pending) return;
+          if (pending.stage === "cam") vendor.camPendingCount++;
+          else vendor.lpoPendingCount++;
+          vendor.pendingValue += pending.amount;
+          projectEntry.pendingValue += pending.amount;
+          notePendingItem(vendor, { type: pending.stage === "cam" ? "CAM" : "LPO", reference: line.camId || line.petReference || line.petCode, days: pending.pendingDays });
+        });
+        vendorInvoiceSourceRows().forEach(function (invoice) {
+          var entry = lineIndex[String(invoice.budgetLineId)];
+          var invoiceKey = invoice.invoiceId != null ? String(invoice.invoiceId) : "";
+          if (!entry || (invoiceKey && seenInvoices[invoiceKey])) return;
+          if (invoiceKey) seenInvoices[invoiceKey] = true;
+          var vendor = entry.vendor;
+          var projectEntry = vendor.projectMap[String(entry.project.projectId)];
+          var isPending = statusIn(invoice.invoiceStatus, pendingInvoiceStatuses);
+          var item = { invoice: invoice, entry: entry, amount: parseNumericInput(invoice.invoiceAmount), isPending: isPending, days: isPending ? daysSince(invoice.createdUtc) : null };
+          vendor.invoices.push(item);
+          vendor.utilized += item.amount;
+          entry.invoiced += item.amount;
+          projectEntry.utilized += item.amount;
+          if (!isPending) return;
+          vendor.invoicePendingCount++;
+          vendor.pendingValue += item.amount;
+          projectEntry.pendingValue += item.amount;
+          notePendingItem(vendor, { type: "Invoice", reference: invoice.invoiceNumber, days: item.days });
+        });
+        var rows = Object.keys(vendors).map(function (key) {
+          var vendor = vendors[key];
+          vendor.outstanding = vendor.awarded - vendor.utilized;
+          vendor.pendingCount = vendor.camPendingCount + vendor.lpoPendingCount + vendor.invoicePendingCount;
+          vendor.utilizationPercent = vm.percent(vendor.utilized, vendor.awarded);
+          return vendor;
+        }).sort(function (a, b) { return b.awarded - a.awarded || b.utilized - a.utilized || a.name.localeCompare(b.name); });
+        rows.forEach(function (vendor, index) { vendor.rank = index + 1; });
+        return rows;
+      }
+      vm.vendorSpendReady = function () {
+        return vm.demo || (vm.approvalMonitorLoaded && vm.vendorInvoicesLoaded && !vm.approvalMonitorError && !vm.vendorInvoiceError);
+      };
+      vm.vendorSpendError = function () {
+        return vm.approvalMonitorError || vm.vendorInvoiceError;
+      };
+      vm.updateVendorSpendView = function (keepPage) {
+        var rows = buildVendorSpendRows();
+        vm.vendorSpendRows = rows;
+        vm.vendorSpendSummary = rows.reduce(function (summary, vendor) {
+          summary.vendorCount++;
+          summary.awarded += vendor.awarded;
+          summary.utilized += vendor.utilized;
+          summary.outstanding += vendor.outstanding;
+          summary.pendingValue += vendor.pendingValue;
+          if (vendor.pendingCount) summary.vendorsWithPending++;
+          return summary;
+        }, { vendorCount: 0, awarded: 0, utilized: 0, outstanding: 0, pendingValue: 0, vendorsWithPending: 0 });
+        var query = vendorKey(vm.vendorSpendSearch);
+        var sortKey = vm.vendorSort.key;
+        var direction = vm.vendorSort.desc ? -1 : 1;
+        var filtered = rows.filter(function (vendor) {
+          return (!query || vendor.key.indexOf(query) >= 0) && (vm.vendorPendingFilter !== "pending" || vendor.pendingCount > 0);
+        }).sort(function (a, b) {
+          var left = sortKey === "name" ? a.name.toLowerCase() : sortKey === "oldest" ? (a.oldest ? a.oldest.days : -1) : a[sortKey];
+          var right = sortKey === "name" ? b.name.toLowerCase() : sortKey === "oldest" ? (b.oldest ? b.oldest.days : -1) : b[sortKey];
+          return (left < right ? -1 : left > right ? 1 : 0) * direction || a.rank - b.rank;
+        });
+        vm.vendorSpendFilteredCount = filtered.length;
+        vm.vendorSpendPageCount = Math.max(1, Math.ceil(filtered.length / vm.vendorSpendPageSize));
+        if (!keepPage || vm.vendorSpendPage > vm.vendorSpendPageCount) vm.vendorSpendPage = 1;
+        var start = (vm.vendorSpendPage - 1) * vm.vendorSpendPageSize;
+        vm.visibleVendorSpendRows = filtered.slice(start, start + vm.vendorSpendPageSize);
+        refreshVendor360();
+      };
+      vm.sortVendorSpend = function (key) {
+        vm.vendorSort = { key: key, desc: vm.vendorSort.key === key ? !vm.vendorSort.desc : key !== "name" && key !== "rank" };
+        vm.updateVendorSpendView();
+        redraw();
+      };
+      vm.vendorSortState = function (key) {
+        if (vm.vendorSort.key !== key) return "none";
+        return vm.vendorSort.desc ? "descending" : "ascending";
+      };
+      vm.changeVendorSpendPage = function (page) { vm.vendorSpendPage = Math.max(1, Math.min(vm.vendorSpendPageCount, page)); vm.updateVendorSpendView(true); redraw(); };
+      function refreshVendor360() {
+        var vendor = vm.selectedVendorKey ? vm.vendorSpendRows.filter(function (row) { return row.key === vm.selectedVendorKey; })[0] : null;
+        if (!vendor) { vm.vendor360 = vm.selectedVendorKey ? { missing: true } : null; return; }
+        vm.vendor360 = {
+          vendor: vendor,
+          projects: vendor.projects.slice().sort(function (a, b) { return b.awarded - a.awarded; }),
+          cams: vendor.lines,
+          lpos: vendor.lines.filter(function (entry) { return entry.isLpo; }),
+          invoices: vendor.invoices,
+          contracts: vendor.lines.filter(function (entry) { return entry.isActiveContract; }),
+        };
+      }
+      vm.openVendor360 = function (vendor) {
+        if (!vendor) return;
+        vm.selectedVendorKey = vendor.key;
+        vm.vendor360Tab = "projects";
+        refreshVendor360();
+        redraw();
+        scrollToReportElement("vendor-spend");
+      };
+      vm.closeVendor360 = function () {
+        vm.selectedVendorKey = "";
+        vm.vendor360 = null;
+        redraw();
+        scrollToReportElement("vendor-spend");
+      };
+      vm.setVendor360Tab = function (tab) {
+        vm.vendor360Tab = tab;
+        redraw();
+      };
+      vm.editVendorLine = function (entry) {
+        if (entry) vm.editApprovalMonitorLine({ project: entry.project, line: entry.line });
+      };
+      vm.openVendorInvoice = function (item) {
+        if (!item) return;
+        var entry = item.entry;
+        function openLine() {
+          var pet = projectPetById(entry.project, entry.line.petId);
+          var line = pet && (pet.budgetLines || []).filter(function (candidate) { return Number(candidate.budgetLineId) === Number(entry.line.budgetLineId); })[0];
+          if (!line) { noticeError("This invoice is no longer available. Refresh to see the latest records."); return; }
+          vm.openInvoiceView(line);
+        }
+        if (!vm.demo) return refreshProjectPets(entry.project.projectId, false, true).then(openLine);
+        openLine();
+      };
+      function loadVendorInvoices() {
+        return $http.get("api/portfolio/vendor-invoices", { params: { _: Date.now() } }).then(function (response) {
+          vm.vendorInvoiceSource = angular.isArray(response.data) ? response.data : [];
+          vm.vendorInvoiceError = "";
+        }, function (response) {
+          vm.vendorInvoiceSource = [];
+          vm.vendorInvoiceError = responseMessage(response, "Unable to load vendor invoices.");
+        }).then(function () {
+          vm.vendorInvoicesLoaded = true;
+        });
+      }
       function projectHasStatus(project, pets, status) {
         if (!status) return true;
         if (sameStatus(status, "Active")) return projectIsActive(project);
@@ -1777,6 +1992,7 @@
         vm.updateReportView();
         vm.updateReportProjectView(keepPage);
         vm.updateApprovalMonitorView(keepPage);
+        vm.updateVendorSpendView(keepPage);
       };
       vm.changePage = function (page) { vm.page = Math.max(1, Math.min(vm.pageCount, page)); vm.updateView(true); redraw(); };
       vm.changeApprovalPage = function (page) { vm.approvalPage = Math.max(1, Math.min(vm.approvalPageCount, page)); vm.updateApprovalView(true); redraw(); };
@@ -3362,7 +3578,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();
-          loadApprovalMonitoring();
+          $q.all([loadApprovalMonitoring(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); redraw(); });
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();

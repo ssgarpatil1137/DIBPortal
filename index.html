@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=30" />
+    <link rel="stylesheet" href="app/styles.css?v=31" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -782,6 +782,126 @@
               </table>
             </div>
             <div class="pagination" ng-if="vm.approvalMonitorPageCount>1"><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===1" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.approvalMonitorPage}} of {{vm.approvalMonitorPageCount}}</span><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===vm.approvalMonitorPageCount" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+          </div>
+        </div>
+        <div class="vendor-spend" id="vendor-spend">
+          <div class="section-bar">
+            <div>
+              <h2>{{vm.vendor360 ? 'Vendor 360' : 'Vendor spend'}}</h2>
+              <span ng-if="!vm.vendor360">Awarded = budget lines on approved PETs · Utilized = invoices recorded against them</span>
+              <span ng-if="vm.vendor360.vendor">{{vm.vendor360.vendor.name}} · Rank #{{vm.vendor360.vendor.rank}} by awarded value</span>
+            </div>
+            <div class="filters" ng-if="!vm.vendor360">
+              <label class="search"><i data-lucide="search"></i><input ng-model="vm.vendorSpendSearch" ng-change="vm.updateVendorSpendView()" placeholder="Search vendor" aria-label="Search vendor" /></label>
+              <select ng-model="vm.vendorPendingFilter" ng-change="vm.updateVendorSpendView()" aria-label="Pending filter"><option value="">All vendors</option><option value="pending">With pending approvals</option></select>
+            </div>
+            <button type="button" class="btn secondary" ng-if="vm.vendor360" ng-click="vm.closeVendor360()"><i data-lucide="arrow-left"></i>Back to vendor spend summary</button>
+          </div>
+          <div class="approval-monitor-error" ng-if="vm.vendorSpendError()" role="alert"><i data-lucide="alert-triangle"></i><span>{{vm.vendorSpendError()}}</span></div>
+
+          <div ng-if="!vm.vendor360">
+            <div class="vendor-summary-cards">
+              <div class="vendor-stat"><small>Vendors</small><strong>{{vm.vendorSpendReady() ? vm.vendorSpendSummary.vendorCount : '—'}}</strong></div>
+              <div class="vendor-stat"><small>Total awarded</small><strong>{{vm.vendorSpendReady() ? vm.money(vm.vendorSpendSummary.awarded) : '—'}}</strong></div>
+              <div class="vendor-stat"><small>Total utilized</small><strong>{{vm.vendorSpendReady() ? vm.money(vm.vendorSpendSummary.utilized) : '—'}}</strong></div>
+              <div class="vendor-stat"><small>Outstanding balance</small><strong>{{vm.vendorSpendReady() ? vm.money(vm.vendorSpendSummary.outstanding) : '—'}}</strong></div>
+              <div class="vendor-stat pending"><small>Pending approval value</small><strong>{{vm.vendorSpendReady() ? vm.money(vm.vendorSpendSummary.pendingValue) : '—'}}</strong><em ng-if="vm.vendorSpendReady()">{{vm.vendorSpendSummary.vendorsWithPending}} vendor(s) with pending items</em></div>
+            </div>
+            <div class="table-scroll">
+              <table class="data-table vendor-spend-table">
+                <thead><tr>
+                  <th aria-sort="{{vm.vendorSortState('rank')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('rank')">Rank</button></th>
+                  <th aria-sort="{{vm.vendorSortState('name')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('name')">Vendor</button></th>
+                  <th aria-sort="{{vm.vendorSortState('awarded')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('awarded')">Awarded</button></th>
+                  <th aria-sort="{{vm.vendorSortState('utilized')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('utilized')">Utilized</button></th>
+                  <th>Utilization</th>
+                  <th aria-sort="{{vm.vendorSortState('outstanding')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('outstanding')">Outstanding</button></th>
+                  <th>Pending CAM</th><th>Pending LPO</th><th>Pending invoices</th>
+                  <th aria-sort="{{vm.vendorSortState('pendingValue')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('pendingValue')">Pending value</button></th>
+                  <th aria-sort="{{vm.vendorSortState('oldest')}}"><button type="button" class="sort-btn" ng-click="vm.sortVendorSpend('oldest')">Oldest pending</button></th>
+                </tr></thead>
+                <tbody>
+                  <tr ng-repeat="vendor in vm.visibleVendorSpendRows track by vendor.key">
+                    <td><span class="rank-chip" ng-class="{top:vendor.rank<=3}">{{vendor.rank}}</span></td>
+                    <td title="{{vendor.name}}"><button type="button" class="link-btn vendor-link" ng-click="vm.openVendor360(vendor)">{{vendor.name}}</button></td>
+                    <td>{{vm.money(vendor.awarded)}}</td>
+                    <td>{{vm.money(vendor.utilized)}}</td>
+                    <td><div class="progress vendor-progress" title="{{vendor.utilizationPercent}}% utilized"><span style="width:{{vendor.utilizationPercent>100?100:vendor.utilizationPercent}}%"></span></div><small>{{vendor.utilizationPercent}}%</small></td>
+                    <td>{{vm.money(vendor.outstanding)}}</td>
+                    <td><span class="count-chip" ng-class="{'pending-chip':vendor.camPendingCount}">{{vendor.camPendingCount}}</span></td>
+                    <td><span class="count-chip" ng-class="{'pending-chip':vendor.lpoPendingCount}">{{vendor.lpoPendingCount}}</span></td>
+                    <td><span class="count-chip" ng-class="{'pending-chip':vendor.invoicePendingCount}">{{vendor.invoicePendingCount}}</span></td>
+                    <td>{{vm.money(vendor.pendingValue)}}</td>
+                    <td><span ng-if="vendor.oldest">{{vendor.oldest.days}} {{vendor.oldest.days===1?'day':'days'}}<small class="pending-source">{{vendor.oldest.type}} {{vendor.oldest.reference}}</small></span><span ng-if="!vendor.oldest">—</span></td>
+                  </tr>
+                  <tr ng-if="!vm.visibleVendorSpendRows.length"><td colspan="11"><div class="empty inline-empty"><i data-lucide="store"></i><strong>{{vm.vendorSpendError() ? 'Vendor spend could not be loaded.' : (vm.vendorSpendReady() ? 'No vendors match the selected filter.' : 'Loading vendor spend…')}}</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination" ng-if="vm.vendorSpendPageCount>1"><button class="icon-btn" ng-disabled="vm.vendorSpendPage===1" ng-click="vm.changeVendorSpendPage(vm.vendorSpendPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.vendorSpendPage}} of {{vm.vendorSpendPageCount}}</span><button class="icon-btn" ng-disabled="vm.vendorSpendPage===vm.vendorSpendPageCount" ng-click="vm.changeVendorSpendPage(vm.vendorSpendPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+          </div>
+
+          <div class="empty" ng-if="vm.vendor360.missing"><i data-lucide="store"></i><strong>This vendor no longer has linked records.</strong></div>
+          <div class="vendor-360" ng-if="vm.vendor360.vendor">
+            <div class="vendor-summary-cards">
+              <div class="vendor-stat"><small>Total awarded</small><strong>{{vm.money(vm.vendor360.vendor.awarded)}}</strong></div>
+              <div class="vendor-stat"><small>Total utilized</small><strong>{{vm.money(vm.vendor360.vendor.utilized)}}</strong><em>{{vm.vendor360.vendor.utilizationPercent}}% of awarded</em></div>
+              <div class="vendor-stat"><small>Outstanding balance</small><strong>{{vm.money(vm.vendor360.vendor.outstanding)}}</strong></div>
+              <div class="vendor-stat pending"><small>Pending approval value</small><strong>{{vm.money(vm.vendor360.vendor.pendingValue)}}</strong><em>{{vm.vendor360.vendor.camPendingCount}} CAM · {{vm.vendor360.vendor.lpoPendingCount}} LPO · {{vm.vendor360.vendor.invoicePendingCount}} invoice(s)</em></div>
+              <div class="vendor-stat"><small>Oldest pending</small><strong>{{vm.vendor360.vendor.oldest ? vm.vendor360.vendor.oldest.days + (vm.vendor360.vendor.oldest.days===1?' day':' days') : '—'}}</strong><em ng-if="vm.vendor360.vendor.oldest">{{vm.vendor360.vendor.oldest.type}} {{vm.vendor360.vendor.oldest.reference}}</em></div>
+            </div>
+            <div class="vendor-tabs" role="tablist">
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='projects'}}" ng-class="{active:vm.vendor360Tab==='projects'}" ng-click="vm.setVendor360Tab('projects')">Projects <b>{{vm.vendor360.projects.length}}</b></button>
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='cams'}}" ng-class="{active:vm.vendor360Tab==='cams'}" ng-click="vm.setVendor360Tab('cams')">CAMs <b>{{vm.vendor360.cams.length}}</b></button>
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='lpos'}}" ng-class="{active:vm.vendor360Tab==='lpos'}" ng-click="vm.setVendor360Tab('lpos')">LPOs <b>{{vm.vendor360.lpos.length}}</b></button>
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='invoices'}}" ng-class="{active:vm.vendor360Tab==='invoices'}" ng-click="vm.setVendor360Tab('invoices')">Invoices <b>{{vm.vendor360.invoices.length}}</b></button>
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='contracts'}}" ng-class="{active:vm.vendor360Tab==='contracts'}" ng-click="vm.setVendor360Tab('contracts')">Active contracts (LPO approved) <b>{{vm.vendor360.contracts.length}}</b></button>
+            </div>
+            <div class="table-scroll" ng-if="vm.vendor360Tab==='projects'">
+              <table class="data-table vendor-360-table">
+                <thead><tr><th>Project ID</th><th>Project name</th><th>Budget type</th><th>Budget source</th><th>Budget lines</th><th>Awarded</th><th>Utilized</th><th>Outstanding</th><th>Pending value</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="item in vm.vendor360.projects track by item.project.projectId"><td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell wide-cell">{{item.project.projectName}}</span></td><td><span class="budget-type">{{item.project.budgetType||'Not supplied'}}</span></td><td>{{item.project.budgetSource||'Not supplied'}}</td><td><span class="count-chip">{{item.lineCount}}</span></td><td>{{vm.money(item.awarded)}}</td><td>{{vm.money(item.utilized)}}</td><td>{{vm.money(item.awarded-item.utilized)}}</td><td>{{vm.money(item.pendingValue)}}</td><td><button type="button" class="btn compact primary" ng-click="vm.openReportProjectDetails(item.project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+                  <tr ng-if="!vm.vendor360.projects.length"><td colspan="10"><div class="empty inline-empty"><strong>No linked projects.</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-scroll" ng-if="vm.vendor360Tab==='cams'">
+              <table class="data-table vendor-360-table">
+                <thead><tr><th>PET reference</th><th>Project</th><th>CAM ID</th><th>Status</th><th>CAM created</th><th>CAM approved</th><th>Awarded</th><th>Days pending</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="entry in vm.vendor360.cams track by entry.line.budgetLineId" ng-class="{'pending-row':entry.pending.stage==='cam'}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.camId||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.camStatus)">{{entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.camCreatedDate ? (entry.line.camCreatedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{entry.line.camApprovedDate ? (entry.line.camApprovedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td><span class="count-chip pending-chip" ng-if="entry.pending.stage==='cam'&&entry.pending.pendingDays!=null">{{entry.pending.pendingDays}}</span><span ng-if="entry.pending.stage!=='cam'">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.vendor360.cams.length"><td colspan="9"><div class="empty inline-empty"><strong>No linked CAMs.</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-scroll" ng-if="vm.vendor360Tab==='lpos'">
+              <table class="data-table vendor-360-table">
+                <thead><tr><th>PET reference</th><th>Project</th><th>LPO number</th><th>Status</th><th>LPO issue date</th><th>Awarded</th><th>Utilized</th><th>Days pending</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="entry in vm.vendor360.lpos track by entry.line.budgetLineId" ng-class="{'pending-row':entry.pending.stage==='lpo'}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.camStatus)">{{entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td><span class="count-chip pending-chip" ng-if="entry.pending.stage==='lpo'&&entry.pending.pendingDays!=null">{{entry.pending.pendingDays}}</span><span ng-if="entry.pending.stage!=='lpo'">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.vendor360.lpos.length"><td colspan="9"><div class="empty inline-empty"><strong>No linked LPOs.</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-scroll" ng-if="vm.vendor360Tab==='invoices'">
+              <table class="data-table vendor-360-table">
+                <thead><tr><th>Invoice no</th><th>Project</th><th>PET reference</th><th>Status</th><th>Amount</th><th>Recorded</th><th>Payment date</th><th>Days pending</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="item in vm.vendor360.invoices" ng-class="{'pending-row':item.isPending}"><td>{{item.invoice.invoiceNumber}}</td><td title="{{item.entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(item.entry.project)}} · {{item.entry.project.projectName}}</span></td><td>{{item.entry.line.petReference||item.entry.line.petCode}}</td><td><span class="status" ng-class="vm.statusClass(item.invoice.invoiceStatus)">{{item.invoice.invoiceStatus}}</span></td><td>{{vm.money(item.amount)}}</td><td>{{item.invoice.createdUtc ? (item.invoice.createdUtc|date:'dd-MMM-yyyy') : '—'}}</td><td>{{item.invoice.paymentDate ? (item.invoice.paymentDate|date:'dd-MMM-yyyy') : '—'}}</td><td><span class="count-chip pending-chip" ng-if="item.isPending&&item.days!=null">{{item.days}}</span><span ng-if="!item.isPending||item.days==null">—</span></td><td><button type="button" class="icon-btn" ng-click="vm.openVendorInvoice(item)" title="View invoices" aria-label="View invoices"><i data-lucide="eye"></i></button></td></tr>
+                  <tr ng-if="!vm.vendor360.invoices.length"><td colspan="9"><div class="empty inline-empty"><strong>No linked invoices.</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-scroll" ng-if="vm.vendor360Tab==='contracts'">
+              <table class="data-table vendor-360-table">
+                <thead><tr><th>PET reference</th><th>Project</th><th>LPO number</th><th>LPO issue date</th><th>Awarded</th><th>Utilized</th><th>Outstanding</th><th>Action</th></tr></thead>
+                <tbody>
+                  <tr ng-repeat="entry in vm.vendor360.contracts track by entry.line.budgetLineId"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td>{{vm.money(entry.amount-entry.invoiced)}}</td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.vendor360.contracts.length"><td colspan="8"><div class="empty inline-empty"><strong>No active contracts.</strong></div></td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
         <div class="section-bar report-project-bar">
@@ -1702,6 +1822,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=32"></script>
+    <script src="app/app.js?v=33"></script>
   </body>
 </html>
