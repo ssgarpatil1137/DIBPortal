@@ -1409,8 +1409,8 @@
       function projectNeedsBudgetSelection(project) {
         return project && project.requiresPet !== false && (!project.budgetType || !project.budgetSourceId);
       }
-      function validatePetBudgetSelection() {
-        if (!projectNeedsBudgetSelection(vm.selectedProject)) return true;
+      function validatePetBudgetSelection(project) {
+        if (!projectNeedsBudgetSelection(project || vm.selectedProject)) return true;
         if (!vm.form || !vm.form.budgetType || !vm.form.budgetSourceId) {
           noticeError("Select CAPEX or OPEX and a budget source before adding PET for this project.");
           return false;
@@ -1428,7 +1428,7 @@
       }
       function saveProjectBudgetSelectionIfNeeded(project) {
         if (!projectNeedsBudgetSelection(project)) return $q.when();
-        if (!validatePetBudgetSelection()) return $q.reject({ handled: true });
+        if (!validatePetBudgetSelection(project)) return $q.reject({ handled: true });
         var payload = {
           projectId: project.projectId,
           isJira: !!project.jiraKey,
@@ -2779,7 +2779,11 @@
           invoiceMemoNumber: "", invoiceNumber: "", invoiceAmountAed: null, invoiceDate: null, invoiceEntryProcessDate: null,
           invoiceStatus: "", invoiceDescription: "", folder: "", handledBy: "", column1: ""
         } : { item: item };
-        if (kind === "pet") ensurePetReferenceNo();
+        if (kind === "pet") {
+          vm.form.budgetType = (item && item.budgetType) || "";
+          vm.form.budgetSourceId = (item && item.budgetSourceId) || null;
+          ensurePetReferenceNo();
+        }
         redraw();
       };
       vm.download = function (kind) {
@@ -3484,7 +3488,10 @@
           var parentId = kind === "pet" ? item.projectId : kind === "budget" ? item.petId : kind === "invoice" ? item.budgetLineId : null;
           if (!parentId) { noticeError("Unable to determine where to import these rows."); return; }
           if (kind === "pet") {
-            savePetUploadRows(parentId, function () { refreshProjectPets(parentId, true); });
+            if (!validatePetUploadRows(true)) return;
+            saveProjectBudgetSelectionIfNeeded(item).then(function () {
+              savePetUploadRows(parentId, function () { refreshProjectPets(parentId, true); });
+            }, function (response) { if (!response || !response.handled) noticeError(responseMessage(response, "Unable to save the project budget selection.")); });
             return;
           }
           runBulkImport(kind, parentId, function () {

@@ -1692,6 +1692,11 @@
                 download
                 ><i data-lucide="download"></i>Download CSV template</a
               >
+              <div class="form-grid compact-grid" ng-if="vm.modal.kind==='pet'&&(!vm.form.item.budgetType||!vm.form.item.budgetSourceId)">
+                <h3 class="form-section-title full">Budget selection</h3>
+                <label>Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null" required><option value="">Select</option><option>CAPEX</option><option>OPEX</option></select></label>
+                <label>Budget source<select falcon-select2 data-placeholder="Search budget source" ng-model="vm.form.budgetSourceId" ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:vm.form.budgetType}" required><option value="">Select budget source</option></select></label>
+              </div>
               <div class="pet-upload-workspace" ng-if="vm.modal.kind==='pet'">
                 <div class="head-actions" style="justify-content:space-between">
                   <strong>{{vm.uploadPreview.length}} PET row(s)</strong>
