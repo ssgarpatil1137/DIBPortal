@@ -1756,7 +1756,11 @@
             invoiced: 0,
             pending: pending,
             countsInSummary: countsInSummary,
-            isLpo: !!String(line.lpoRequest || "").trim() || !!line.lpoIssueDate || statusIn(line.camStatus, lpoStageStatuses) || sameStatus(line.lpoStatus, "Issued") || !!(pending && pending.stage === "lpo"),
+            camPending: approvalMonitorStageFor(line.camStatus) === "cam",
+            lpoPending: approvalMonitorStageFor(line.camStatus) === "lpo",
+            camPendingDays: daysSince(line.camCreatedDate || line.createdUtc),
+            lpoPendingDays: daysSince(line.camApprovedDate || line.createdUtc),
+            isLpo: !!String(line.lpoRequest || "").trim() || !!String(line.lpoStatus || "").trim() || !!line.lpoIssueDate || statusIn(line.camStatus, lpoStageStatuses) || !!(pending && pending.stage === "lpo"),
             isActiveContract: !sameStatus(line.camStatus, "Completed") && (sameStatus(line.camStatus, "LPO Approved") || sameStatus(line.lpoStatus, "Issued")),
           };
           lineIndex[id] = entry;
@@ -1863,8 +1867,11 @@
           vendor: vendor,
           projects: vendor.projects.slice().sort(function (a, b) { return b.awarded - a.awarded; }),
           cams: vendor.lines,
+          pendingCams: vendor.lines.filter(function (entry) { return entry.camPending; }),
+          pendingLpos: vendor.lines.filter(function (entry) { return entry.lpoPending; }),
           lpos: vendor.lines.filter(function (entry) { return entry.isLpo; }),
           invoices: vendor.invoices,
+          pendingInvoices: vendor.invoices.filter(function (item) { return item.isPending; }),
           contracts: vendor.lines.filter(function (entry) { return entry.isActiveContract; }),
         };
       }
