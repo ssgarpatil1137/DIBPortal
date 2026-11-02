@@ -637,7 +637,7 @@
 
       <section ng-if="vm.tab==='roles'" class="workspace">
         <div class="section-bar">
-          <div><h2>Role management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
+          <div><h2>User Management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
           <div class="filters">
             <label class="search"><i data-lucide="search"></i><input ng-model="vm.roleSearch" ng-change="vm.updateRoleView()" placeholder="Search user, email, role" /></label>
             <select ng-model="vm.roleFilter" ng-change="vm.updateRoleView()"><option value="">All roles</option><option value="Reviewer">Reviewers</option><option value="Approver">Approvers</option><option value="Admin">Admins</option><option value="Requestor">Requestor only</option></select>

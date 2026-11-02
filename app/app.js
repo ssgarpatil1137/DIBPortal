@@ -191,7 +191,7 @@
         { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
         { id: "vendors", label: "Vendors", icon: "store", roles: ["Admin", "Master"] },
         { id: "gl", label: "GL Management", icon: "badge-dollar-sign", roles: ["Admin", "Master"] },
-        { id: "roles", label: "Role management", icon: "users", roles: ["Admin", "Master"] },
+        { id: "roles", label: "User Management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
           label: "Management report",
@@ -228,7 +228,7 @@
           budgets: "Budget source control",
           currencies: "Currency maintenance",
           vendors: "Vendor maintenance",
-          roles: "Role management",
+          roles: "User Management",
           reports: "Management reporting",
         }[vm.tab];
       };
@@ -3668,7 +3668,7 @@
           vm.updateRoleView();
           redraw();
         }, function (response) {
-          if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load role management."));
+          if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load User Management."));
         });
       }
       function loadCurrencies(showError) {
