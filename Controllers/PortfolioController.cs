@@ -751,6 +751,7 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                     ValidateBudgetLineSourceSpendItems(value.PetId, sourceSpendItemIds);
                 }
                 value.Vendor = NormalizeEditableVendor(value.Vendor);
+                value.GlNumber = string.IsNullOrWhiteSpace(value.GlNumber) || string.Equals(value.GlNumber.Trim(), "__NO_GL__", StringComparison.OrdinalIgnoreCase) ? null : value.GlNumber.Trim();
                 ValidateBudgetLineVendorSelection(value.PetId, sourceSpendItemIds, value.Vendor);
                 VendorMaintenance.EnsureVendors(value.Vendor);
                 AmountValidation.ValidateBudgetLineAmount(value.PetId, value.BudgetLineId, value.Cost, sourceSpendItemIds, value.GlNumber);

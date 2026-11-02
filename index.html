@@ -1404,7 +1404,7 @@
                   <option>USD</option>
                   <option>EUR</option>
                 </select></label
-              ><label>GL funding<select ng-model="vm.form.glNumber"><option value="" disabled>Select</option><option ng-repeat="gl in vm.activeGlFunds()" value="{{gl.glNumber}}">{{gl.glNumber}} · {{gl.glName}} · {{vm.money(gl.availableBalance)}} available</option></select></label
+              ><label>GL funding<select ng-model="vm.form.glNumber"><option value="">No GL funding - use selected budget source</option><option ng-repeat="gl in vm.activeGlFunds()" value="{{gl.glNumber}}">{{gl.glNumber}} · {{gl.glName}} · {{vm.money(gl.availableBalance)}} available</option></select></label
               ><div class="full detail-grid" ng-if="vm.selectedGlFund()" style="grid-template-columns:repeat(3,1fr)">
                 <div><small>GL Description</small><strong>{{vm.selectedGlFund().glName}}</strong></div>
                 <div><small>GL Fund Amount</small><strong>{{vm.money(vm.selectedGlFund().fundAmount)}}</strong></div>
