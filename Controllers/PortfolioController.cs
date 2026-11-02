@@ -74,7 +74,7 @@ namespace DFM.Web.Controllers
         }
 
         [HttpGet, Route("approval-monitoring")]
-        public IHttpActionResult ApprovalMonitoring()
+        public IHttpActionResult ApprovalMonitoring(bool allStatuses = false)
         {
             try
             {
@@ -83,14 +83,14 @@ namespace DFM.Web.Controllers
                     bl.CamId,bl.CamStatus,bl.CamCreatedDate,bl.CamApprovedDate,bl.LpoRequest,bl.LpoStatus,bl.LpoIssueDate,bl.CreatedUtc
                     FROM dbo.BudgetLines bl
                     JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
-                    WHERE pet.Status='Approved'
-                    ORDER BY bl.BudgetLineId"));
+                    WHERE (@AllStatuses=1 OR pet.Status='Approved')
+                    ORDER BY bl.BudgetLineId", P("@AllStatuses", allStatuses)));
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
         [HttpGet, Route("vendor-invoices")]
-        public IHttpActionResult VendorInvoices()
+        public IHttpActionResult VendorInvoices(bool allStatuses = false)
         {
             try
             {
@@ -98,8 +98,8 @@ namespace DFM.Web.Controllers
                     FROM dbo.Invoices i
                     JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
                     JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
-                    WHERE pet.Status='Approved'
-                    ORDER BY i.InvoiceId"));
+                    WHERE (@AllStatuses=1 OR pet.Status='Approved')
+                    ORDER BY i.InvoiceId", P("@AllStatuses", allStatuses)));
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }

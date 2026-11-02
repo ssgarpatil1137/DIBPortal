@@ -109,6 +109,9 @@
       vm.approvalMonitorFilteredCount = 0;
       vm.approvalMonitorFilteredTotal = 0;
       vm.visibleApprovalMonitorRows = [];
+      vm.vendor360LineSource = [];
+      vm.vendor360LinesLoaded = false;
+      vm.vendor360LineError = "";
       vm.vendorInvoiceSource = [];
       vm.vendorInvoicesLoaded = false;
       vm.vendorInvoiceError = "";
@@ -1590,6 +1593,18 @@
         });
         return lines;
       }
+      function vendor360SourceLines() {
+        if (!vm.demo) return vm.vendor360LineSource || [];
+        var lines = [];
+        (vm.projects || []).forEach(function (project) {
+          (project.pets || []).forEach(function (pet) {
+            (pet.budgetLines || []).forEach(function (line) {
+              lines.push(angular.extend({}, line, { projectId: project.projectId, petId: pet.petId, petCode: pet.code, petStatus: pet.status, petAmount: pet.requestedAmount }));
+            });
+          });
+        });
+        return lines;
+      }
       function buildApprovalMonitorRows() {
         var projectsById = {};
         var seen = {};
@@ -1708,7 +1723,7 @@
       function vendorInvoiceSourceRows() {
         if (!vm.demo) return vm.vendorInvoiceSource || [];
         var rows = [];
-        approvalMonitorSourceLines().forEach(function (line) {
+        vendor360SourceLines().forEach(function (line) {
           (line.invoices || []).forEach(function (invoice) { rows.push(angular.extend({}, invoice, { budgetLineId: line.budgetLineId })); });
         });
         return rows;
@@ -1725,13 +1740,14 @@
         var seenInvoices = {};
         (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
         buildApprovalMonitorRows().forEach(function (row) { pendingByLine[String(row.line.budgetLineId)] = row; });
-        approvalMonitorSourceLines().forEach(function (line) {
+        vendor360SourceLines().forEach(function (line) {
           var id = String(line.budgetLineId);
           var project = projectsById[String(line.projectId)];
-          if (!project || !sameStatus(line.petStatus, "Approved") || statusIn(line.camStatus, excludedBudgetLineStatuses) || lineIndex[id]) return;
+          if (!project || lineIndex[id]) return;
           var key = vendorKey(line.vendor);
           var vendor = vendors[key] || (vendors[key] = { key: key, name: String(line.vendor || "").trim() || "Not supplied", lines: [], invoices: [], projectMap: {}, projects: [], awarded: 0, utilized: 0, camPendingCount: 0, lpoPendingCount: 0, invoicePendingCount: 0, pendingValue: 0, oldest: null });
           var pending = pendingByLine[id] || null;
+          var countsInSummary = sameStatus(line.petStatus, "Approved") && !statusIn(line.camStatus, excludedBudgetLineStatuses);
           var entry = {
             line: line,
             project: project,
@@ -1739,12 +1755,12 @@
             amount: parseNumericInput(line.cost),
             invoiced: 0,
             pending: pending,
+            countsInSummary: countsInSummary,
             isLpo: !!String(line.lpoRequest || "").trim() || !!line.lpoIssueDate || statusIn(line.camStatus, lpoStageStatuses) || sameStatus(line.lpoStatus, "Issued") || !!(pending && pending.stage === "lpo"),
             isActiveContract: !sameStatus(line.camStatus, "Completed") && (sameStatus(line.camStatus, "LPO Approved") || sameStatus(line.lpoStatus, "Issued")),
           };
           lineIndex[id] = entry;
           vendor.lines.push(entry);
-          vendor.awarded += entry.amount;
           var projectKey = String(project.projectId);
           var projectEntry = vendor.projectMap[projectKey];
           if (!projectEntry) {
@@ -1752,7 +1768,11 @@
             vendor.projects.push(projectEntry);
           }
           projectEntry.lineCount++;
-          projectEntry.awarded += entry.amount;
+          if (countsInSummary) {
+            vendor.hasAwardedLine = true;
+            vendor.awarded += entry.amount;
+            projectEntry.awarded += entry.amount;
+          }
           if (!pending) return;
           if (pending.stage === "cam") vendor.camPendingCount++;
           else vendor.lpoPendingCount++;
@@ -1770,16 +1790,18 @@
           var isPending = statusIn(invoice.invoiceStatus, pendingInvoiceStatuses);
           var item = { invoice: invoice, entry: entry, amount: parseNumericInput(invoice.invoiceAmount), isPending: isPending, days: isPending ? daysSince(invoice.createdUtc) : null };
           vendor.invoices.push(item);
-          vendor.utilized += item.amount;
           entry.invoiced += item.amount;
-          projectEntry.utilized += item.amount;
-          if (!isPending) return;
+          if (entry.countsInSummary) {
+            vendor.utilized += item.amount;
+            projectEntry.utilized += item.amount;
+          }
+          if (!entry.countsInSummary || !isPending) return;
           vendor.invoicePendingCount++;
           vendor.pendingValue += item.amount;
           projectEntry.pendingValue += item.amount;
           notePendingItem(vendor, { type: "Invoice", reference: invoice.invoiceNumber, days: item.days });
         });
-        var rows = Object.keys(vendors).map(function (key) {
+        var rows = Object.keys(vendors).filter(function (key) { return vendors[key].hasAwardedLine; }).map(function (key) {
           var vendor = vendors[key];
           vendor.outstanding = vendor.awarded - vendor.utilized;
           vendor.pendingCount = vendor.camPendingCount + vendor.lpoPendingCount + vendor.invoicePendingCount;
@@ -1790,10 +1812,10 @@
         return rows;
       }
       vm.vendorSpendReady = function () {
-        return vm.demo || (vm.approvalMonitorLoaded && vm.vendorInvoicesLoaded && !vm.approvalMonitorError && !vm.vendorInvoiceError);
+        return vm.demo || (vm.approvalMonitorLoaded && vm.vendor360LinesLoaded && vm.vendorInvoicesLoaded && !vm.approvalMonitorError && !vm.vendor360LineError && !vm.vendorInvoiceError);
       };
       vm.vendorSpendError = function () {
-        return vm.approvalMonitorError || vm.vendorInvoiceError;
+        return vm.approvalMonitorError || vm.vendor360LineError || vm.vendorInvoiceError;
       };
       vm.updateVendorSpendView = function (keepPage) {
         var rows = buildVendorSpendRows();
@@ -1880,7 +1902,7 @@
         openLine();
       };
       function loadVendorInvoices() {
-        return $http.get("api/portfolio/vendor-invoices", { params: { _: Date.now() } }).then(function (response) {
+        return $http.get("api/portfolio/vendor-invoices", { params: { allStatuses: true, _: Date.now() } }).then(function (response) {
           vm.vendorInvoiceSource = angular.isArray(response.data) ? response.data : [];
           vm.vendorInvoiceError = "";
         }, function (response) {
@@ -1888,6 +1910,17 @@
           vm.vendorInvoiceError = responseMessage(response, "Unable to load vendor invoices.");
         }).then(function () {
           vm.vendorInvoicesLoaded = true;
+        });
+      }
+      function loadVendor360Lines() {
+        return $http.get("api/portfolio/approval-monitoring", { params: { allStatuses: true, _: Date.now() } }).then(function (response) {
+          vm.vendor360LineSource = angular.isArray(response.data) ? response.data : [];
+          vm.vendor360LineError = "";
+        }, function (response) {
+          vm.vendor360LineSource = [];
+          vm.vendor360LineError = responseMessage(response, "Unable to load vendor history.");
+        }).then(function () {
+          vm.vendor360LinesLoaded = true;
         });
       }
       function projectHasStatus(project, pets, status) {
@@ -3585,7 +3618,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();
-          $q.all([loadApprovalMonitoring(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); redraw(); });
+          $q.all([loadApprovalMonitoring(), loadVendor360Lines(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); redraw(); });
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();
