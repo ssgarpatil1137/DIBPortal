@@ -3021,6 +3021,23 @@ textarea {
 .reports > .table-scroll > .data-table td:last-child {
   overflow: hidden;
 }
+.workspace > .table-scroll > .data-table.role-table th:last-child,
+.workspace > .table-scroll > .data-table.role-table td.user-actions {
+  position: sticky;
+  right: 0;
+  z-index: 8;
+  box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
+}
+.workspace > .table-scroll > .data-table.role-table th:last-child {
+  z-index: 12;
+  background: #f0f4f1;
+}
+.workspace > .table-scroll > .data-table.role-table td.user-actions {
+  width: 148px;
+  min-width: 148px;
+  background: var(--paper);
+  overflow: visible;
+}
 .workspace > .table-scroll > table.data-table.approvals-table {
   width: max-content;
   min-width: 100%;
