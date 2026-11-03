@@ -535,6 +535,15 @@ caption {
   fill: none;
   transition: transform 0.16s ease;
 }
+.role-table .user-actions {
+  width: 128px;
+  white-space: nowrap;
+}
+.role-table .user-actions .icon-btn {
+  display: inline-grid;
+  vertical-align: middle;
+  margin-right: 3px;
+}
 .icon-btn.accent svg,
 .icon-btn.accent [data-lucide] {
   color: #fff;
