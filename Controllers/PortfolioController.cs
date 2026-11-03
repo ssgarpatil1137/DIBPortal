@@ -249,9 +249,9 @@ namespace DFM.Web.Controllers
                             CASE WHEN @setQuestion=1 THEN '; SecurityQuestionUpdated=1' WHEN @resetQuestion=1 THEN '; SecurityQuestionReset=1' ELSE '' END));
                     COMMIT;",
                     P("@requestedUserId", value.UserId), P("@email", email), P("@displayName", displayName), P("@isActive", value.IsActive),
-                    P("@portalAccess", value.PortalAccess), P("@role", role), P("@setPassword", password.Length > 0), P("@passwordSalt", passwordSalt),
-                    P("@passwordHash", passwordHash), P("@setQuestion", setQuestion), P("@questionId", value.SecurityQuestionId),
-                    P("@answerSalt", answerSalt), P("@answerHash", answerHash), P("@resetQuestion", value.ResetSecurityQuestion), P("@actor", User.Identity.Name));
+                    P("@portalAccess", value.PortalAccess), P("@role", role), P("@setPassword", password.Length > 0), PBinary("@passwordSalt", passwordSalt),
+                    PBinary("@passwordHash", passwordHash), P("@setQuestion", setQuestion), P("@questionId", value.SecurityQuestionId),
+                    PBinary("@answerSalt", answerSalt), PBinary("@answerHash", answerHash), P("@resetQuestion", value.ResetSecurityQuestion), P("@actor", User.Identity.Name));
                 return Ok();
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -1564,6 +1564,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
         }
 
         private static bool ValidAdminPassword(string value) { return !string.IsNullOrEmpty(value) && value.Length >= 10 && value.Any(char.IsUpper) && value.Any(char.IsLower) && value.Any(char.IsDigit) && value.Any(ch => !char.IsLetterOrDigit(ch)); }
+        private static SqlParameter PBinary(string name, byte[] value) { return new SqlParameter(name, System.Data.SqlDbType.VarBinary, 64) { Value = value == null ? (object)DBNull.Value : value }; }
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
 
         private static void ValidatePetRequiredDropdowns(SpendItemRequest value)
