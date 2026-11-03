@@ -1,0 +1,28 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 2012
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DFM.Web", "DFM.Web\DFM.Web.csproj", "{6A26C456-EE74-4FA5-A56B-3D0D8A989E17}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DFM.DirectorySync", "DFM.DirectorySync\DFM.DirectorySync.csproj", "{21C173E9-AB01-433B-A55D-D5CE6CF77AB1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DFM.OfflineSync", "DFM.OfflineSync\DFM.OfflineSync.csproj", "{28B782C7-4740-4FB6-9762-7F1A521D3583}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6A26C456-EE74-4FA5-A56B-3D0D8A989E17}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6A26C456-EE74-4FA5-A56B-3D0D8A989E17}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6A26C456-EE74-4FA5-A56B-3D0D8A989E17}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6A26C456-EE74-4FA5-A56B-3D0D8A989E17}.Release|Any CPU.Build.0 = Release|Any CPU
+		{21C173E9-AB01-433B-A55D-D5CE6CF77AB1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{21C173E9-AB01-433B-A55D-D5CE6CF77AB1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{21C173E9-AB01-433B-A55D-D5CE6CF77AB1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{21C173E9-AB01-433B-A55D-D5CE6CF77AB1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{28B782C7-4740-4FB6-9762-7F1A521D3583}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{28B782C7-4740-4FB6-9762-7F1A521D3583}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{28B782C7-4740-4FB6-9762-7F1A521D3583}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{28B782C7-4740-4FB6-9762-7F1A521D3583}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
