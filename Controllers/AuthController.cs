@@ -96,7 +96,7 @@ namespace DFM.Web.Controllers
             return (email ?? "").Trim().TrimEnd(';', ',').Trim().ToLowerInvariant();
         }
 
-        private static bool SecurityQuestionExists(int securityQuestionId)
+        internal static bool SecurityQuestionExists(int securityQuestionId)
         {
             return Db.Query("SELECT 1 X FROM SecurityQuestions WHERE SecurityQuestionId=@id AND IsActive=1", new SqlParameter("@id", securityQuestionId)).Count > 0;
         }

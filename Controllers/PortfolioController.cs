@@ -187,7 +187,7 @@ namespace DFM.Web.Controllers
             var setQuestion = value.SecurityQuestionId.HasValue && answer.Length > 0;
             if ((value.SecurityQuestionId.HasValue || answer.Length > 0) && !setQuestion && !value.ResetSecurityQuestion) return BadRequest("Select a security question and enter its answer, or choose Reset security question.");
             if (setQuestion && value.ResetSecurityQuestion) return BadRequest("Set a security question or reset it, not both.");
-            if (setQuestion && !SecurityQuestionExists(value.SecurityQuestionId.Value)) return BadRequest("Select an active security question.");
+            if (setQuestion && !AuthController.SecurityQuestionExists(value.SecurityQuestionId.Value)) return BadRequest("Select an active security question.");
 
             byte[] passwordSalt = null, passwordHash = null, answerSalt = null, answerHash = null;
             if (password.Length > 0) PasswordSecurity.CreateHash(password, out passwordSalt, out passwordHash);
