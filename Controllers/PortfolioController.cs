@@ -182,7 +182,7 @@ namespace DFM.Web.Controllers
 
             var password = value.Password ?? "";
             if (password.Length > 0 && !ValidAdminPassword(password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
-            if (value.ResetSecurityQuestion && (password.Length > 0 || !value.UserId.HasValue)) return BadRequest("Resetting a security question requires an existing user and cannot be combined with setting a password.");
+            if (value.ResetSecurityQuestion && (!value.UserId.HasValue || password.Length == 0)) return BadRequest("A reset requires an existing user and an Admin-issued temporary password.");
             var answer = (value.SecurityAnswer ?? "").Trim();
             var setQuestion = value.SecurityQuestionId.HasValue && answer.Length > 0;
             if ((value.SecurityQuestionId.HasValue || answer.Length > 0) && !setQuestion && !value.ResetSecurityQuestion) return BadRequest("Select a security question and enter its answer, or choose Reset security question.");
@@ -226,7 +226,7 @@ namespace DFM.Web.Controllers
                         UPDATE dbo.Users SET Email=@email,DisplayName=@displayName,IsActive=@isActive,PortalAccess=@portalAccess,
                             PasswordSalt=CASE WHEN @setPassword=1 THEN @passwordSalt ELSE PasswordSalt END,
                             PasswordHash=CASE WHEN @setPassword=1 THEN @passwordHash ELSE PasswordHash END,
-                            RequiresPasswordSetup=CASE WHEN @setPassword=1 THEN 0 ELSE RequiresPasswordSetup END,
+                            RequiresPasswordSetup=CASE WHEN @resetQuestion=1 THEN 1 WHEN @setPassword=1 THEN 0 ELSE RequiresPasswordSetup END,
                             SecurityQuestionId=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @questionId ELSE SecurityQuestionId END,
                             SecurityAnswerSalt=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @answerSalt ELSE SecurityAnswerSalt END,
                             SecurityAnswerHash=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @answerHash ELSE SecurityAnswerHash END,
@@ -245,7 +245,7 @@ namespace DFM.Web.Controllers
                     INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail)
                     VALUES('User',@UserId,CASE WHEN @requestedUserId IS NULL THEN 'Created' ELSE 'Updated' END,@actor,
                         CONCAT('Email=',@email,'; Role=',@role,'; Active=',@isActive,'; PortalAccess=',@portalAccess,
-                            CASE WHEN @setPassword=1 THEN '; PasswordReset=1' ELSE '' END,
+                            CASE WHEN @resetQuestion=1 THEN '; CredentialResetRequired=1' WHEN @setPassword=1 THEN '; PasswordUpdated=1' ELSE '' END,
                             CASE WHEN @setQuestion=1 THEN '; SecurityQuestionUpdated=1' WHEN @resetQuestion=1 THEN '; SecurityQuestionReset=1' ELSE '' END));
                     COMMIT;",
                     P("@requestedUserId", value.UserId), P("@email", email), P("@displayName", displayName), P("@isActive", value.IsActive),

@@ -19,7 +19,7 @@
         <label ng-if="vm.auth.mode!=='login'">Security answer<input ng-model="vm.auth.securityAnswer" required /></label>
           <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>
         <p class="form-error" ng-if="vm.auth.error">{{vm.auth.error}}</p><button class="btn primary auth-submit" type="submit">{{vm.authAction()}}</button>
-        <div class="auth-links"><button type="button" ng-click="vm.auth.mode='setup'">First-time setup</button><button type="button" ng-click="vm.auth.mode='reset'">Reset password</button></div>
+        <div class="auth-links" ng-if="!vm.auth.requiredSetup"><button type="button" ng-click="vm.auth.mode='setup'">First-time setup</button><button type="button" ng-click="vm.auth.mode='reset'">Reset password</button></div>
         <div class="preview-divider"><span>Design review</span></div><button type="button" class="btn secondary preview-button" ng-click="vm.enterPreview()">Preview workspace</button>
       </form>
     </section>
@@ -961,11 +961,12 @@
               <label>Workflow role<select ng-model="vm.form.role"><option value="">Requestor only</option><option ng-repeat="role in vm.availableManagedRoles" value="{{role}}">{{role}}</option><option ng-if="vm.form.role==='Master'" value="Master">Master</option></select></label>
               <div class="full access-options"><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Account active</label><label class="option-check"><input type="checkbox" ng-model="vm.form.portalAccess" />Portal access enabled</label></div>
               <h3 class="form-section-title full">Password and security question</h3>
-              <label class="full">Set or reset password<input type="password" ng-model="vm.form.password" autocomplete="new-password" minlength="10" placeholder="Leave blank to keep current password" /></label>
+              <label class="full">Set password or temporary password<input type="password" ng-model="vm.form.password" autocomplete="new-password" minlength="10" ng-required="vm.form.resetSecurityQuestion" placeholder="{{vm.form.resetSecurityQuestion?'Required temporary password':'Leave blank to keep current password'}}" /></label>
               <p class="full form-hint" ng-if="!vm.form.userId">Leave the password blank to allow first-time password setup.</p>
-              <label class="option-check full"><input type="checkbox" ng-model="vm.form.resetSecurityQuestion" />Reset the stored security question and answer</label>
-              <label ng-if="!vm.form.resetSecurityQuestion">Security question<select ng-model="vm.form.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions"><option value="">Keep current question</option></select></label>
-              <label ng-if="!vm.form.resetSecurityQuestion">New security answer<input type="password" ng-model="vm.form.securityAnswer" autocomplete="off" placeholder="Required when changing question" /></label>
+              <p class="full form-hint" ng-if="vm.form.resetSecurityQuestion">Give the temporary password to the user securely. They must sign in with it and set a new password and recovery question before entering the portal.</p>
+              <label class="option-check full"><input type="checkbox" ng-model="vm.form.resetSecurityQuestion" ng-change="vm.changeCredentialReset()" />Require password and security-question reset at next sign-in</label>
+              <label ng-if="!vm.form.resetSecurityQuestion">Security question<select ng-model="vm.form.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" ng-required="vm.form.securityAnswer"><option value="">Keep current question</option></select></label>
+              <label ng-if="!vm.form.resetSecurityQuestion">New security answer<input type="password" ng-model="vm.form.securityAnswer" autocomplete="off" placeholder="Required when changing question" ng-required="vm.form.securityQuestionId" /></label>
             </div>
             <div ng-if="vm.modal.type==='project'" class="form-grid">
               <h3 class="form-section-title full">Project source</h3>

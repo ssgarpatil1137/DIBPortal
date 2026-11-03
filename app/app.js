@@ -233,9 +233,9 @@
           reports: "Management reporting",
         }[vm.tab];
       };
-      vm.authTitle = function () { return { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
-      vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : "This anonymous step is protected by your stored security challenge."; };
-      vm.authAction = function () { return { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
+      vm.authTitle = function () { return vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Complete required reset" : { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
+      vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Set a new password and recovery question before entering the portal." : "This anonymous step is protected by your stored security challenge."; };
+      vm.authAction = function () { return vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Save credentials" : { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
       vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
       vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
@@ -251,10 +251,16 @@
           if (!vm.auth.securityQuestionId) { vm.auth.error = "Select a security question."; return; }
           if (!String(vm.auth.securityAnswer || "").trim()) { vm.auth.error = "Enter the security answer."; return; }
         }
-        var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? "first-time-setup" : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
+        var route = vm.auth.mode === "login" ? "login" : vm.auth.mode === "setup" ? (vm.auth.requiredSetup ? "required-setup" : "first-time-setup") : vm.auth.mode === "reset" ? "reset/challenge" : "reset/complete";
         $http.post("api/auth/" + route, vm.auth).then(function (response) {
           if (mode === "login") {
-            if (response.data.requiresPasswordSetup) { vm.auth.mode = "setup"; return; }
+            if (response.data.requiresPasswordSetup) {
+              vm.auth.mode = "setup";
+              vm.auth.password = "";
+              vm.auth.requiredSetup = !!response.data.token;
+              if (response.data.token) $http.defaults.headers.common.Authorization = "Bearer " + response.data.token;
+              return;
+            }
             saveRememberedLogin();
             applySession(response.data, response.data.token);
             rememberSession(response.data);
@@ -265,7 +271,12 @@
             loadGlFunds(false);
             loadRoles(false);
           } else if (mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
-          else { vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe }; notice(mode === "complete" ? "Password reset. Sign in to continue." : "Password saved. Sign in to continue."); }
+          else {
+            var requiredSetup = mode === "setup" && vm.auth.requiredSetup;
+            if (requiredSetup) delete $http.defaults.headers.common.Authorization;
+            vm.auth = { mode: "login", email: vm.auth.email, rememberMe: vm.auth.rememberMe };
+            notice(requiredSetup ? "Password and recovery question updated. Sign in with your new password." : mode === "complete" ? "Password reset. Sign in to continue." : "Password saved. Sign in to continue.");
+          }
           redraw();
         }, function (response) { vm.auth.error = authResponseMessage(response, "Unable to complete this request."); });
       };
@@ -3783,6 +3794,12 @@
         vm.modal = { type: "user", kicker: "ADMINISTRATION", title: user ? "Edit user" : "Add user", submit: user ? "Save changes" : "Create user" };
         redraw();
       };
+      vm.changeCredentialReset = function () {
+        if (vm.form && vm.form.resetSecurityQuestion) {
+          vm.form.securityQuestionId = null;
+          vm.form.securityAnswer = "";
+        }
+      };
       vm.saveManagedUser = function () {
         var form = vm.form || {};
         var payload = {
@@ -3797,7 +3814,7 @@
           securityAnswer: form.securityAnswer || "",
           resetSecurityQuestion: !!form.resetSecurityQuestion,
         };
-        if (payload.resetSecurityQuestion && !window.confirm("Clear this user's security question and answer? Password recovery will remain unavailable until an Admin sets a new question and answer.")) return;
+        if (payload.resetSecurityQuestion && !window.confirm("Require this user to sign in with the temporary password and choose a new password and recovery question?")) return;
         if (payload.userId && payload.password && !window.confirm("Set a new password for " + payload.displayName + "?")) return;
         if (vm.demo) {
           var demoUser = (vm.roleUsers || []).filter(function (item) { return Number(item.userId) === Number(payload.userId); })[0];

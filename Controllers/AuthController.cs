@@ -21,8 +21,16 @@ namespace DFM.Web.Controllers
             var users = Db.Query("SELECT UserId,Email,DisplayName,PasswordSalt,PasswordHash,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1 AND PortalAccess=1", new SqlParameter("@email", email));
             if (users.Count == 0) return Unauthorized();
             var user = users[0];
-            if (Convert.ToBoolean(user["RequiresPasswordSetup"])) return Ok(new AuthResult { Email = Convert.ToString(user["Email"]), DisplayName = Convert.ToString(user["DisplayName"]), RequiresPasswordSetup = true });
-            if (user["PasswordHash"] == null || !PasswordSecurity.Verify(request.Password ?? "", (byte[])user["PasswordSalt"], (byte[])user["PasswordHash"])) return Unauthorized();
+            var hasPassword = user["PasswordHash"] != null && user["PasswordSalt"] != null;
+            if (hasPassword && !PasswordSecurity.Verify(request.Password ?? "", (byte[])user["PasswordSalt"], (byte[])user["PasswordHash"])) return Unauthorized();
+            if (Convert.ToBoolean(user["RequiresPasswordSetup"]))
+            {
+                if (!hasPassword) return Ok(new AuthResult { Email = Convert.ToString(user["Email"]), DisplayName = Convert.ToString(user["DisplayName"]), RequiresPasswordSetup = true });
+                var setupSession = CreateSession(Convert.ToInt32(user["UserId"]), Convert.ToString(user["Email"]), Convert.ToString(user["DisplayName"]));
+                setupSession.RequiresPasswordSetup = true;
+                return Ok(setupSession);
+            }
+            if (!hasPassword) return Unauthorized();
             return Ok(CreateSession(Convert.ToInt32(user["UserId"]), Convert.ToString(user["Email"]), Convert.ToString(user["DisplayName"])));
         }
 
@@ -47,11 +55,26 @@ namespace DFM.Web.Controllers
             if (string.IsNullOrWhiteSpace(request.SecurityAnswer)) return BadRequest("Security answer is required.");
             var email = NormalizeEmail(request == null ? null : request.Email);
             if (string.IsNullOrWhiteSpace(email)) return BadRequest("Email is required.");
-            var users = Db.Query("SELECT UserId,RequiresPasswordSetup FROM Users WHERE Email=@email AND IsActive=1 AND PortalAccess=1", new SqlParameter("@email", email));
-            if (users.Count == 0 || !Convert.ToBoolean(users[0]["RequiresPasswordSetup"])) return Content(HttpStatusCode.Conflict, "First-time setup is unavailable.");
+            var users = Db.Query("SELECT UserId,RequiresPasswordSetup,PasswordHash FROM Users WHERE Email=@email AND IsActive=1 AND PortalAccess=1", new SqlParameter("@email", email));
+            if (users.Count == 0 || !Convert.ToBoolean(users[0]["RequiresPasswordSetup"]) || users[0]["PasswordHash"] != null) return Content(HttpStatusCode.Conflict, "First-time setup is unavailable.");
             if (!SecurityQuestionExists(request.SecurityQuestionId)) return BadRequest("Selected security question is not configured. Contact the administrator.");
             request.Email = email;
             SavePassword(Convert.ToInt32(users[0]["UserId"]), request);
+            return Ok();
+        }
+
+        [ApiAuthorize, HttpPost, Route("required-setup")]
+        public IHttpActionResult RequiredSetup(PasswordSetupRequest request)
+        {
+            if (!ValidPassword(request == null ? null : request.Password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
+            if (request.SecurityQuestionId <= 0) return BadRequest("Security question is required.");
+            if (string.IsNullOrWhiteSpace(request.SecurityAnswer)) return BadRequest("Security answer is required.");
+            if (!SecurityQuestionExists(request.SecurityQuestionId)) return BadRequest("Selected security question is not configured. Contact the administrator.");
+            var users = Db.Query("SELECT UserId FROM Users WHERE Email=@email AND IsActive=1 AND PortalAccess=1 AND RequiresPasswordSetup=1 AND PasswordHash IS NOT NULL", new SqlParameter("@email", User.Identity.Name));
+            if (users.Count == 0) return Content(HttpStatusCode.Conflict, "A required credential reset is not pending.");
+            var userId = Convert.ToInt32(users[0]["UserId"]);
+            SavePassword(userId, request);
+            Db.Execute("DELETE UserSessions WHERE UserId=@user; DELETE PasswordResetTokens WHERE UserId=@user; INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail) VALUES('User',@user,'CredentialResetCompleted',@actor,'User replaced temporary password and recovery question.')", new SqlParameter("@user", userId), new SqlParameter("@actor", User.Identity.Name));
             return Ok();
         }
 
