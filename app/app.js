@@ -34,8 +34,7 @@
       var vm = this;
       vm.session = null;
       var rememberedEmail = rememberedLoginEmail();
-      var rememberedPassword = rememberedLoginPassword();
-      vm.auth = { mode: "login", email: rememberedEmail, password: rememberedPassword, rememberMe: !!rememberedEmail || !!rememberedPassword };
+      vm.auth = { mode: "login", email: rememberedEmail, password: "", rememberMe: !!rememberedEmail };
       vm.questions = [
         { securityQuestionId: 1, question: "What was the name of your first school?" },
         { securityQuestionId: 2, question: "In which city were you born?" },
@@ -131,6 +130,8 @@
       vm.roleUsers = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
+      vm.roleStatusFilter = "";
+      vm.roleSort = { key: "displayName", desc: false };
       vm.rolePage = 1;
       vm.rolePageSize = 20;
       vm.rolePageCount = 1;
@@ -191,7 +192,7 @@
         { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
         { id: "vendors", label: "Vendors", icon: "store", roles: ["Admin", "Master"] },
         { id: "gl", label: "GL Management", icon: "badge-dollar-sign", roles: ["Admin", "Master"] },
-        { id: "roles", label: "User Management", icon: "users", roles: ["Admin", "Master"] },
+        { id: "roles", label: "User management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
           label: "Management report",
@@ -228,7 +229,7 @@
           budgets: "Budget source control",
           currencies: "Currency maintenance",
           vendors: "Vendor maintenance",
-          roles: "User Management",
+          roles: "User management",
           reports: "Management reporting",
         }[vm.tab];
       };
@@ -269,28 +270,22 @@
         }, function (response) { vm.auth.error = authResponseMessage(response, "Unable to complete this request."); });
       };
       function rememberedLoginEmail() {
-        try { return localStorage.getItem("dfmRememberedEmail") || ""; }
-        catch (ignore) { return ""; }
-      }
-      function rememberedLoginPassword() {
-        try { return localStorage.getItem("dfmRememberedPassword") || ""; }
+        try { localStorage.removeItem("dfmRememberedPassword"); return localStorage.getItem("dfmRememberedEmail") || ""; }
         catch (ignore) { return ""; }
       }
       function saveRememberedLogin() {
         try {
           if (vm.auth.rememberMe && vm.auth.email) {
             localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
-            localStorage.setItem("dfmRememberedPassword", vm.auth.password || "");
           } else {
             localStorage.removeItem("dfmRememberedEmail");
-            localStorage.removeItem("dfmRememberedPassword");
           }
+          localStorage.removeItem("dfmRememberedPassword");
         } catch (ignore) { }
       }
       function resetLoginAuth() {
         var email = rememberedLoginEmail();
-        var password = rememberedLoginPassword();
-        vm.auth = { mode: "login", email: email, password: password, rememberMe: !!email || !!password };
+        vm.auth = { mode: "login", email: email, password: "", rememberMe: !!email };
       }
       function applySession(session, token) {
         vm.session = session || {};
@@ -2190,15 +2185,28 @@
           if (user.elevatedRole === "Admin") vm.roleSummary.admin++;
         });
         var filtered = (vm.roleUsers || []).filter(function (user) {
-          var queryMatch = !query || [user.displayName, user.email, user.roleList].join(" ").toLowerCase().indexOf(query) >= 0;
+          var queryMatch = !query || [user.displayName, user.email, user.roleList, user.isActive ? "active" : "inactive", user.portalAccess ? "portal enabled" : "portal disabled"].join(" ").toLowerCase().indexOf(query) >= 0;
           var roleMatch = !vm.roleFilter || user.elevatedRole === vm.roleFilter || (vm.roleFilter === "Requestor" && !user.elevatedRole);
-          return queryMatch && roleMatch;
+          var statusMatch = !vm.roleStatusFilter || (vm.roleStatusFilter === "active" && user.isActive) || (vm.roleStatusFilter === "inactive" && !user.isActive);
+          return queryMatch && roleMatch && statusMatch;
+        });
+        var sortKey = vm.roleSort.key;
+        filtered.sort(function (left, right) {
+          var leftValue = sortKey === "roles" ? left.roleList : left[sortKey];
+          var rightValue = sortKey === "roles" ? right.roleList : right[sortKey];
+          if (typeof leftValue === "boolean") return (leftValue === rightValue ? 0 : leftValue ? -1 : 1) * (vm.roleSort.desc ? -1 : 1);
+          return String(leftValue || "").localeCompare(String(rightValue || ""), undefined, { sensitivity: "base" }) * (vm.roleSort.desc ? -1 : 1);
         });
         vm.roleFilteredCount = filtered.length;
         vm.rolePageCount = Math.max(1, Math.ceil(filtered.length / vm.rolePageSize));
         if (!keepPage || vm.rolePage > vm.rolePageCount) vm.rolePage = 1;
         var start = (vm.rolePage - 1) * vm.rolePageSize;
         vm.visibleRoleUsers = filtered.slice(start, start + vm.rolePageSize);
+      };
+      vm.sortRoleUsers = function (key) {
+        if (vm.roleSort.key === key) vm.roleSort.desc = !vm.roleSort.desc;
+        else vm.roleSort = { key: key, desc: false };
+        vm.updateRoleView(true);
       };
       function prepareProjects() {
         if (vm.demo) vm.budgetUsage = [];
@@ -3044,6 +3052,7 @@
       }
       vm.saveModal = function () {
         var type = vm.modal.type;
+        if (type === "user") { vm.saveManagedUser(); return; }
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
         if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.form.isEdit && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
@@ -3668,7 +3677,7 @@
           vm.updateRoleView();
           redraw();
         }, function (response) {
-          if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load User Management."));
+          if (showError || vm.tab === "roles") noticeError(responseMessage(response, "Unable to load role management."));
         });
       }
       function loadCurrencies(showError) {
@@ -3736,7 +3745,13 @@
       };
       function normalizeRoleUsers(users) {
         return users.map(function (user) {
-          var roles = String(user.roles || "").split(",").filter(Boolean);
+          var roles = String(user.roles || user.Roles || "").split(",").filter(Boolean);
+          user.userId = user.userId || user.UserId;
+          user.email = user.email || user.Email || "";
+          user.displayName = user.displayName || user.DisplayName || "";
+          user.isActive = typeof user.isActive === "boolean" ? user.isActive : !!user.IsActive;
+          user.portalAccess = typeof user.portalAccess === "boolean" ? user.portalAccess : !!user.PortalAccess;
+          user.roleNames = roles.slice();
           user.roleMap = {};
           roles.forEach(function (role) { user.roleMap[role] = true; if (role === "Master") user.roleMap.Admin = true; });
           user.elevatedRole = ["Reviewer", "Approver", "Admin"].filter(function (role) { return user.roleMap[role]; })[0] || "";
@@ -3755,6 +3770,96 @@
           vm.updateRoleView(true);
           notice("Roles updated");
         }, function (response) { noticeError(responseMessage(response, "Unable to update roles.")); });
+      };
+      vm.openUser = function (user) {
+        var roles = user ? (user.roleNames || []) : [];
+        vm.form = angular.copy(user || { isActive: true, portalAccess: true });
+        vm.form.role = roles.indexOf("Master") >= 0 ? "Master" : (user && user.elevatedRole || "");
+        vm.form.password = "";
+        vm.form.securityQuestionId = null;
+        vm.form.securityAnswer = "";
+        vm.form.resetSecurityQuestion = false;
+        vm.modal = { type: "user", kicker: "ADMINISTRATION", title: user ? "Edit user" : "Add user", submit: user ? "Save changes" : "Create user" };
+        redraw();
+      };
+      vm.saveManagedUser = function () {
+        var form = vm.form || {};
+        var payload = {
+          userId: form.userId || null,
+          email: String(form.email || "").trim(),
+          displayName: String(form.displayName || "").trim(),
+          roles: form.role ? [form.role] : [],
+          isActive: !!form.isActive,
+          portalAccess: !!form.portalAccess,
+          password: form.password || "",
+          securityQuestionId: form.securityQuestionId || null,
+          securityAnswer: form.securityAnswer || "",
+          resetSecurityQuestion: !!form.resetSecurityQuestion,
+        };
+        if (vm.demo) {
+          var demoUser = (vm.roleUsers || []).filter(function (item) { return Number(item.userId) === Number(payload.userId); })[0];
+          if (!demoUser) { payload.userId = Date.now(); demoUser = {}; vm.roleUsers.push(demoUser); }
+          angular.extend(demoUser, payload, { roles: payload.roles.join(","), userId: payload.userId });
+          normalizeRoleUsers([demoUser]);
+          vm.roleUsers = normalizeRoleUsers(vm.roleUsers);
+          vm.updateRoleView(true);
+          vm.close();
+          notice(payload.userId === form.userId ? "User updated" : "User created");
+          return;
+        }
+        $http.post("api/portfolio/users", payload).then(function () {
+          vm.close();
+          notice(payload.userId ? "User updated" : "User created");
+          loadRoles(true);
+        }, function (response) { noticeError(responseMessage(response, "Unable to save user.")); });
+      };
+      function saveManagedUserState(user, nextActive, nextPortalAccess) {
+        var payload = {
+          userId: user.userId,
+          email: user.email,
+          displayName: user.displayName,
+          roles: user.roleNames && user.roleNames.indexOf("Master") >= 0 ? ["Master"] : (user.elevatedRole ? [user.elevatedRole] : []),
+          isActive: nextActive,
+          portalAccess: nextPortalAccess,
+          password: "",
+          resetSecurityQuestion: false,
+        };
+        if (vm.demo) {
+          user.isActive = nextActive;
+          user.portalAccess = nextPortalAccess;
+          vm.updateRoleView(true);
+          notice("User access updated");
+          return;
+        }
+        $http.post("api/portfolio/users", payload).then(function () {
+          notice("User access updated");
+          loadRoles(true);
+        }, function (response) { noticeError(responseMessage(response, "Unable to update user access.")); });
+      }
+      vm.toggleUserActive = function (user) {
+        if (!user) return;
+        var next = !user.isActive;
+        if (!next && !window.confirm("Disable " + user.displayName + "? Their active sessions will be revoked.")) return;
+        saveManagedUserState(user, next, user.portalAccess);
+      };
+      vm.togglePortalAccess = function (user) {
+        if (!user) return;
+        var next = !user.portalAccess;
+        if (!next && !window.confirm("Disable portal access for " + user.displayName + "? Their active sessions will be revoked.")) return;
+        saveManagedUserState(user, user.isActive, next);
+      };
+      vm.deleteManagedUser = function (user) {
+        if (!user || !window.confirm("Permanently delete " + user.displayName + " (" + user.email + ")? Linked business records prevent deletion. This cannot be undone.")) return;
+        if (vm.demo) {
+          vm.roleUsers = vm.roleUsers.filter(function (item) { return Number(item.userId) !== Number(user.userId); });
+          vm.updateRoleView(true);
+          notice("User deleted");
+          return;
+        }
+        $http.delete("api/portfolio/users/" + user.userId).then(function () {
+          notice("User deleted");
+          loadRoles(true);
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete user.")); });
       };
       vm.refreshTransactions = function () {
         if (vm.refreshing) return;

@@ -637,19 +637,21 @@
 
       <section ng-if="vm.tab==='roles'" class="workspace">
         <div class="section-bar">
-          <div><h2>User Management</h2><span>Every active user can request projects; assign elevated workflow roles here.</span></div>
+          <div><h2>User management</h2><span>Manage account status, portal access, credentials, and workflow roles.</span></div>
           <div class="filters">
-            <label class="search"><i data-lucide="search"></i><input ng-model="vm.roleSearch" ng-change="vm.updateRoleView()" placeholder="Search user, email, role" /></label>
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.roleSearch" ng-change="vm.updateRoleView()" placeholder="Search users" /></label>
             <select ng-model="vm.roleFilter" ng-change="vm.updateRoleView()"><option value="">All roles</option><option value="Reviewer">Reviewers</option><option value="Approver">Approvers</option><option value="Admin">Admins</option><option value="Requestor">Requestor only</option></select>
+            <select ng-model="vm.roleStatusFilter" ng-change="vm.updateRoleView()"><option value="">All account statuses</option><option value="active">Active</option><option value="inactive">Inactive</option></select>
+            <button type="button" class="btn primary compact" ng-click="vm.openUser()"><i data-lucide="user-round-plus"></i>Add user</button>
           </div>
         </div>
         <div class="role-summary"><span><b>{{vm.roleSummary.reviewer}}</b> Reviewers</span><span><b>{{vm.roleSummary.approver}}</b> Approvers</span><span><b>{{vm.roleSummary.admin}}</b> Admins</span><span><b>{{vm.roleFilteredCount}}</b> users in view</span></div>
         <div class="table-scroll">
           <table class="data-table role-table">
-            <thead><tr><th>User</th><th>Email</th><th>Current roles</th><th>Elevated role</th><th>Action</th></tr></thead>
+            <thead><tr><th ng-click="vm.sortRoleUsers('displayName')">User</th><th ng-click="vm.sortRoleUsers('email')">Email</th><th ng-click="vm.sortRoleUsers('roles')">Roles</th><th ng-click="vm.sortRoleUsers('isActive')">Account</th><th ng-click="vm.sortRoleUsers('portalAccess')">Portal access</th><th>Actions</th></tr></thead>
             <tbody>
-              <tr ng-repeat="user in vm.visibleRoleUsers track by user.userId"><td>{{user.displayName}}</td><td>{{user.email}}</td><td>{{user.roleList}}</td><td><select ng-model="user.elevatedRole"><option value="">Requestor only</option><option ng-repeat="role in vm.availableManagedRoles" value="{{role}}">{{role}}</option></select></td><td><button class="btn compact primary" ng-click="vm.saveUserRoles(user)">Save roles</button></td></tr>
-              <tr ng-if="!vm.visibleRoleUsers.length"><td colspan="5"><div class="empty inline-empty"><i data-lucide="users"></i><strong>No users match the selected filter.</strong></div></td></tr>
+              <tr ng-repeat="user in vm.visibleRoleUsers track by user.userId"><td>{{user.displayName}}</td><td>{{user.email}}</td><td>{{user.roleList}}</td><td><span class="status" ng-class="user.isActive?'approved':'rejected'">{{user.isActive?'Active':'Disabled'}}</span></td><td><span class="status" ng-class="user.portalAccess?'approved':'rejected'">{{user.portalAccess?'Enabled':'Blocked'}}</span></td><td class="user-actions"><button type="button" class="icon-btn" title="Edit user" ng-click="vm.openUser(user)"><i data-lucide="pencil"></i></button><button type="button" class="icon-btn" title="{{user.isActive?'Disable':'Enable'}} account" ng-click="vm.toggleUserActive(user)"><i data-lucide="power"></i></button><button type="button" class="icon-btn" title="{{user.portalAccess?'Block':'Enable'}} portal access" ng-click="vm.togglePortalAccess(user)"><i data-lucide="shield"></i></button><button type="button" class="icon-btn" title="Delete user" ng-click="vm.deleteManagedUser(user)"><i data-lucide="trash-2"></i></button></td></tr>
+              <tr ng-if="!vm.visibleRoleUsers.length"><td colspan="6"><div class="empty inline-empty"><i data-lucide="users"></i><strong>No users match the selected filters.</strong></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -937,7 +939,7 @@
     >
       <section
         class="modal"
-        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='budgetUtilization'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'}"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='budgetUtilization'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'||vm.modal.type==='user'}"
         role="dialog"
         aria-modal="true"
       >
@@ -952,6 +954,19 @@
         </header>
         <form ng-submit="vm.saveModal()">
           <div class="modal-body">
+            <div ng-if="vm.modal.type==='user'" class="form-grid">
+              <h3 class="form-section-title full">Account details</h3>
+              <label>Display name<input ng-model="vm.form.displayName" maxlength="200" autocomplete="name" required /></label>
+              <label>Email<input type="email" ng-model="vm.form.email" maxlength="254" autocomplete="email" required /></label>
+              <label>Workflow role<select ng-model="vm.form.role"><option value="">Requestor only</option><option ng-repeat="role in vm.availableManagedRoles" value="{{role}}">{{role}}</option><option ng-if="vm.form.role==='Master'" value="Master">Master</option></select></label>
+              <div class="full access-options"><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Account active</label><label class="option-check"><input type="checkbox" ng-model="vm.form.portalAccess" />Portal access enabled</label></div>
+              <h3 class="form-section-title full">Password and security question</h3>
+              <label class="full">Set or reset password<input type="password" ng-model="vm.form.password" autocomplete="new-password" minlength="10" placeholder="Leave blank to keep current password" /></label>
+              <p class="full form-hint" ng-if="!vm.form.userId">Leave the password blank to allow first-time password setup.</p>
+              <label class="option-check full"><input type="checkbox" ng-model="vm.form.resetSecurityQuestion" />Reset the stored security question and answer</label>
+              <label ng-if="!vm.form.resetSecurityQuestion">Security question<select ng-model="vm.form.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions"><option value="">Keep current question</option></select></label>
+              <label ng-if="!vm.form.resetSecurityQuestion">New security answer<input type="password" ng-model="vm.form.securityAnswer" autocomplete="off" placeholder="Required when changing question" /></label>
+            </div>
             <div ng-if="vm.modal.type==='project'" class="form-grid">
               <h3 class="form-section-title full">Project source</h3>
               <label class="full"

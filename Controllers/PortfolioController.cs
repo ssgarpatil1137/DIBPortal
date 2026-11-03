@@ -127,17 +127,17 @@ namespace DFM.Web.Controllers
             });
         }
 
-        [ApiAuthorize("Master"), HttpGet, Route("roles")]
+        [ApiAuthorize("Admin"), HttpGet, Route("roles")]
         public IHttpActionResult Roles()
         {
-            var users = Db.Query(@"SELECT u.UserId,u.Email,u.DisplayName,u.IsActive,
+            var users = Db.Query(@"SELECT u.UserId,u.Email,u.DisplayName,u.IsActive,u.PortalAccess,
                 STUFF((SELECT ',' + r.Name FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId FOR XML PATH('')),1,1,'') Roles
                 FROM dbo.Users u ORDER BY u.DisplayName,u.Email");
             var roles = Db.Query("SELECT Name FROM dbo.Roles WHERE Name NOT IN ('Requestor','Master') ORDER BY CASE Name WHEN 'Reviewer' THEN 1 WHEN 'Approver' THEN 2 WHEN 'Admin' THEN 3 ELSE 4 END,Name");
             return Ok(new { users = users, roles = roles.Select(row => Convert.ToString(row["Name"])).ToArray() });
         }
 
-        [ApiAuthorize("Master"), HttpPost, Route("roles")]
+        [ApiAuthorize("Admin"), HttpPost, Route("roles")]
         public IHttpActionResult SaveRoles(RoleAssignmentRequest value)
         {
             if (value == null || value.UserId <= 0) return BadRequest("User is required.");
@@ -145,12 +145,135 @@ namespace DFM.Web.Controllers
             requestedRoles.Remove("Requestor");
             requestedRoles.Remove("Master");
             if (requestedRoles.Count > 1) return BadRequest("Select only one elevated role: Reviewer, Approver, or Admin.");
+            var selectedRole = requestedRoles.FirstOrDefault() ?? "Requestor";
+            if (selectedRole != "Requestor" && selectedRole != "Reviewer" && selectedRole != "Approver" && selectedRole != "Admin") return BadRequest("Select a configured user role.");
             try
             {
-                Db.Execute(@"DELETE ur FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@user AND r.Name IN ('Reviewer','Approver','Admin','Master');
-                    INSERT dbo.UserRoles(UserId,RoleId) SELECT @user,RoleId FROM dbo.Roles WHERE Name='Requestor' AND NOT EXISTS(SELECT 1 FROM dbo.UserRoles WHERE UserId=@user AND RoleId=dbo.Roles.RoleId);
-                    INSERT dbo.UserRoles(UserId,RoleId) SELECT @user,RoleId FROM dbo.Roles WHERE Name IN ('Reviewer','Approver','Admin') AND CHARINDEX(',' + Name + ',', @roles) > 0;",
-                    P("@user", value.UserId), P("@roles", "," + string.Join(",", requestedRoles.ToArray()) + ","));
+                Db.Execute(@"SET XACT_ABORT ON; BEGIN TRAN;
+                    IF NOT EXISTS(SELECT 1 FROM dbo.Users WITH (UPDLOCK,HOLDLOCK) WHERE UserId=@user) THROW 50011,'User was not found.',1;
+                    IF EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId=@user AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                       AND @role NOT IN ('Admin','Master')
+                       AND NOT EXISTS(SELECT 1 FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK) JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId<>@user AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                        THROW 50010,'Cannot remove the last active Admin.',1;
+                    DELETE ur FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@user AND r.Name IN ('Reviewer','Approver','Admin','Master');
+                    INSERT dbo.UserRoles(UserId,RoleId) SELECT @user,RoleId FROM dbo.Roles WHERE Name=@role AND NOT EXISTS(SELECT 1 FROM dbo.UserRoles WHERE UserId=@user AND RoleId=dbo.Roles.RoleId);
+                    INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail) VALUES('User',@user,'RolesUpdated',@actor,@role);
+                    COMMIT;",
+                    P("@user", value.UserId), P("@role", selectedRole), P("@actor", User.Identity.Name));
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin"), HttpPost, Route("users")]
+        public IHttpActionResult SaveUser(UserManagementRequest value)
+        {
+            if (value == null) return BadRequest("User details are required.");
+            var email = (value.Email ?? "").Trim().TrimEnd(';', ',').Trim().ToLowerInvariant();
+            var displayName = (value.DisplayName ?? "").Trim();
+            if (email.Length == 0 || email.Length > 254 || !email.Contains("@") || email.StartsWith("@") || email.EndsWith("@")) return BadRequest("Enter a valid email address.");
+            if (displayName.Length == 0 || displayName.Length > 200) return BadRequest("Display name is required and must be 200 characters or fewer.");
+
+            var requestedRoles = new HashSet<string>(value.Roles ?? new string[0], StringComparer.OrdinalIgnoreCase);
+            requestedRoles.Remove("Requestor");
+            if (requestedRoles.Count > 1) return BadRequest("Select only one elevated role: Reviewer, Approver, or Admin.");
+            var role = requestedRoles.FirstOrDefault() ?? "Requestor";
+            if (role != "Requestor" && role != "Reviewer" && role != "Approver" && role != "Admin" && role != "Master") return BadRequest("Select a configured user role.");
+
+            var password = value.Password ?? "";
+            if (password.Length > 0 && !ValidAdminPassword(password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
+            var answer = (value.SecurityAnswer ?? "").Trim();
+            var setQuestion = value.SecurityQuestionId.HasValue && answer.Length > 0;
+            if ((value.SecurityQuestionId.HasValue || answer.Length > 0) && !setQuestion && !value.ResetSecurityQuestion) return BadRequest("Select a security question and enter its answer, or choose Reset security question.");
+            if (setQuestion && value.ResetSecurityQuestion) return BadRequest("Set a security question or reset it, not both.");
+            if (setQuestion && !SecurityQuestionExists(value.SecurityQuestionId.Value)) return BadRequest("Select an active security question.");
+
+            byte[] passwordSalt = null, passwordHash = null, answerSalt = null, answerHash = null;
+            if (password.Length > 0) PasswordSecurity.CreateHash(password, out passwordSalt, out passwordHash);
+            if (setQuestion) PasswordSecurity.CreateHash(answer.ToUpperInvariant(), out answerSalt, out answerHash);
+
+            try
+            {
+                Db.Execute(@"SET XACT_ABORT ON; BEGIN TRAN;
+                    DECLARE @UserId int=@requestedUserId;
+                    IF @UserId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Users WITH (UPDLOCK,HOLDLOCK) WHERE UserId=@UserId) THROW 50011,'User was not found.',1;
+                    IF EXISTS(SELECT 1 FROM dbo.Users WHERE Email=@email AND (@UserId IS NULL OR UserId<>@UserId)) THROW 50012,'A user with this email already exists.',1;
+                    IF @UserId IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId=@UserId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                       AND (@isActive=0 OR @portalAccess=0 OR @role NOT IN ('Admin','Master'))
+                       AND NOT EXISTS(SELECT 1 FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK) JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId<>@UserId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                        THROW 50010,'Cannot disable, remove, or revoke access from the last active Admin.',1;
+                    IF @UserId IS NULL
+                    BEGIN
+                        INSERT dbo.Users(Email,DisplayName,IsActive,PortalAccess,RequiresPasswordSetup,PasswordSalt,PasswordHash,SecurityQuestionId,SecurityAnswerSalt,SecurityAnswerHash)
+                        VALUES(@email,@displayName,@isActive,@portalAccess,CASE WHEN @setPassword=1 THEN 0 ELSE 1 END,@passwordSalt,@passwordHash,CASE WHEN @setQuestion=1 THEN @questionId ELSE NULL END,@answerSalt,@answerHash);
+                        SET @UserId=CONVERT(int,SCOPE_IDENTITY());
+                    END
+                    ELSE
+                    BEGIN
+                        UPDATE dbo.Users SET Email=@email,DisplayName=@displayName,IsActive=@isActive,PortalAccess=@portalAccess,
+                            PasswordSalt=CASE WHEN @setPassword=1 THEN @passwordSalt ELSE PasswordSalt END,
+                            PasswordHash=CASE WHEN @setPassword=1 THEN @passwordHash ELSE PasswordHash END,
+                            RequiresPasswordSetup=CASE WHEN @setPassword=1 THEN 0 ELSE RequiresPasswordSetup END,
+                            SecurityQuestionId=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @questionId ELSE SecurityQuestionId END,
+                            SecurityAnswerSalt=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @answerSalt ELSE SecurityAnswerSalt END,
+                            SecurityAnswerHash=CASE WHEN @resetQuestion=1 THEN NULL WHEN @setQuestion=1 THEN @answerHash ELSE SecurityAnswerHash END,
+                            UpdatedUtc=SYSUTCDATETIME() WHERE UserId=@UserId;
+                    END;
+                    DELETE ur FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=@UserId AND r.Name IN ('Reviewer','Approver','Admin','Master');
+                    IF NOT EXISTS(SELECT 1 FROM dbo.UserRoles WHERE UserId=@UserId AND RoleId=(SELECT RoleId FROM dbo.Roles WHERE Name='Requestor'))
+                        INSERT dbo.UserRoles(UserId,RoleId) SELECT @UserId,RoleId FROM dbo.Roles WHERE Name='Requestor';
+                    IF @role<>'Requestor' AND NOT EXISTS(SELECT 1 FROM dbo.UserRoles WHERE UserId=@UserId AND RoleId=(SELECT RoleId FROM dbo.Roles WHERE Name=@role))
+                        INSERT dbo.UserRoles(UserId,RoleId) SELECT @UserId,RoleId FROM dbo.Roles WHERE Name=@role;
+                    IF @isActive=0 OR @portalAccess=0 OR @setPassword=1 OR @resetQuestion=1
+                    BEGIN
+                        DELETE dbo.UserSessions WHERE UserId=@UserId;
+                        DELETE dbo.PasswordResetTokens WHERE UserId=@UserId;
+                    END;
+                    INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail)
+                    VALUES('User',@UserId,CASE WHEN @requestedUserId IS NULL THEN 'Created' ELSE 'Updated' END,@actor,
+                        CONCAT('Email=',@email,'; Role=',@role,'; Active=',@isActive,'; PortalAccess=',@portalAccess,
+                            CASE WHEN @setPassword=1 THEN '; PasswordReset=1' ELSE '' END,
+                            CASE WHEN @setQuestion=1 THEN '; SecurityQuestionUpdated=1' WHEN @resetQuestion=1 THEN '; SecurityQuestionReset=1' ELSE '' END));
+                    COMMIT;",
+                    P("@requestedUserId", value.UserId), P("@email", email), P("@displayName", displayName), P("@isActive", value.IsActive),
+                    P("@portalAccess", value.PortalAccess), P("@role", role), P("@setPassword", password.Length > 0), P("@passwordSalt", passwordSalt),
+                    P("@passwordHash", passwordHash), P("@setQuestion", setQuestion), P("@questionId", value.SecurityQuestionId),
+                    P("@answerSalt", answerSalt), P("@answerHash", answerHash), P("@resetQuestion", value.ResetSecurityQuestion), P("@actor", User.Identity.Name));
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin"), HttpDelete, Route("users/{userId:int}")]
+        public IHttpActionResult DeleteUser(int userId)
+        {
+            try
+            {
+                Db.Execute(@"SET XACT_ABORT ON; BEGIN TRAN;
+                    DECLARE @Email nvarchar(254);
+                    SELECT @Email=Email FROM dbo.Users WITH (UPDLOCK,HOLDLOCK) WHERE UserId=@userId;
+                    IF @Email IS NULL THROW 50011,'User was not found.',1;
+                    IF EXISTS(SELECT 1 FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId JOIN dbo.Users u ON u.UserId=ur.UserId WHERE u.UserId=@userId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                       AND NOT EXISTS(SELECT 1 FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK) JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId<>@userId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
+                        THROW 50010,'Cannot delete the last active Admin.',1;
+                    IF EXISTS(SELECT 1 FROM dbo.Projects WHERE RequestorEmail=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.PETRequests WHERE CreatedBy=@Email OR ReviewerEmail=@Email OR ApproverEmail=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.WorkflowHistory WHERE ActionBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.SpendItems WHERE CreatedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.BudgetLines WHERE CreatedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.Invoices WHERE CreatedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.Attachments WHERE UploadedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.GLFunds WHERE CreatedBy=@Email OR UpdatedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.NonProjectOpexBatches WHERE CreatedBy=@Email)
+                       OR EXISTS(SELECT 1 FROM dbo.NonProjectOpexLines WHERE CreatedBy=@Email OR HandledBy=@Email)
+                        THROW 50013,'User is linked to business records and cannot be deleted. Disable the account instead.',1;
+                    INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail) VALUES('User',@userId,'Deleted',@actor,CONCAT('Email=',@Email));
+                    DELETE dbo.UserSessions WHERE UserId=@userId;
+                    DELETE dbo.PasswordResetTokens WHERE UserId=@userId;
+                    DELETE dbo.UserRoles WHERE UserId=@userId;
+                    DELETE dbo.Users WHERE UserId=@userId;
+                    COMMIT;",
+                    P("@userId", userId), P("@actor", User.Identity.Name));
                 return Ok();
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -1427,6 +1550,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             throw lastError ?? new ArgumentException("The Excel workbook does not contain PET template rows.");
         }
 
+        private static bool ValidAdminPassword(string value) { return !string.IsNullOrEmpty(value) && value.Length >= 10 && value.Any(char.IsUpper) && value.Any(char.IsLower) && value.Any(char.IsDigit) && value.Any(ch => !char.IsLetterOrDigit(ch)); }
         private static SqlParameter P(string name, object value) { return new SqlParameter(name, Db.Value(value)); }
 
         private static void ValidatePetRequiredDropdowns(SpendItemRequest value)

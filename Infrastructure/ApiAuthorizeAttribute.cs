@@ -20,7 +20,7 @@ namespace DFM.Web.Infrastructure
         {
             var header = context.Request.Headers.Authorization;
             var token = header != null && header.Scheme == "Bearer" ? header.Parameter : null;
-            var rows = string.IsNullOrWhiteSpace(token) ? null : Db.Query(@"SELECT u.Email, STUFF((SELECT ',' + r.Name FROM UserRoles ur JOIN Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId FOR XML PATH('')),1,1,'') Roles FROM UserSessions s JOIN Users u ON u.UserId=s.UserId WHERE s.TokenHash=HASHBYTES('SHA2_256',@token) AND s.ExpiresUtc>GETUTCDATE() AND u.IsActive=1", new SqlParameter("@token", token));
+            var rows = string.IsNullOrWhiteSpace(token) ? null : Db.Query(@"SELECT u.Email, STUFF((SELECT ',' + r.Name FROM UserRoles ur JOIN Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId FOR XML PATH('')),1,1,'') Roles FROM UserSessions s JOIN Users u ON u.UserId=s.UserId WHERE s.TokenHash=HASHBYTES('SHA2_256',@token) AND s.ExpiresUtc>GETUTCDATE() AND u.IsActive=1 AND u.PortalAccess=1", new SqlParameter("@token", token));
             if (rows == null || rows.Count == 0) { Deny(context, HttpStatusCode.Unauthorized); return; }
             Db.Execute("UPDATE UserSessions SET ExpiresUtc=DATEADD(MINUTE,@timeout,GETUTCDATE()) WHERE TokenHash=HASHBYTES('SHA2_256',@token)", new SqlParameter("@timeout", AuthController.SessionTimeoutMinutes), new SqlParameter("@token", token));
             var roles = Convert.ToString(rows[0]["Roles"]).Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
