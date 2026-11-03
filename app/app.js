@@ -2202,6 +2202,7 @@
         if (!keepPage || vm.rolePage > vm.rolePageCount) vm.rolePage = 1;
         var start = (vm.rolePage - 1) * vm.rolePageSize;
         vm.visibleRoleUsers = filtered.slice(start, start + vm.rolePageSize);
+        redraw();
       };
       vm.sortRoleUsers = function (key) {
         if (vm.roleSort.key === key) vm.roleSort.desc = !vm.roleSort.desc;
