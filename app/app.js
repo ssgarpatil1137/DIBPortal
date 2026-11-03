@@ -288,7 +288,7 @@
         try {
           if (vm.auth.rememberMe && vm.auth.email) {
             localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
-            storeBrowserPassword();
+            storeRememberedCredential();
           } else {
             localStorage.removeItem("dfmRememberedEmail");
             if (navigator.credentials && navigator.credentials.preventSilentAccess) navigator.credentials.preventSilentAccess();
@@ -296,14 +296,14 @@
           localStorage.removeItem("dfmRememberedPassword");
         } catch (ignore) { }
       }
-      function storeBrowserPassword() {
+      function storeRememberedCredential() {
         if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.store || !vm.auth.password) return;
         try {
           var credential = new window.PasswordCredential({ id: normalizeAuthEmail(vm.auth.email), password: vm.auth.password });
           navigator.credentials.store(credential).catch(function () { });
         } catch (ignore) { }
       }
-      function restoreBrowserPassword() {
+      function restoreRememberedCredential() {
         if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.get) return;
         try {
           navigator.credentials.get({ password: true, mediation: "optional" }).then(function (credential) {
@@ -3933,7 +3933,7 @@
         prepareProjects();
         vm.updateView();
         redraw();
+        restoreRememberedCredential();
       }
-      restoreBrowserPassword();
     });
 })();
