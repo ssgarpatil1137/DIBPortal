@@ -34,7 +34,8 @@
       var vm = this;
       vm.session = null;
       var rememberedEmail = rememberedLoginEmail();
-      vm.auth = { mode: "login", email: rememberedEmail, password: "", rememberMe: !!rememberedEmail };
+      var rememberedPassword = rememberedLoginPassword();
+      vm.auth = { mode: "login", email: rememberedEmail, password: rememberedPassword, rememberMe: !!rememberedEmail };
       vm.questions = [
         { securityQuestionId: 1, question: "What was the name of your first school?" },
         { securityQuestionId: 2, question: "In which city were you born?" },
@@ -281,45 +282,27 @@
         }, function (response) { vm.auth.error = authResponseMessage(response, "Unable to complete this request."); });
       };
       function rememberedLoginEmail() {
-        try { localStorage.removeItem("dfmRememberedPassword"); return localStorage.getItem("dfmRememberedEmail") || ""; }
+        try { return localStorage.getItem("dfmRememberedEmail") || ""; }
+        catch (ignore) { return ""; }
+      }
+      function rememberedLoginPassword() {
+        try { return localStorage.getItem("dfmRememberedPassword") || ""; }
         catch (ignore) { return ""; }
       }
       function saveRememberedLogin() {
         try {
           if (vm.auth.rememberMe && vm.auth.email) {
             localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
-            storeRememberedCredential();
+            localStorage.setItem("dfmRememberedPassword", vm.auth.password || "");
           } else {
             localStorage.removeItem("dfmRememberedEmail");
-            if (navigator.credentials && navigator.credentials.preventSilentAccess) navigator.credentials.preventSilentAccess();
+            localStorage.removeItem("dfmRememberedPassword");
           }
-          localStorage.removeItem("dfmRememberedPassword");
-        } catch (ignore) { }
-      }
-      function storeRememberedCredential() {
-        if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.store || !vm.auth.password) return;
-        try {
-          var credential = new window.PasswordCredential({ id: normalizeAuthEmail(vm.auth.email), password: vm.auth.password });
-          navigator.credentials.store(credential).catch(function () { });
-        } catch (ignore) { }
-      }
-      function restoreRememberedCredential() {
-        if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.get) return;
-        try {
-          navigator.credentials.get({ password: true, mediation: "optional" }).then(function (credential) {
-            if (!credential || credential.type !== "password" || vm.auth.mode !== "login") return;
-            $timeout(function () {
-              vm.auth.email = credential.id || vm.auth.email;
-              vm.auth.password = credential.password || "";
-              vm.auth.rememberMe = true;
-              redraw();
-            }, 0, false);
-          }).catch(function () { });
         } catch (ignore) { }
       }
       function resetLoginAuth() {
         var email = rememberedLoginEmail();
-        vm.auth = { mode: "login", email: email, password: "", rememberMe: !!email };
+        vm.auth = { mode: "login", email: email, password: rememberedLoginPassword(), rememberMe: !!email };
       }
       function applySession(session, token) {
         vm.session = session || {};
@@ -3933,7 +3916,6 @@
         prepareProjects();
         vm.updateView();
         redraw();
-        restoreRememberedCredential();
       }
     });
 })();

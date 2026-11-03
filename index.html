@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=31" />
+    <link rel="stylesheet" href="app/styles.css?v=32" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -14,7 +14,7 @@
         <p class="eyebrow">SECURE ACCESS</p><h2>{{vm.authTitle()}}</h2><p class="auth-help">{{vm.authHelp()}}</p>
         <label>Email ID<input type="text" inputmode="email" ng-model="vm.auth.email" autocomplete="username" required /></label>
         <label ng-if="vm.auth.mode==='login'">Password<input type="password" ng-model="vm.auth.password" autocomplete="current-password" required /></label>
-        <label class="option-check" ng-if="vm.auth.mode==='login'"><input type="checkbox" ng-model="vm.auth.rememberMe" />Remember me (browser password manager)</label>
+        <label class="option-check" ng-if="vm.auth.mode==='login'"><input type="checkbox" ng-model="vm.auth.rememberMe" />Remember me</label>
         <label ng-if="vm.auth.mode!=='login'">Security question<select ng-model="vm.auth.securityQuestionId" ng-options="q.securityQuestionId as q.question for q in vm.questions" required><option value="">Select a security question</option></select></label>
         <label ng-if="vm.auth.mode!=='login'">Security answer<input ng-model="vm.auth.securityAnswer" required /></label>
           <label ng-if="vm.auth.mode==='setup'||vm.auth.mode==='complete'">New password<input type="password" ng-model="vm.auth.password" autocomplete="new-password" required /></label>
@@ -1846,6 +1846,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=33"></script>
+    <script src="app/app.js?v=34"></script>
   </body>
 </html>
