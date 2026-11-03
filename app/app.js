@@ -288,10 +288,33 @@
         try {
           if (vm.auth.rememberMe && vm.auth.email) {
             localStorage.setItem("dfmRememberedEmail", normalizeAuthEmail(vm.auth.email));
+            storeBrowserPassword();
           } else {
             localStorage.removeItem("dfmRememberedEmail");
+            if (navigator.credentials && navigator.credentials.preventSilentAccess) navigator.credentials.preventSilentAccess();
           }
           localStorage.removeItem("dfmRememberedPassword");
+        } catch (ignore) { }
+      }
+      function storeBrowserPassword() {
+        if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.store || !vm.auth.password) return;
+        try {
+          var credential = new window.PasswordCredential({ id: normalizeAuthEmail(vm.auth.email), password: vm.auth.password });
+          navigator.credentials.store(credential).catch(function () { });
+        } catch (ignore) { }
+      }
+      function restoreBrowserPassword() {
+        if (!window.PasswordCredential || !navigator.credentials || !navigator.credentials.get) return;
+        try {
+          navigator.credentials.get({ password: true, mediation: "optional" }).then(function (credential) {
+            if (!credential || credential.type !== "password" || vm.auth.mode !== "login") return;
+            $timeout(function () {
+              vm.auth.email = credential.id || vm.auth.email;
+              vm.auth.password = credential.password || "";
+              vm.auth.rememberMe = true;
+              redraw();
+            }, 0, false);
+          }).catch(function () { });
         } catch (ignore) { }
       }
       function resetLoginAuth() {
@@ -3911,5 +3934,6 @@
         vm.updateView();
         redraw();
       }
+      restoreBrowserPassword();
     });
 })();
