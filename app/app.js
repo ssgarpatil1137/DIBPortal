@@ -3796,6 +3796,8 @@
           securityAnswer: form.securityAnswer || "",
           resetSecurityQuestion: !!form.resetSecurityQuestion,
         };
+        if (payload.resetSecurityQuestion && !window.confirm("Clear this user's security question and answer? Password recovery will remain unavailable until an Admin sets a new question and answer.")) return;
+        if (payload.userId && payload.password && !window.confirm("Set a new password for " + payload.displayName + "?")) return;
         if (vm.demo) {
           var demoUser = (vm.roleUsers || []).filter(function (item) { return Number(item.userId) === Number(payload.userId); })[0];
           if (!demoUser) { payload.userId = Date.now(); demoUser = {}; vm.roleUsers.push(demoUser); }

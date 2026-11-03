@@ -182,6 +182,7 @@ namespace DFM.Web.Controllers
 
             var password = value.Password ?? "";
             if (password.Length > 0 && !ValidAdminPassword(password)) return BadRequest("Password must be at least 10 characters and contain upper, lower, number and symbol.");
+            if (value.ResetSecurityQuestion && (password.Length > 0 || !value.UserId.HasValue)) return BadRequest("Resetting a security question requires an existing user and cannot be combined with setting a password.");
             var answer = (value.SecurityAnswer ?? "").Trim();
             var setQuestion = value.SecurityQuestionId.HasValue && answer.Length > 0;
             if ((value.SecurityQuestionId.HasValue || answer.Length > 0) && !setQuestion && !value.ResetSecurityQuestion) return BadRequest("Select a security question and enter its answer, or choose Reset security question.");
@@ -198,6 +199,18 @@ namespace DFM.Web.Controllers
                     DECLARE @UserId int=@requestedUserId;
                     IF @UserId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Users WITH (UPDLOCK,HOLDLOCK) WHERE UserId=@UserId) THROW 50011,'User was not found.',1;
                     IF EXISTS(SELECT 1 FROM dbo.Users WHERE Email=@email AND (@UserId IS NULL OR UserId<>@UserId)) THROW 50012,'A user with this email already exists.',1;
+                                        IF @UserId IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.Users WHERE UserId=@UserId AND Email<>@email)
+                                             AND (EXISTS(SELECT 1 FROM dbo.Projects WHERE RequestorEmail=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.PETRequests WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId) OR ReviewerEmail=(SELECT Email FROM dbo.Users WHERE UserId=@UserId) OR ApproverEmail=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.WorkflowHistory WHERE ActionBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.SpendItems WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.BudgetLines WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.Invoices WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.Attachments WHERE UploadedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.GLFunds WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId) OR UpdatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.NonProjectOpexBatches WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId))
+                                                 OR EXISTS(SELECT 1 FROM dbo.NonProjectOpexLines WHERE CreatedBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId) OR HandledBy=(SELECT Email FROM dbo.Users WHERE UserId=@UserId)))
+                                                THROW 50014,'Email cannot be changed while business records use the current address.',1;
                     IF @UserId IS NOT NULL AND EXISTS(SELECT 1 FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId=@UserId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
                        AND (@isActive=0 OR @portalAccess=0 OR @role NOT IN ('Admin','Master'))
                        AND NOT EXISTS(SELECT 1 FROM dbo.Users u WITH (UPDLOCK,HOLDLOCK) JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE u.UserId<>@UserId AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name IN ('Admin','Master'))
