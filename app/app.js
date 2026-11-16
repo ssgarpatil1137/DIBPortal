@@ -52,6 +52,8 @@
       vm.pageCount = 1;
       vm.filteredCount = 0;
       vm.visibleProjects = [];
+      vm.visibleOpexContracts = [];
+      vm.projectGroups = [];
       vm.approvalItems = [];
       vm.approvalSearch = "";
       vm.approvalPage = 1;
@@ -2029,11 +2031,16 @@
                 .indexOf(query) >= 0)
           );
         });
+        var opexContracts = filtered.filter(vm.isOpexContract);
+        filtered = filtered.filter(function (p) { return !vm.isOpexContract(p); });
         vm.filteredCount = filtered.length;
         vm.pageCount = Math.max(1, Math.ceil(filtered.length / vm.pageSize));
         if (!keepPage || vm.page > vm.pageCount) vm.page = 1;
         var start = (vm.page - 1) * vm.pageSize;
         vm.visibleProjects = filtered.slice(start, start + vm.pageSize);
+        vm.visibleOpexContracts = opexContracts;
+        vm.projectGroups = (vm.viewFilter === "opexContract" ? [] : [{ key: "projects", projects: vm.visibleProjects }])
+          .concat([{ key: "opexContracts", title: "OPEX Contract line items", projects: opexContracts }]);
         vm.visibleNonProjectOpex = (vm.nonProjectOpex || []).filter(function (row) {
           return !query || [row.initiative, row.platform, row.lineItem, row.opexReference, row.vendor, row.createdBy]
             .join(" ").toLowerCase().indexOf(query) >= 0;
@@ -2323,7 +2330,7 @@
         vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
-        vm.form.isJira = project ? !!project.jiraKey : true;
+        vm.form.isJira = project ? !!project.jiraKey : !isOpexContract;
         validateProjectRegistration(false);
         redraw();
       };

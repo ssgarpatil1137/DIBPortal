@@ -163,7 +163,12 @@
             </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option><option value="opexContract">OPEX Contract</option></select>
           </div>
         </div>
-        <div class="table-scroll">
+        <div ng-repeat="group in vm.projectGroups track by group.key">
+        <div class="section-bar" ng-if="group.title">
+          <div><h2>{{group.title}}</h2><span>{{group.projects.length}} OPEX Contract{{group.projects.length===1?'':'s'}} in view</span></div>
+        </div>
+        <div class="empty" ng-if="group.title&&!group.projects.length&&!vm.visibleNonProjectOpex.length"><i data-lucide="sheet"></i><strong>No OPEX Contracts found.</strong></div>
+        <div class="table-scroll" ng-if="!group.title||group.projects.length">
           <table class="data-table projects project-register-table">
             <thead>
               <tr>
@@ -184,7 +189,7 @@
               </tr>
             </thead>
             <tbody
-              ng-repeat="project in vm.visibleProjects track by project.projectId"
+              ng-repeat="project in group.projects track by project.projectId"
             >
               <tr class="project-row">
                 <td>
@@ -493,7 +498,8 @@
             </tbody>
           </table>
         </div>
-        <div class="pagination" ng-if="vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+        <div class="pagination" ng-if="group.key==='projects'&&vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+        </div>
         <div class="section-bar" ng-if="vm.visibleNonProjectOpex.length">
           <div><h2>OPEX Contract line items (legacy)</h2><span>{{vm.visibleNonProjectOpex.length}} OPEX line items</span></div>
         </div>
@@ -967,8 +973,8 @@
               <label ng-if="!vm.form.resetSecurityQuestion">New security answer<input type="password" ng-model="vm.form.securityAnswer" autocomplete="off" placeholder="Required when changing question" ng-required="vm.form.securityQuestionId" /></label>
             </div>
             <div ng-if="vm.modal.type==='project'" class="form-grid">
-              <h3 class="form-section-title full">Project source</h3>
-              <label class="full"
+              <h3 class="form-section-title full" ng-if="!vm.form.isOpexContract">Project source</h3>
+              <label class="full" ng-if="!vm.form.isOpexContract"
                 >Project source
                 <div class="segmented">
                   <button

@@ -600,6 +600,11 @@ namespace DFM.Web.Controllers
             if (value.IsOpexContract)
             {
                 value.ProjectType = OpexContract.ProjectTypeName;
+                if (!value.ProjectId.HasValue)
+                {
+                    value.IsJira = false;
+                    value.JiraKey = null;
+                }
                 if (!string.IsNullOrWhiteSpace(value.BudgetType) && !value.BudgetType.Trim().Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("OPEX Contract budget type must be OPEX.");
             }
             else if (OpexContract.IsProjectType(value.ProjectType))
