@@ -384,6 +384,8 @@
         }).format(Number(value) || 0);
       };
       vm.projectDisplayId = function (project) { return project && project.jiraKey ? project.jiraKey : project.projectCode; };
+      vm.opexContractType = "OPEX Contract";
+      vm.isOpexContract = function (project) { return !!project && String(project.projectType || "").trim().toLowerCase() === vm.opexContractType.toLowerCase(); };
       vm.selectNonProjectOpexSource = function () {
         var source = (vm.budgets || []).filter(function (b) {
           return b.budgetType === "OPEX" && b.externalId === vm.form.opexReference;
@@ -2002,14 +2004,15 @@
           var pets = p.pets || [];
           var statusMatch = projectHasStatus(p, pets, vm.statusFilter);
           var isMine = projectRequestorMatchesCurrentUser(p);
-          var viewMatch = vm.viewFilter !== "nonProject" && (vm.viewFilter === "all" ||
+          var viewMatch = vm.viewFilter === "all" ||
+            (vm.viewFilter === "opexContract" && vm.isOpexContract(p)) ||
             (vm.viewFilter === "my" && projectHasCurrentUserCreatedRecord(p)) ||
             (vm.viewFilter === "jira" && !!p.jiraKey) ||
             (vm.viewFilter === "nonJira" && !p.jiraKey) ||
             (vm.viewFilter === "pendingReview" && pets.some(function (pet) { return pet.status === "Pending Review"; })) ||
             (vm.viewFilter === "pendingApproval" && pets.some(function (pet) { return pet.status === "Pending Approval"; })) ||
             (vm.viewFilter === "approved" && pets.some(function (pet) { return pet.status === "Approved" && (isMine || (pet.approverEmail || "").toLowerCase() === currentEmail); })) ||
-            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; })));
+            (vm.viewFilter === "reviewed" && pets.some(function (pet) { return !!pet.reviewedUtc; }));
           return (
             viewMatch &&
             statusMatch &&
@@ -2032,7 +2035,7 @@
         var start = (vm.page - 1) * vm.pageSize;
         vm.visibleProjects = filtered.slice(start, start + vm.pageSize);
         vm.visibleNonProjectOpex = (vm.nonProjectOpex || []).filter(function (row) {
-          return vm.viewFilter !== "nonProject" || !query || [row.initiative, row.platform, row.lineItem, row.opexReference, row.vendor, row.createdBy]
+          return !query || [row.initiative, row.platform, row.lineItem, row.opexReference, row.vendor, row.createdBy]
             .join(" ").toLowerCase().indexOf(query) >= 0;
         });
         vm.approvalItems = buildApprovalItems();
@@ -2059,6 +2062,7 @@
         var canReview = vm.hasRole("Reviewer");
         var canApprove = vm.hasRole("Approver");
         vm.projects.forEach(function (p) {
+          if (vm.isOpexContract(p)) return;
           var reviewPets = [];
           var approvePets = [];
           p.pets.forEach(function (pet) {
@@ -2297,23 +2301,25 @@
           redraw();
         }, function () { project.loading = false; noticeError("Unable to load project details."); });
       }
-      vm.openProject = function (project) {
+      vm.openProject = function (project, opexContract) {
+        var isOpexContract = project ? vm.isOpexContract(project) : !!opexContract;
         vm.modal = {
           type: "project",
-          kicker: "PROJECT REGISTRATION",
-          title: project ? "Edit project" : "Register a new project",
-          submit: project ? "Save changes" : "Register project",
+          kicker: isOpexContract ? "OPEX CONTRACT REGISTRATION" : "PROJECT REGISTRATION",
+          title: isOpexContract ? (project ? "Edit OPEX Contract" : "Register a new OPEX Contract") : project ? "Edit project" : "Register a new project",
+          submit: project ? "Save changes" : isOpexContract ? "Register OPEX Contract" : "Register project",
         };
         vm.form = angular.copy(
           project || {
             isJira: true,
-            projectType: "Project",
+            projectType: isOpexContract ? vm.opexContractType : "Project",
             projectSize: "",
-            budgetType: "",
+            budgetType: isOpexContract ? "OPEX" : "",
             budgetSourceId: null,
             requiresPet: true,
           },
         );
+        vm.form.isOpexContract = isOpexContract;
         vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
@@ -2352,13 +2358,13 @@
         })[0];
         if (!jira) { validateProjectRegistration(true); return; }
         vm.form.projectName = jira.summary;
-        vm.form.projectType = jira.projectType;
+        vm.form.projectType = vm.form.isOpexContract ? vm.opexContractType : jira.projectType;
         vm.form.accountableExecLead = jira.accountableExecLead;
         vm.form.accountableExec = jira.accountableExec;
         vm.form.smeLead = jira.smeLead;
         vm.form.projectSizingScores = {};
         vm.form.projectSize = "";
-        vm.form.budgetType = "";
+        vm.form.budgetType = vm.form.isOpexContract ? "OPEX" : "";
         vm.form.budgetSourceId = null;
         vm.form.projectManager = jira.assignedProjectManager;
         validateProjectRegistration(true);
@@ -2396,7 +2402,7 @@
           return {
             isNonProject: true,
             budgetType: row.budgetType,
-            projectDisplayId: "Non Project",
+            projectDisplayId: "OPEX Contract (legacy)",
             projectName: [row.initiative, row.lineItem, row.vendor].filter(Boolean).join(" · "),
             petCode: row.memoCamId || row.invoiceNumber || "",
             petStatus: row.invoiceStatus || "Recorded",
@@ -2464,7 +2470,7 @@
           code: generatedPetReference(),
             currency: "AED",
             requestedAmount: 0,
-            reviewRequired: !project.skipReview,
+            reviewRequired: !project.skipReview && !vm.isOpexContract(project),
           });
         if (pet) {
           vm.form.petId = vm.form.petId || pet.petId || pet.PetId;
@@ -2476,15 +2482,16 @@
           if (vm.form.status === "Sent Back" && angular.isUndefined(vm.form.reviewRequired)) vm.form.reviewRequired = angular.isDefined(vm.form.ReviewRequired) ? !!vm.form.ReviewRequired : !project.skipReview;
           if (vm.form.status === "Sent Back") vm.form.comments = "";
         }
-        vm.form.budgetType = vm.form.budgetType || project.budgetType || "";
+        vm.form.budgetType = vm.form.budgetType || project.budgetType || (vm.isOpexContract(project) ? "OPEX" : "");
         vm.form.budgetSourceId = vm.form.budgetSourceId || project.budgetSourceId || null;
+        if (vm.isOpexContract(project)) vm.form.reviewRequired = false;
         vm.uploadPreview = ((pet && pet.spendItems) || []).map(function (item) { return preparePetUploadRow(angular.extend({ petReference: vm.form.code, projectId: vm.projectDisplayId(project), finalAed: spendItemFinalAed(item) }, item)); });
         vm.recalculateUploadPreview();
         vm.modal = {
           type: "pet",
           kicker: "PET REQUEST",
           title: pet ? "Edit " + vm.form.code : "Create PET for " + vm.projectDisplayId(project),
-          submit: pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
+          submit: vm.isOpexContract(project) ? "Save PET" : pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
         };
         redraw();
       }
@@ -2810,12 +2817,12 @@
         vm.modal = {
           type: "upload",
           kind: kind,
-          kicker: kind === "nonProject" ? "NON PROJECT" : "BULK IMPORT",
+          kicker: kind === "nonProject" ? "OPEX CONTRACT (LEGACY)" : "BULK IMPORT",
           title:
             kind === "attachment"
               ? "Attach supporting files"
               : kind === "nonProject"
-                ? "Non Project"
+                ? "OPEX Contract line item"
               : kind === "sources"
                 ? "Synchronize CAPEX / OPEX"
                 : "Upload " + kind + " records",
@@ -2827,7 +2834,7 @@
               : kind === "sources"
                 ? "Columns: Type (Capex/Opex), ID, Description, Budget, Utilization, Available Budget, Locked Amt, Budget after Locked Amt, Claim Amt, Net Balance. Existing sources are updated by Type + ID."
                 : kind === "nonProject"
-                  ? "Add a single Non Project OPEX record manually by selecting an OPEX source from CAPEX / OPEX, or import multiple rows from the template. Supporting documents are optional."
+                  ? "Add a single legacy OPEX Contract line item manually by selecting an OPEX source from CAPEX / OPEX, or import multiple rows from the template. Supporting documents are optional."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
@@ -2846,7 +2853,7 @@
           invoiceStatus: "", invoiceDescription: "", folder: "", handledBy: "", column1: ""
         } : { item: item };
         if (kind === "pet") {
-          vm.form.budgetType = (item && item.budgetType) || "";
+          vm.form.budgetType = (item && item.budgetType) || (vm.isOpexContract(item) ? "OPEX" : "");
           vm.form.budgetSourceId = (item && item.budgetSourceId) || null;
           ensurePetReferenceNo();
         }
@@ -2860,7 +2867,7 @@
       };
       vm.editNonProjectOpex = function (row) {
         vm.openUpload("nonProject");
-        vm.modal.title = "Edit Non Project";
+        vm.modal.title = "Edit OPEX Contract line item";
         vm.nonProjectEditId = row.nonProjectOpexLineId;
         Object.keys(vm.form).forEach(function (key) {
           if (row[key] !== undefined) vm.form[key] = row[key];
@@ -2871,11 +2878,11 @@
         redraw();
       };
       vm.deleteNonProjectOpex = function (row) {
-        if (!window.confirm("Delete Non Project record \"" + (row.lineItem || row.nonProjectOpexLineId) + "\"? This cannot be undone.")) return;
+        if (!window.confirm("Delete OPEX Contract line item \"" + (row.lineItem || row.nonProjectOpexLineId) + "\"? This cannot be undone.")) return;
         $http.post("api/portfolio/non-project-opex/" + row.nonProjectOpexLineId + "/delete").then(function () {
-          notice("Non Project record deleted.");
+          notice("OPEX Contract line item deleted.");
           loadDashboard();
-        }, function (response) { noticeError(responseMessage(response, "Unable to delete the Non Project record.")); });
+        }, function (response) { noticeError(responseMessage(response, "Unable to delete the OPEX Contract line item.")); });
       };
       vm.close = function () {
         vm.modal = null;
@@ -2927,7 +2934,7 @@
           var url = isEdit ? "api/portfolio/non-project-opex/" + vm.nonProjectEditId : "api/portfolio/non-project-opex";
           $http.post(url, payload).then(function (response) {
             var batchId = response.data && response.data.batchId;
-            var savedMessage = isEdit ? "Non Project record updated." : "Non Project record saved.";
+            var savedMessage = isEdit ? "OPEX Contract line item updated." : "OPEX Contract line item saved.";
             if (!vm.nonProjectSupportingFile) {
               notice(savedMessage);
               vm.close();
@@ -2942,19 +2949,19 @@
               noticeError("Record saved, but supporting document upload failed. " + responseMessage(uploadResponse, "Retry the document upload."));
               loadDashboard();
             });
-          }, function (response) { noticeError(responseMessage(response, "Unable to save the Non-Project OPEX record.")); });
+          }, function (response) { noticeError(responseMessage(response, "Unable to save the OPEX Contract line item.")); });
           return;
         }
-        if (!vm.uploadFile) { noticeError("Choose the Non-Project OPEX CSV or Excel file first."); return; }
+        if (!vm.uploadFile) { noticeError("Choose the OPEX Contract CSV or Excel file first."); return; }
         var formData = new FormData();
         formData.append("dataFile", vm.uploadFile);
         if (vm.nonProjectSupportingFile) formData.append("supportingFile", vm.nonProjectSupportingFile);
         $http.post("api/portfolio/non-project-opex/import", formData, { transformRequest: angular.identity, headers: { "Content-Type": undefined } }).then(function (response) {
-          notice(((response.data && response.data.imported) || 0) + " non-project OPEX row(s) imported.");
+          notice(((response.data && response.data.imported) || 0) + " OPEX Contract line item(s) imported.");
           vm.close();
           loadDashboard();
         }, function (response) {
-          noticeError(responseMessage(response, "Unable to import Non-Project OPEX rows."));
+          noticeError(responseMessage(response, "Unable to import OPEX Contract line items."));
         });
       }
       function uploadAttachment(entityType, entityId, file) {
@@ -3092,9 +3099,10 @@
             projectManager: vm.form.projectManager,
             budgetType: vm.form.budgetType || null,
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
+            isOpexContract: !!vm.form.isOpexContract,
           };
           $http.post("api/portfolio/projects", payload).then(function (response) {
-            notice(payload.projectId ? "Project updated" : "Project registered");
+            notice(payload.isOpexContract ? (payload.projectId ? "OPEX Contract updated" : "OPEX Contract registered") : payload.projectId ? "Project updated" : "Project registered");
             var responseProject = response && response.data || {};
             var savedProject = normalizeProjectSizing(angular.extend({}, vm.form, responseProject, payload));
             if (savedProject) savedProject.projectId = savedProject.projectId || responseProject.projectId || responseProject.ProjectId || vm.form.projectId;
@@ -3200,7 +3208,7 @@
             applyProjectBudgetSelection(vm.selectedProject);
             var savedPetId = petPayload.petId || response.data && (response.data.petId || response.data.PetId);
             uploadAttachment("PET", savedPetId, supportingDocument).then(function () {
-              notice(vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
+              notice(vm.isOpexContract(vm.selectedProject) ? "PET saved and approved (OPEX Contract - no review or approval required)" : vm.form.status === "Sent Back" ? "PET resubmitted for approval" : petPayload.petId ? "PET updated" : "PET submitted for review");
               vm.close();
               refreshProjectPets(petPayload.projectId, true);
               loadVendors(false);

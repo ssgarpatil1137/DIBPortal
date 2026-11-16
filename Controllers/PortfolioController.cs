@@ -57,7 +57,7 @@ namespace DFM.Web.Controllers
                         SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
                         FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
                     ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
-                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE (@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
+                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE LTRIM(RTRIM(ISNULL(p.ProjectType,'')))<>'OPEX Contract' AND ((@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 nonProjectOpex = Db.Query(@"SELECT l.*, b.SourceFile, b.CreatedUtc BatchCreatedUtc,
                     a.AttachmentId, a.OriginalName SupportingDocumentName, a.ContentType SupportingDocumentContentType
@@ -481,12 +481,13 @@ namespace DFM.Web.Controllers
 
         private static void EnsureProjectBudgetSelection(PetRequest value)
         {
-            var project = Db.Query("SELECT BudgetType,BudgetSourceId FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            var project = Db.Query("SELECT BudgetType,BudgetSourceId,ProjectType FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
             if (project == null) throw new ArgumentException("Project was not found.");
             var currentType = Convert.ToString(project["BudgetType"]);
             var currentSource = project["BudgetSourceId"] == null || project["BudgetSourceId"] == DBNull.Value ? (int?)null : Convert.ToInt32(project["BudgetSourceId"]);
             if (!string.IsNullOrWhiteSpace(currentType) && currentSource.HasValue) return;
             var budgetType = NormalizeBudgetType(value.BudgetType);
+            if (OpexContract.IsProjectType(Convert.ToString(project["ProjectType"])) && budgetType != "OPEX") throw new ArgumentException("OPEX Contract budget type must be OPEX.");
             ValidateBudgetSourceSelection(budgetType, value.BudgetSourceId);
             Db.Execute("UPDATE dbo.Projects SET BudgetType=@BudgetType,BudgetSourceId=@BudgetSourceId,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId AND (BudgetType IS NULL OR BudgetSourceId IS NULL)", P("@BudgetType", budgetType), P("@BudgetSourceId", value.BudgetSourceId), P("@ProjectId", value.ProjectId));
         }
@@ -514,6 +515,7 @@ namespace DFM.Web.Controllers
             try
             {
                 PreserveRegisteredProjectIdentity(value);
+                ApplyOpexContractRules(value);
                 var duplicate = DuplicateProjectRegistrationMessage(value);
                 if (duplicate != null) return BadRequest(duplicate);
                 value.BudgetType = NormalizeBudgetType(value.BudgetType);
@@ -586,6 +588,24 @@ namespace DFM.Web.Controllers
             if (existing == null) return;
             value.IsJira = Convert.ToBoolean(existing["IsJira"]);
             value.JiraKey = Convert.ToString(existing["JiraKey"]);
+        }
+
+        private static void ApplyOpexContractRules(ProjectRequest value)
+        {
+            if (value.ProjectId.HasValue)
+            {
+                var existing = Db.Query("SELECT ProjectType FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault();
+                if (existing != null) value.IsOpexContract = OpexContract.IsProjectType(Convert.ToString(existing["ProjectType"]));
+            }
+            if (value.IsOpexContract)
+            {
+                value.ProjectType = OpexContract.ProjectTypeName;
+                if (!string.IsNullOrWhiteSpace(value.BudgetType) && !value.BudgetType.Trim().Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("OPEX Contract budget type must be OPEX.");
+            }
+            else if (OpexContract.IsProjectType(value.ProjectType))
+            {
+                throw new ArgumentException("Project type \"" + OpexContract.ProjectTypeName + "\" is reserved. Use Register OPEX Contract instead.");
+            }
         }
 
         [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpDelete, Route("projects/{projectId:int}")]
@@ -677,6 +697,8 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             try
             {
                 EnsureProjectBudgetSelection(value);
+                var isOpexContract = OpexContract.IsProject(value.ProjectId);
+                if (isOpexContract) value.ReviewRequired = false;
                 if (value.PetId.HasValue)
                 {
                     var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
@@ -702,6 +724,11 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 var saved = SavePetRow(value, isSentBack).FirstOrDefault();
                 var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
                 if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems, User.Identity.Name);
+                if (isOpexContract)
+                {
+                    OpexContract.FinalizePet(petId, !value.PetId.HasValue, User.Identity.Name);
+                    if (saved != null) saved["Status"] = "Approved";
+                }
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -853,11 +880,13 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             }
         }
 
+        private const string OpexContractDecisionMessage = "OPEX Contract PET requests do not go through review or approval.";
+
         [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Review(int petId, DecisionRequest value) { if (OpexContract.IsPet(petId)) return BadRequest(OpexContractDecisionMessage); var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Review", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
-        public IHttpActionResult Approve(int petId, DecisionRequest value) { var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Approval", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { if (OpexContract.IsPet(petId)) return BadRequest(OpexContractDecisionMessage); var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecutePetDecision(petId, "Approval", value, User.Identity.Name); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]
         public IHttpActionResult SaveBudgetLine(BudgetLineRequest value)

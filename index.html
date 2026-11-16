@@ -63,8 +63,8 @@
             <i data-lucide="refresh-cw"></i>{{vm.refreshing ? 'Refreshing' : 'Refresh'}}</button
           ><button class="btn secondary" ng-click="vm.download('pet')">
             <i data-lucide="download"></i>PET template</button
-          ><button class="btn secondary" ng-if="vm.can('request')" ng-click="vm.openUpload('nonProject')">
-            <i data-lucide="sheet"></i>Create Non Project</button
+          ><button class="btn secondary" ng-if="vm.can('request')" ng-click="vm.openProject(null,true)">
+            <i data-lucide="sheet"></i>Register OPEX Contract</button
           ><button
             class="btn primary"
             ng-if="vm.can('request')"
@@ -160,10 +160,10 @@
               <option>Approved</option>
                             <option>Rejected</option>
                             <option>Sent Back</option>
-            </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option><option value="nonProject">Non Project</option></select>
+            </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option><option value="opexContract">OPEX Contract</option></select>
           </div>
         </div>
-        <div class="table-scroll" ng-if="vm.viewFilter!=='nonProject'">
+        <div class="table-scroll">
           <table class="data-table projects project-register-table">
             <thead>
               <tr>
@@ -493,10 +493,9 @@
             </tbody>
           </table>
         </div>
-        <div class="pagination" ng-if="vm.pageCount>1&&vm.viewFilter!=='nonProject'"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
-        <div class="section-bar">
-          <div><h2>Non Project</h2><span>{{vm.visibleNonProjectOpex.length}} OPEX line items</span></div>
-          <button class="btn secondary" type="button" ng-if="vm.can('request')" ng-click="vm.openUpload('nonProject')"><i data-lucide="plus"></i>Add or upload OPEX</button>
+        <div class="pagination" ng-if="vm.pageCount>1"><button class="icon-btn" ng-disabled="vm.page===1" ng-click="vm.changePage(vm.page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.page}} of {{vm.pageCount}}</span><button class="icon-btn" ng-disabled="vm.page===vm.pageCount" ng-click="vm.changePage(vm.page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+        <div class="section-bar" ng-if="vm.visibleNonProjectOpex.length">
+          <div><h2>OPEX Contract line items (legacy)</h2><span>{{vm.visibleNonProjectOpex.length}} OPEX line items</span></div>
         </div>
         <div class="table-scroll" ng-if="vm.visibleNonProjectOpex.length">
           <table class="data-table">
@@ -505,12 +504,11 @@
               <tr ng-repeat="row in vm.visibleNonProjectOpex track by row.nonProjectOpexLineId">
                 <td>{{row.initiative}}</td><td>{{row.platform}}</td><td>{{row.lineItem}}</td><td>{{row.epmId}}</td><td>{{row.budgetType}}</td><td>{{row.opexReference}}</td><td>{{row.glNumber}}</td><td>{{row.budgetApprovedAed!=null?vm.money(row.budgetApprovedAed):''}}</td><td>{{row.memoCamId}}</td><td>{{vm.money(row.amountApprovedAed)}}</td><td>{{row.vendor}}</td><td>{{row.dateRaised|date:'dd-MMM-yyyy'}}</td><td>{{row.lpoSoNumber}}</td><td>{{row.poDate|date:'dd-MMM-yyyy'}}</td><td>{{row.amsNumber}}</td><td>{{row.camStatus}}</td><td>{{row.description}}</td><td>{{row.invoiceMemoNumber}}</td><td>{{row.invoiceNumber}}</td><td>{{row.invoiceAmountAed!=null?vm.money(row.invoiceAmountAed):''}}</td><td>{{row.invoiceDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceEntryProcessDate|date:'dd-MMM-yyyy'}}</td><td>{{row.invoiceStatus}}</td><td>{{row.invoiceDescription}}</td><td>{{row.folder}}</td><td>{{row.handledBy}}</td><td>{{row.column1}}</td>
                 <td><button type="button" class="link-btn" ng-if="row.attachmentId" ng-click="vm.downloadAttachment({attachmentId:row.attachmentId,originalName:row.supportingDocumentName})">{{row.supportingDocumentName||'Download'}}</button></td>
-                <td><div class="row-actions" ng-if="vm.canChangeNonProjectOpex(row)"><button type="button" class="icon-btn" ng-click="vm.editNonProjectOpex(row)" title="Edit Non Project record"><i data-lucide="pencil"></i></button><button type="button" class="icon-btn danger" ng-click="vm.deleteNonProjectOpex(row)" title="Delete Non Project record"><i data-lucide="trash-2"></i></button></div></td>
+                <td><div class="row-actions" ng-if="vm.canChangeNonProjectOpex(row)"><button type="button" class="icon-btn" ng-click="vm.editNonProjectOpex(row)" title="Edit OPEX Contract line item"><i data-lucide="pencil"></i></button><button type="button" class="icon-btn danger" ng-click="vm.deleteNonProjectOpex(row)" title="Delete OPEX Contract line item"><i data-lucide="trash-2"></i></button></div></td>
               </tr>
             </tbody>
           </table>
         </div>
-        <div class="empty" ng-if="!vm.visibleNonProjectOpex.length"><i data-lucide="sheet"></i><strong>No Non Project OPEX records found.</strong></div>
       </section>
 
       <section ng-if="vm.tab==='approvals'" class="workspace approval-workspace">
@@ -1004,7 +1002,8 @@
                   </option>
                 </select></label
               ><p class="form-error full" ng-if="vm.form.registrationError">{{vm.form.registrationError}}</p
-              ><h3 class="form-section-title full">Project details</h3>
+              ><p class="form-hint full" ng-if="vm.form.isOpexContract">OPEX Contract: PET Requests, Budget Lines, Contracts and Invoices are not routed for review or approval.</p
+              ><h3 class="form-section-title full">{{vm.form.isOpexContract?'OPEX Contract details':'Project details'}}</h3>
               <label
                 >Project name<input
                   ng-model="vm.form.projectName"
@@ -1014,7 +1013,7 @@
               ><label
                 >Project type<input
                   ng-model="vm.form.projectType"
-                  ng-readonly="vm.form.isJira"
+                  ng-readonly="vm.form.isJira||vm.form.isOpexContract"
                   required /></label
               ><label
                 >Accountable Exec Lead<input
@@ -1048,7 +1047,7 @@
                   <label
                 >Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null">
                   <option value="">Select at ADD PET</option>
-                  <option>CAPEX</option>
+                  <option ng-if="!vm.form.isOpexContract">CAPEX</option>
                   <option>OPEX</option>
                 </select></label
               ><label class="full" ng-if="vm.form.budgetType"
@@ -1179,7 +1178,7 @@
               </div>
               <div class="full form-grid compact-grid" ng-if="!vm.selectedProject.budgetType||!vm.selectedProject.budgetSourceId">
                 <h3 class="form-section-title full">Budget selection</h3>
-                <label>Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null" required><option value="">Select</option><option>CAPEX</option><option>OPEX</option></select></label>
+                <label>Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null" required><option value="">Select</option><option ng-if="!vm.isOpexContract(vm.selectedProject)">CAPEX</option><option>OPEX</option></select></label>
                 <label>Budget source<select falcon-select2 data-placeholder="Search budget source" ng-model="vm.form.budgetSourceId" ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:vm.form.budgetType}" required><option value="">Select budget source</option></select></label>
               </div>
               <h3 class="form-section-title full" ng-if="!vm.petVendorOnly()">PET lines</h3>
@@ -1206,7 +1205,8 @@
                 </div>
               </div>
               <h3 class="form-section-title full">Submission details</h3>
-              <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
+              <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()&&!vm.isOpexContract(vm.selectedProject)"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
+              <p class="full form-hint" ng-if="vm.isOpexContract(vm.selectedProject)">OPEX Contract: this PET is approved on save. No review or approval is required.</p>
               <div class="full pet-upload-workspace" ng-if="vm.petVendorOnly()">
                 <div class="detail-grid" style="grid-template-columns:1fr 1fr">
                   <div><small>PET Reference No</small><strong>{{vm.form.code}}</strong></div>
@@ -1667,7 +1667,7 @@
               <input type="file" ng-if="vm.modal.kind==='sources'" multiple accept=".csv,.xlsx,.xlsm" file-change="vm.setUploadFiles($files)" />
               <p ng-if="vm.uploadFile&&vm.modal.kind!=='nonProject'">Selected: {{vm.uploadFile.name}}<span ng-if="vm.uploadFiles.length>1"> + {{vm.uploadFiles.length-1}} more</span></p>
               <div class="non-project-entry" ng-if="vm.modal.kind==='nonProject'">
-                <div class="segmented" role="group" aria-label="Non Project entry mode" ng-if="!vm.nonProjectEditId">
+                <div class="segmented" role="group" aria-label="OPEX Contract line item entry mode" ng-if="!vm.nonProjectEditId">
                   <button type="button" ng-class="{active:vm.nonProjectEntryMode==='manual'}" ng-click="vm.nonProjectEntryMode='manual'">Enter manually</button>
                   <button type="button" ng-class="{active:vm.nonProjectEntryMode==='upload'}" ng-click="vm.nonProjectEntryMode='upload'">Upload Excel / CSV</button>
                 </div>
@@ -1675,7 +1675,7 @@
                 <label class="file-field">Supporting document (optional)<input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg" file-change="vm.setNonProjectSupportingFile($file)" /><span><i data-lucide="paperclip"></i>{{vm.nonProjectSupportingFile ? vm.nonProjectSupportingFile.name : 'Choose supporting document'}}</span></label>
                 <a class="template-link" ng-if="vm.nonProjectEntryMode==='upload'" href="{{vm.modal.template}}" download><i data-lucide="download"></i>Download template (Budget Type must be OPEX)</a>
                 <div class="form-grid" ng-if="vm.nonProjectEntryMode==='manual'">
-                  <h3 class="form-section-title full">Non Project details</h3>
+                  <h3 class="form-section-title full">OPEX Contract line item details</h3>
                   <label>Initiative<input ng-model="vm.form.initiative" maxlength="500" required /></label>
                   <label>Platform<input ng-model="vm.form.platform" maxlength="200" /></label>
                   <label>Line Item<input ng-model="vm.form.lineItem" maxlength="200" required /></label>
@@ -1713,7 +1713,7 @@
               >
               <div class="form-grid compact-grid" ng-if="vm.modal.kind==='pet'&&(!vm.form.item.budgetType||!vm.form.item.budgetSourceId)">
                 <h3 class="form-section-title full">Budget selection</h3>
-                <label>Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null" required><option value="">Select</option><option>CAPEX</option><option>OPEX</option></select></label>
+                <label>Budget type<select ng-model="vm.form.budgetType" ng-change="vm.form.budgetSourceId=null" required><option value="">Select</option><option ng-if="!vm.isOpexContract(vm.form.item)">CAPEX</option><option>OPEX</option></select></label>
                 <label>Budget source<select falcon-select2 data-placeholder="Search budget source" ng-model="vm.form.budgetSourceId" ng-options="b.budgetSourceId as (b.externalId+' · '+b.description+' · '+vm.money(b.availableBudget)+' remaining') for b in vm.budgets | filter:{budgetType:vm.form.budgetType}" required><option value="">Select budget source</option></select></label>
               </div>
               <div class="pet-upload-workspace" ng-if="vm.modal.kind==='pet'">
