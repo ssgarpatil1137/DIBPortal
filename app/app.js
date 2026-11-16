@@ -2327,6 +2327,7 @@
           },
         );
         vm.form.isOpexContract = isOpexContract;
+        if (isOpexContract) { vm.userDirectory = []; loadUserDirectory(); }
         vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
@@ -3087,7 +3088,7 @@
         if (type === "user") { vm.saveManagedUser(); return; }
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
         if (type === "project" && !validateProjectRegistration(true)) return;
-        if (type === "project" && !vm.form.isEdit && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
+        if (type === "project" && !vm.form.isEdit && !vm.form.isOpexContract && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
@@ -3101,9 +3102,9 @@
             accountableExecLead: vm.form.accountableExecLead,
             accountableExec: vm.form.accountableExec,
             smeLead: vm.form.smeLead,
-            projectSize: vm.form.projectSize,
-            projectSizingScores: projectSizingPayload(),
-            projectManager: vm.form.projectManager,
+            projectSize: vm.form.isOpexContract ? null : vm.form.projectSize,
+            projectSizingScores: vm.form.isOpexContract ? null : projectSizingPayload(),
+            projectManager: vm.form.isOpexContract ? null : vm.form.projectManager,
             budgetType: vm.form.budgetType || null,
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
             isOpexContract: !!vm.form.isOpexContract,
@@ -3723,6 +3724,25 @@
           if (showError || vm.tab === "currencies") noticeError(responseMessage(response, "Unable to load currencies."));
         });
       }
+      function loadUserDirectory() {
+        var form = vm.form;
+        function keepCurrentSelections() {
+          ["accountableExecLead", "accountableExec", "smeLead"].forEach(function (key) {
+            var name = String(form[key] || "").trim();
+            if (name && !vm.userDirectory.some(function (u) { return u.displayName === name; })) vm.userDirectory.push({ displayName: name, email: "" });
+          });
+          redraw();
+          $timeout(function () { window.jQuery("select[falcon-select2]").trigger("change.select2"); }, 0, false);
+        }
+        if (vm.demo) { vm.userDirectory = vm.userDirectory || []; keepCurrentSelections(); return $q.when(); }
+        return $http.get("api/portfolio/user-directory").then(function (response) {
+          vm.userDirectory = response.data || [];
+          keepCurrentSelections();
+        }, function (response) {
+          noticeError(responseMessage(response, "Unable to load the user list."));
+        });
+      }
+      vm.userDirectoryLabel = function (user) { return user.email ? user.displayName + " · " + user.email : user.displayName; };
       function loadVendors(showError) {
         if (vm.demo) { vm.updateVendorView(true); return $q.when(); }
         return $http.get("api/portfolio/vendors").then(function (response) {

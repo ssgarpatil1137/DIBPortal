@@ -1021,18 +1021,21 @@
                   ng-model="vm.form.projectType"
                   ng-readonly="vm.form.isJira||vm.form.isOpexContract"
                   required /></label
-              ><label
+              ><label ng-if="!vm.form.isOpexContract"
                 >Accountable Exec Lead<input
                   ng-model="vm.form.accountableExecLead"
                   ng-readonly="vm.form.isJira"
                   required /></label
-              ><label
+              ><label ng-if="!vm.form.isOpexContract"
                 >Accountable Executive<input
                   ng-model="vm.form.accountableExec"
                   ng-readonly="vm.form.isJira"
                   required /></label
-              ><label>SME Lead<input ng-model="vm.form.smeLead" ng-readonly="vm.form.isJira" /></label
-              ><div class="project-sizing full">
+              ><label ng-if="!vm.form.isOpexContract">SME Lead<input ng-model="vm.form.smeLead" ng-readonly="vm.form.isJira" /></label
+              ><label ng-if="vm.form.isOpexContract">Accountable Exec Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExecLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
+              ><label ng-if="vm.form.isOpexContract">Accountable Executive<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExec" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
+              ><label ng-if="vm.form.isOpexContract">SME Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.smeLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory"><option value="">Select user</option></select></label
+              ><div class="project-sizing full" ng-if="!vm.form.isOpexContract">
                 <div class="sizing-head">
                   <div><small>Project Sizing</small><strong>{{vm.form.projectSize||'Select scoring'}}</strong></div>
                   <span>Scoring Guide: Select Low (1), Medium (3), High (5) for each criterion. Weighted total -&gt; Size: XS (&lt;=1.5) | S (1.5-2.3) | M (2.3-3.5) | L (3.5-4.1) | XL (&gt;4.1)</span>
@@ -1045,7 +1048,7 @@
                 </div>
                 <div class="sizing-result"><span>Weighted total: {{vm.projectSizingWeightedTotal()||0}}</span><strong><small>Project size</small>{{vm.form.projectSize||'Not selected'}}</strong></div>
               </div
-              ><label
+              ><label ng-if="!vm.form.isOpexContract"
                 >Project manager<input
                     ng-readonly="vm.form.isJira"
                     ng-model="vm.form.projectManager" /></label

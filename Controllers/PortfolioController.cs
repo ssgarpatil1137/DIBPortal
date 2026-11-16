@@ -292,6 +292,13 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        [HttpGet, Route("user-directory")]
+        public IHttpActionResult UserDirectory()
+        {
+            try { return Ok(Db.Query("SELECT DisplayName,Email FROM dbo.Users WHERE IsActive=1 AND PortalAccess=1 AND NULLIF(LTRIM(RTRIM(DisplayName)),'') IS NOT NULL ORDER BY DisplayName")); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
         [HttpGet, Route("currencies")]
         public IHttpActionResult Currencies()
         {
@@ -600,6 +607,10 @@ namespace DFM.Web.Controllers
             if (value.IsOpexContract)
             {
                 value.ProjectType = OpexContract.ProjectTypeName;
+                value.ProjectSize = null;
+                value.ProjectSizingScores = null;
+                value.ProjectManager = null;
+                if (string.IsNullOrWhiteSpace(value.AccountableExecLead) || string.IsNullOrWhiteSpace(value.AccountableExec)) throw new ArgumentException("Select Accountable Exec Lead and Accountable Executive.");
                 if (!value.ProjectId.HasValue)
                 {
                     value.IsJira = false;
