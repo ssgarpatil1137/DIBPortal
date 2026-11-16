@@ -2718,6 +2718,25 @@
         }
         showInvoices(line);
       };
+      vm.budgetSourceAmountFields = [
+        { key: "budget", label: "Budget", required: true },
+        { key: "utilization", label: "Utilization" },
+        { key: "availableBudget", label: "Available Budget" },
+        { key: "lockedAmount", label: "Locked Amt" },
+        { key: "budgetAfterLocked", label: "Budget after Locked Amt" },
+        { key: "claimAmount", label: "Claim Amt" },
+        { key: "netBalance", label: "Net Balance" },
+      ];
+      vm.openBudgetSource = function () {
+        vm.form = { budgetType: "", externalId: "", description: "" };
+        vm.modal = {
+          type: "budgetSource",
+          kicker: "MASTER CONTROL",
+          title: "Add CAPEX / OPEX source",
+          submit: "Add budget source",
+        };
+        redraw();
+      };
       vm.openBudget = function (budget) {
         vm.selectedBudget = budget;
         vm.form = angular.copy(budget);
@@ -3462,6 +3481,29 @@
           prepareProjects();
           vm.updateView();
           notice("Invoice saved");
+        }
+        if (type === "budgetSource") {
+          var sourceForm = vm.form || {};
+          if (sourceForm.budgetType !== "CAPEX" && sourceForm.budgetType !== "OPEX") { noticeError("Budget Type is required."); return; }
+          var sourceId = String(sourceForm.externalId || "").trim();
+          if (!sourceId) { noticeError("ID is required."); return; }
+          if (sourceId.length > 100) { noticeError("ID cannot exceed 100 characters."); return; }
+          var sourcePayload = { budgetType: sourceForm.budgetType, externalId: sourceId, description: String(sourceForm.description || "").trim() };
+          for (var fieldIndex = 0; fieldIndex < vm.budgetSourceAmountFields.length; fieldIndex++) {
+            var field = vm.budgetSourceAmountFields[fieldIndex];
+            if (!validateNumericInput(sourceForm[field.key], field.label, !field.required)) return;
+            sourcePayload[field.key] = blankNumericInput(sourceForm[field.key]) ? null : parseNumericInput(sourceForm[field.key]);
+          }
+          if (sourcePayload.budget < 0) { noticeError("Budget must be zero or greater."); return; }
+          var duplicateSource = (vm.budgets || []).some(function (b) { return b.budgetType === sourcePayload.budgetType && String(b.externalId || "").trim().toUpperCase() === sourceId.toUpperCase(); });
+          if (duplicateSource) { noticeError(sourcePayload.budgetType + " source " + sourceId + " already exists. Edit it from the register or use Synchronize CSV."); return; }
+          if (vm.demo) { noticeError("Connect to the server to add budget sources."); return; }
+          $http.post("api/portfolio/budgets", sourcePayload).then(function () {
+            notice(sourcePayload.budgetType + " source " + sourceId + " added");
+            vm.close();
+            loadDashboard();
+          }, function (response) { noticeError(responseMessage(response, "Unable to add the budget source.")); });
+          return;
         }
         if (type === "budget") {
           if (!validateBudgetSourceAmounts(vm.form)) return;

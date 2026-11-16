@@ -1064,6 +1064,38 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             return Ok();
         }
 
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("budgets")]
+        public IHttpActionResult CreateBudget(BudgetSourceCreateRequest value)
+        {
+            if (value == null) return BadRequest("Budget source details are required.");
+            var budgetType = (value.BudgetType ?? "").Trim().ToUpperInvariant();
+            var externalId = (value.ExternalId ?? "").Trim();
+            if (budgetType != "CAPEX" && budgetType != "OPEX") return BadRequest("Budget Type must be CAPEX or OPEX.");
+            if (externalId.Length == 0) return BadRequest("ID is required.");
+            if (!value.Budget.HasValue) return BadRequest("Budget is required.");
+            try
+            {
+                if (Db.Query("SELECT 1 Found FROM dbo.BudgetSources WHERE BudgetType=@Type AND UPPER(LTRIM(RTRIM(ExternalId)))=UPPER(@ExternalId)", P("@Type", budgetType), P("@ExternalId", externalId)).Count > 0)
+                    return BadRequest(budgetType + " source " + externalId + " already exists. Edit it from the register or use Synchronize CSV.");
+                // Same columns and validation as the CAPEX/OPEX CSV template.
+                var rows = new List<List<string>>
+                {
+                    new List<string> { "Type", "ID", "Description", "Budget", "Utilization", "Available Budget", "Locked Amt", "Budget after Locked Amt", "Claim Amt", "Net Balance" },
+                    new List<string> { budgetType, externalId, (value.Description ?? "").Trim(), SourceAmountText(value.Budget), SourceAmountText(value.Utilization), SourceAmountText(value.AvailableBudget),
+                        SourceAmountText(value.LockedAmount), SourceAmountText(value.BudgetAfterLocked), SourceAmountText(value.ClaimAmount), SourceAmountText(value.NetBalance) }
+                };
+                CsvBulkImporter.ImportBudgetSources(rows, "Manual entry", User.Identity.Name);
+                return Ok(Db.Query("SELECT BudgetSourceId,BudgetType,ExternalId FROM dbo.BudgetSources WHERE BudgetType=@Type AND ExternalId=@ExternalId", P("@Type", budgetType), P("@ExternalId", externalId)).FirstOrDefault());
+            }
+            catch (ArgumentException ex) { return BadRequest(ex.Message.Replace("Row 2 of Manual entry: ", "")); }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static string SourceAmountText(decimal? value)
+        {
+            return value.HasValue ? value.Value.ToString(CultureInfo.InvariantCulture) : "";
+        }
+
         [ApiAuthorize("Admin", "Master"), HttpPost, Route("budgets/sync")]
         public async Task<IHttpActionResult> SyncBudgetSources()
         {

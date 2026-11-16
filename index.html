@@ -554,6 +554,13 @@
           >
             <i data-lucide="refresh-cw"></i>Synchronize CSV
           </button>
+          <button
+            class="btn primary"
+            ng-if="vm.hasRole('Admin')"
+            ng-click="vm.openBudgetSource()"
+          >
+            <i data-lucide="plus"></i>Add CAPEX / OPEX
+          </button>
           <div class="filters">
             <label class="search"><i data-lucide="search"></i><input ng-model="vm.budgetSearch" ng-change="vm.updateBudgetView()" placeholder="Search source, type, description" /></label>
           </div>
@@ -1589,6 +1596,14 @@
                   </table>
                 </div>
               </article>
+            </div>
+            <div ng-if="vm.modal.type==='budgetSource'" class="form-grid">
+              <h3 class="form-section-title full">Source details</h3>
+              <label>Budget Type<select ng-model="vm.form.budgetType" required><option value="">Select</option><option>CAPEX</option><option>OPEX</option></select></label
+              ><label>ID<input ng-model="vm.form.externalId" maxlength="100" placeholder="e.g. IT_OPEX_Sub_1_2026" required /></label
+              ><label class="full">Description<input ng-model="vm.form.description" maxlength="1000" /></label>
+              <h3 class="form-section-title full">Balances</h3>
+              <label ng-repeat="field in vm.budgetSourceAmountFields">{{field.label}}<input type="text" inputmode="decimal" ng-model="vm.form[field.key]" ng-required="field.required" placeholder="{{field.required?'Required':'Optional - calculated when blank'}}" /></label>
             </div>
             <div ng-if="vm.modal.type==='budget'" class="form-grid">
               <label class="full"
