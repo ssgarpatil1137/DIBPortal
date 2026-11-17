@@ -57,7 +57,7 @@ namespace DFM.Web.Controllers
                         SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
                         FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
                     ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
-                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE LTRIM(RTRIM(ISNULL(p.ProjectType,'')))<>'OPEX Contract' AND ((@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)).Concat(DelegatedApprovalPets(canReview, canApprove)).ToList(),
+                approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE LTRIM(RTRIM(ISNULL(p.ProjectType,'')))<>'OPEX Contract' AND ((@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)).Concat(DelegatedApprovalPets()).ToList(),
                 delegators = DelegationController.ReceivedDelegations(User.Identity.Name),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
                 nonProjectOpex = Db.Query(@"SELECT l.*, b.SourceFile, b.CreatedUtc BatchCreatedUtc,
@@ -957,10 +957,9 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
 
         private const string OpexContractDecisionMessage = "OPEX Contract PET requests do not go through review or approval.";
 
-        // PETs assigned to users who delegated to the caller and not already assigned to the caller directly; the caller must still hold the stage role.
-        private List<Dictionary<string, object>> DelegatedApprovalPets(bool canReview, bool canApprove)
+        // PETs assigned to users who delegated to the caller (and not already assigned to the caller); the delegator must hold the stage role.
+        private List<Dictionary<string, object>> DelegatedApprovalPets()
         {
-            if (!canReview && !canApprove) return new List<Dictionary<string, object>>();
             try
             {
                 return Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
@@ -969,26 +968,36 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                     AND NOT ((pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))
                         OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))))
                     AND EXISTS(SELECT 1 FROM dbo.vw_ActiveDelegations d WHERE d.DelegateEmail=@user AND (
-                        (@canReview=1 AND d.DelegatorCanReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))
-                        OR (@canApprove=1 AND d.DelegatorCanApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))))
-                    ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove));
+                        (d.DelegatorCanReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))
+                        OR (d.DelegatorCanApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))))
+                    ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name));
             }
             catch (SqlException ex) { if (ex.Number == 208) return new List<Dictionary<string, object>>(); throw; }
         }
 
-        [ApiAuthorize("Reviewer"), HttpPost, Route("pets/{petId:int}/review")]
-        public IHttpActionResult Review(int petId, DecisionRequest value) { if (OpexContract.IsPet(petId)) return BadRequest(OpexContractDecisionMessage); var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecuteDecisionAsAssignee(petId, "Review", value); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        [HttpPost, Route("pets/{petId:int}/review")]
+        public IHttpActionResult Review(int petId, DecisionRequest value) { return Decide(petId, "Review", "Reviewer", value); }
 
-        [ApiAuthorize("Approver"), HttpPost, Route("pets/{petId:int}/approve")]
-        public IHttpActionResult Approve(int petId, DecisionRequest value) { if (OpexContract.IsPet(petId)) return BadRequest(OpexContractDecisionMessage); var validation = ValidateDecision(value, true); if (validation != null) return BadRequest(validation); try { ExecuteDecisionAsAssignee(petId, "Approval", value); return Ok(); } catch (SqlException ex) { return BadRequest(ex.Message); } }
+        [HttpPost, Route("pets/{petId:int}/approve")]
+        public IHttpActionResult Approve(int petId, DecisionRequest value) { return Decide(petId, "Approval", "Approver", value); }
 
-        // A delegate acts with the original assignee's assignment; sp_PetDecision still enforces every workflow rule.
-        private void ExecuteDecisionAsAssignee(int petId, string stage, DecisionRequest value)
+        // Without an active delegation the caller needs the stage role (as before); a delegate acts with the
+        // delegator's role and assignment, and sp_PetDecision still enforces every workflow rule.
+        private IHttpActionResult Decide(int petId, string stage, string role, DecisionRequest value)
         {
-            var actor = User.Identity.Name;
-            var onBehalfOf = DelegationController.ResolveOnBehalfOf(petId, stage, actor);
-            if (onBehalfOf == null) ExecutePetDecision(petId, stage, value, actor);
-            else ExecutePetDecision(petId, stage, value, onBehalfOf, actor);
+            try
+            {
+                var actor = User.Identity.Name;
+                var onBehalfOf = DelegationController.ResolveOnBehalfOf(petId, stage, actor);
+                if (onBehalfOf == null && !User.IsInRole(role)) return Content(HttpStatusCode.Forbidden, "This role cannot perform the action.");
+                if (OpexContract.IsPet(petId)) return BadRequest(OpexContractDecisionMessage);
+                var validation = ValidateDecision(value, true);
+                if (validation != null) return BadRequest(validation);
+                if (onBehalfOf == null) ExecutePetDecision(petId, stage, value, actor);
+                else ExecutePetDecision(petId, stage, value, onBehalfOf, actor);
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("budget-lines")]

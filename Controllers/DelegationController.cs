@@ -7,14 +7,10 @@ using DFM.Web.Models;
 
 namespace DFM.Web.Controllers
 {
-    // Self-service delegation: a Reviewer/Approver names one active backup who can act on their assigned PET decisions.
+    // Self-service delegation: any user names one active backup who can act on their assigned PET decisions.
     [ApiAuthorize, RoutePrefix("api/delegation")]
     public class DelegationController : ApiController
     {
-        private const string SharedWorkflowRoleSql = @"EXISTS(SELECT 1 FROM dbo.UserRoles mine JOIN dbo.Roles mr ON mr.RoleId=mine.RoleId
-            JOIN dbo.UserRoles theirs ON theirs.RoleId=mine.RoleId
-            WHERE mine.UserId=@Me AND theirs.UserId={0} AND mr.Name IN ('Reviewer','Approver'))";
-
         [HttpGet, Route("")]
         public IHttpActionResult Get()
         {
@@ -29,7 +25,7 @@ namespace DFM.Web.Controllers
                          ELSE 'Active' END Status
                     FROM dbo.UserDelegations d JOIN dbo.Users g ON g.UserId=d.DelegateUserId
                     WHERE d.DelegatorUserId=@Me AND d.RevokedUtc IS NULL", P("@Me", me.Value)).FirstOrDefault();
-                return Ok(new { eligible = IsEligible(), delegation = current, received = ReceivedDelegations(User.Identity.Name) });
+                return Ok(new { delegation = current, received = ReceivedDelegations(User.Identity.Name) });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -37,13 +33,12 @@ namespace DFM.Web.Controllers
         [HttpGet, Route("candidates")]
         public IHttpActionResult Candidates()
         {
-            if (!IsEligible()) return Ok(new object[0]);
             try
             {
                 var me = CurrentUserId();
                 if (!me.HasValue) return Unauthorized();
                 return Ok(Db.Query(@"SELECT u.UserId,u.DisplayName,u.Email FROM dbo.Users u
-                    WHERE u.UserId<>@Me AND u.IsActive=1 AND u.PortalAccess=1 AND " + string.Format(SharedWorkflowRoleSql, "u.UserId") + @"
+                    WHERE u.UserId<>@Me AND u.IsActive=1 AND u.PortalAccess=1
                     ORDER BY u.DisplayName,u.Email", P("@Me", me.Value)));
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -52,7 +47,6 @@ namespace DFM.Web.Controllers
         [HttpPost, Route("")]
         public IHttpActionResult Save(DelegationRequest value)
         {
-            if (!IsEligible()) return Content(System.Net.HttpStatusCode.Forbidden, "Delegation is available to Reviewers and Approvers only.");
             if (value == null || value.DelegateUserId <= 0) return BadRequest("Select a delegate.");
             try
             {
@@ -65,7 +59,6 @@ namespace DFM.Web.Controllers
                     IF @Delegate=@Me THROW 50080,'You cannot delegate to yourself.',1;
                     SELECT @DelegateEmail=Email FROM dbo.Users WHERE UserId=@Delegate AND IsActive=1 AND PortalAccess=1;
                     IF @DelegateEmail IS NULL THROW 50081,'Select an active user as your delegate.',1;
-                    IF NOT " + string.Format(SharedWorkflowRoleSql, "@Delegate") + @" THROW 50082,'The delegate must hold the Reviewer or Approver role you are delegating.',1;
                     SET @Start=ISNULL(@Start,@Today);
                     IF @Start<@Today AND (@Existing IS NULL OR @Start<>@OldStart) THROW 50083,'Start date cannot be in the past.',1;
                     IF @End IS NOT NULL AND @End<@Start THROW 50084,'End date cannot be before the start date.',1;
@@ -147,8 +140,6 @@ namespace DFM.Web.Controllers
             }
             catch (SqlException ex) { if (ex.Number == 208) return null; throw; }
         }
-
-        private bool IsEligible() { return User.IsInRole("Reviewer") || User.IsInRole("Approver"); }
 
         private int? CurrentUserId()
         {

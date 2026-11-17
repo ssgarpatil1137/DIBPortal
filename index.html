@@ -1713,17 +1713,16 @@
                 <div><small>Roles</small><strong>{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</strong></div>
               </div>
               <h3 class="form-section-title full">Delegation</h3>
-              <p class="form-hint full" ng-if="!vm.delegationEligible()">Delegation is available to users with the Reviewer or Approver role.</p>
               <div class="full detail-grid" style="grid-template-columns:repeat(4,1fr)" ng-if="vm.delegation">
                 <div><small>Current delegate</small><strong>{{vm.delegation.delegateName||vm.delegation.delegateEmail}}</strong></div>
                 <div><small>Status</small><strong><span class="status" ng-class="vm.delegation.status==='Active'?'approved':(vm.delegation.status==='Scheduled'?'pending':'rejected')">{{vm.delegation.status}}</span></strong></div>
                 <div><small>Valid</small><strong>{{vm.delegation.startDate|date:'dd-MMM-yyyy'}} – {{vm.delegation.endDate?(vm.delegation.endDate|date:'dd-MMM-yyyy'):'Until revoked'}}</strong></div>
                 <div><small>Last updated</small><strong>{{vm.delegation.updatedUtc|date:'dd-MMM-yyyy HH:mm'}}</strong></div>
               </div>
-              <label class="full" ng-if="vm.delegationEligible()">Delegate / backup<select falcon-select2 data-placeholder="Search active user" ng-model="vm.form.delegateUserId" ng-options="u.userId as vm.userDirectoryLabel(u) for u in vm.delegationCandidates" required><option value="">Select user</option></select></label>
-              <label ng-if="vm.delegationEligible()">Start date<input type="date" ng-model="vm.form.startDate" /></label>
-              <label ng-if="vm.delegationEligible()">End date (optional)<input type="date" ng-model="vm.form.endDate" /></label>
-              <p class="form-hint full" ng-if="vm.delegationEligible()">Your delegate sees and can act on review/approval items assigned to you for the roles you both hold. You keep full access. Leave End date blank to keep the delegation until you revoke it.</p>
+              <label class="full">Delegate / backup<select falcon-select2 data-placeholder="Search active user" ng-model="vm.form.delegateUserId" ng-options="u.userId as vm.userDirectoryLabel(u) for u in vm.delegationCandidates" required><option value="">Select user</option></select></label>
+              <label>Start date<input type="date" ng-model="vm.form.startDate" /></label>
+              <label>End date (optional)<input type="date" ng-model="vm.form.endDate" /></label>
+              <p class="form-hint full">Your delegate sees and can act on review/approval items assigned to you, with your Reviewer/Approver authority for those items only. You keep full access. Leave End date blank to keep the delegation until you revoke it.</p>
               <div class="full" ng-if="vm.delegation"><button type="button" class="btn compact secondary" ng-click="vm.revokeDelegation()"><i data-lucide="user-x"></i>Revoke delegation</button></div>
               <h3 class="form-section-title full" ng-if="vm.receivedDelegations.length">Delegated to me</h3>
               <table class="nested full" ng-if="vm.receivedDelegations.length">
@@ -1937,7 +1936,7 @@
           <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'&&vm.modal.type!=='budgetUtilization'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
-            ><button type="submit" class="btn primary" ng-if="vm.modal.type!=='profile'||vm.delegationEligible()">
+            ><button type="submit" class="btn primary">
               <i data-lucide="check"></i>{{vm.modal.kind==='nonProject'&&vm.nonProjectEntryMode==='manual'?(vm.nonProjectEditId?'Update record':'Save OPEX record'):vm.modal.submit}}
             </button>
           </footer>
@@ -1955,6 +1954,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=37"></script>
+    <script src="app/app.js?v=38"></script>
   </body>
 </html>
