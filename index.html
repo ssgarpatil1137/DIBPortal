@@ -42,6 +42,7 @@
       </nav>
         <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
         <span class="user-email" title="{{vm.session.email}}">{{vm.session.email}}</span>
+        <button class="btn secondary topbar-btn" type="button" ng-click="vm.openProfile()"><i data-lucide="user-cog"></i>My profile</button>
         <button class="btn secondary topbar-btn" type="button" ng-click="vm.signOut()"><i data-lucide="log-out"></i>Sign out</button>
       </div>
     </header>
@@ -532,7 +533,7 @@
             <thead><tr><th>Project ID</th><th>Project name</th><th>Project type</th><th>PET reference</th><th>Status</th><th>PET amount</th><th>CapEx source</th><th>Available CapEx</th><th>Requestor</th><th>Reviewer</th><th>Approver</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="item in vm.visibleApprovalItems track by item.pet.petId">
-                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.project.projectType||'Not supplied'}}</td><td>{{item.petCount}} PET{{item.petCount===1?'':'s'}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.requestedAmount)}}</td><td title="{{item.project.budgetSource}}"><span class="truncate-cell">{{item.project.budgetType==='CAPEX' ? item.project.budgetSource : 'Not CapEx'}}</span></td><td>{{item.project.budgetType==='CAPEX' ? vm.money(item.project.availableBudget) : '—'}}</td><td title="{{item.project.requestorEmail}}"><span class="truncate-cell">{{item.project.requestorName||item.project.requestorEmail}}</span></td><td title="{{item.pet.reviewerEmail}}"><span class="truncate-cell">{{item.pet.reviewerEmail||item.project.accountableExecLead}}</span></td><td title="{{item.pet.approverEmail}}"><span class="truncate-cell">{{item.pet.approverEmail||item.project.accountableExec}}</span></td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.stage==='approve'?'Approve / Change CapEx':item.action}}</button></td>
+                <td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell">{{item.project.projectName}}</span></td><td>{{item.project.projectType||'Not supplied'}}</td><td>{{item.petCount}} PET{{item.petCount===1?'':'s'}}</td><td><span class="status" ng-class="vm.statusClass(item.pet.status)">{{item.pet.status}}</span></td><td>{{vm.money(item.requestedAmount)}}</td><td title="{{item.project.budgetSource}}"><span class="truncate-cell">{{item.project.budgetType==='CAPEX' ? item.project.budgetSource : 'Not CapEx'}}</span></td><td>{{item.project.budgetType==='CAPEX' ? vm.money(item.project.availableBudget) : '—'}}</td><td title="{{item.project.requestorEmail}}"><span class="truncate-cell">{{item.project.requestorName||item.project.requestorEmail}}</span></td><td title="{{item.pet.reviewerEmail}}"><span class="truncate-cell">{{item.pet.reviewerEmail||item.project.accountableExecLead}}</span></td><td title="{{item.pet.approverEmail}}"><span class="truncate-cell">{{item.pet.approverEmail||item.project.accountableExec}}</span></td><td><button class="btn compact primary" ng-click="vm.openDecision(item.pet,item.stage)">{{item.stage==='approve'?'Approve / Change CapEx':item.action}}</button><small class="platform-tag" ng-if="vm.delegatedFrom(item.project,item.pet,item.stage)">On behalf of {{vm.delegatedFrom(item.project,item.pet,item.stage)}}</small></td>
               </tr>
               <tr ng-if="!vm.visibleApprovalItems.length"><td colspan="12"><div class="empty inline-empty"><i data-lucide="inbox"></i><strong>No PETs await your action</strong></div></td></tr>
             </tbody>
@@ -1321,6 +1322,7 @@
               </div>
             </div>
             <div ng-if="vm.modal.type==='decision'" class="decision">
+              <p class="form-hint" ng-if="!vm.modal.bulk&&vm.delegatedFrom(vm.selectedProject,vm.selectedPet,vm.modal.stage)">You are acting as delegate on behalf of {{vm.delegatedFrom(vm.selectedProject,vm.selectedPet,vm.modal.stage)}}. The decision is recorded under your name.</p>
               <h3 class="form-section-title">Decision summary</h3>
               <div class="decision-amount" ng-if="!vm.modal.bulk">
                 <span>{{vm.form.code}}</span
@@ -1703,6 +1705,32 @@
                   required /></label
               ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>
+            <div ng-if="vm.modal.type==='profile'" class="form-grid">
+              <h3 class="form-section-title full">Account</h3>
+              <div class="full detail-grid" style="grid-template-columns:1fr 1fr 1fr">
+                <div><small>Name</small><strong>{{vm.session.displayName}}</strong></div>
+                <div><small>Email</small><strong>{{vm.session.email}}</strong></div>
+                <div><small>Roles</small><strong>{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</strong></div>
+              </div>
+              <h3 class="form-section-title full">Delegation</h3>
+              <p class="form-hint full" ng-if="!vm.delegationEligible()">Delegation is available to users with the Reviewer or Approver role.</p>
+              <div class="full detail-grid" style="grid-template-columns:repeat(4,1fr)" ng-if="vm.delegation">
+                <div><small>Current delegate</small><strong>{{vm.delegation.delegateName||vm.delegation.delegateEmail}}</strong></div>
+                <div><small>Status</small><strong><span class="status" ng-class="vm.delegation.status==='Active'?'approved':(vm.delegation.status==='Scheduled'?'pending':'rejected')">{{vm.delegation.status}}</span></strong></div>
+                <div><small>Valid</small><strong>{{vm.delegation.startDate|date:'dd-MMM-yyyy'}} – {{vm.delegation.endDate?(vm.delegation.endDate|date:'dd-MMM-yyyy'):'Until revoked'}}</strong></div>
+                <div><small>Last updated</small><strong>{{vm.delegation.updatedUtc|date:'dd-MMM-yyyy HH:mm'}}</strong></div>
+              </div>
+              <label class="full" ng-if="vm.delegationEligible()">Delegate / backup<select falcon-select2 data-placeholder="Search active user" ng-model="vm.form.delegateUserId" ng-options="u.userId as vm.userDirectoryLabel(u) for u in vm.delegationCandidates" required><option value="">Select user</option></select></label>
+              <label ng-if="vm.delegationEligible()">Start date<input type="date" ng-model="vm.form.startDate" /></label>
+              <label ng-if="vm.delegationEligible()">End date (optional)<input type="date" ng-model="vm.form.endDate" /></label>
+              <p class="form-hint full" ng-if="vm.delegationEligible()">Your delegate sees and can act on review/approval items assigned to you for the roles you both hold. You keep full access. Leave End date blank to keep the delegation until you revoke it.</p>
+              <div class="full" ng-if="vm.delegation"><button type="button" class="btn compact secondary" ng-click="vm.revokeDelegation()"><i data-lucide="user-x"></i>Revoke delegation</button></div>
+              <h3 class="form-section-title full" ng-if="vm.receivedDelegations.length">Delegated to me</h3>
+              <table class="nested full" ng-if="vm.receivedDelegations.length">
+                <thead><tr><th>Delegated by</th><th>Email</th><th>Covers</th><th>Valid until</th></tr></thead>
+                <tbody><tr ng-repeat="d in vm.receivedDelegations"><td>{{d.displayName}}</td><td>{{d.email}}</td><td>{{[d.canReview?'Review':'',d.canApprove?'Approval':''].join(' ').trim()}}</td><td>{{d.endDate?(d.endDate|date:'dd-MMM-yyyy'):'Until revoked'}}</td></tr></tbody>
+              </table>
+            </div>
             <div ng-if="vm.modal.type==='platform'" class="form-grid">
               <label class="full"
                 >Platform name<input
@@ -1825,7 +1853,7 @@
               <table class="nested">
                 <thead><tr><th>From</th><th>To</th><th>Action by</th><th>Comments</th><th>When</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="entry in vm.history"><td>{{entry.fromStatus||'—'}}</td><td>{{entry.toStatus}}</td><td>{{entry.actionByName}}</td><td>{{entry.comments||'—'}}</td><td>{{entry.actionUtc|date:'dd-MMM-yyyy HH:mm'}}</td></tr>
+                  <tr ng-repeat="entry in vm.history"><td>{{entry.fromStatus||'—'}}</td><td>{{entry.toStatus}}</td><td>{{entry.actionByName}}<small class="platform-tag" ng-if="entry.onBehalfOfName">Delegate on behalf of {{entry.onBehalfOfName}}</small></td><td>{{entry.comments||'—'}}</td><td>{{entry.actionUtc|date:'dd-MMM-yyyy HH:mm'}}</td></tr>
                 </tbody>
               </table>
               <div class="empty" ng-if="!vm.history.length">
@@ -1909,7 +1937,7 @@
           <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'&&vm.modal.type!=='budgetUtilization'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
-            ><button type="submit" class="btn primary">
+            ><button type="submit" class="btn primary" ng-if="vm.modal.type!=='profile'||vm.delegationEligible()">
               <i data-lucide="check"></i>{{vm.modal.kind==='nonProject'&&vm.nonProjectEntryMode==='manual'?(vm.nonProjectEditId?'Update record':'Save OPEX record'):vm.modal.submit}}
             </button>
           </footer>
@@ -1927,6 +1955,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=36"></script>
+    <script src="app/app.js?v=37"></script>
   </body>
 </html>

@@ -158,6 +158,10 @@
       vm.vendor360 = null;
       vm.vendor360Tab = "projects";
       vm.roleUsers = [];
+      vm.delegators = [];
+      vm.delegation = null;
+      vm.delegationCandidates = [];
+      vm.receivedDelegations = [];
       vm.roleSearch = "";
       vm.roleFilter = "";
       vm.roleStatusFilter = "";
@@ -837,8 +841,27 @@
       // the project (AccountableExecLead/AccountableExec) - so match on Users.DisplayName, not email.
       vm.isReviewerFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExecLead); };
       vm.isApproverFor = function (project) { return sameName(vm.session && vm.session.displayName, project.accountableExec); };
-      vm.isReviewerForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.reviewerEmail) || vm.isReviewerFor(project); };
-      vm.isApproverForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.approverEmail) || vm.isApproverFor(project); };
+      vm.isReviewerForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.reviewerEmail) || vm.isReviewerFor(project) || !!delegatorFor(project, pet, true); };
+      vm.isApproverForPet = function (project, pet) { return sameEmail(vm.session && vm.session.email, pet && pet.approverEmail) || vm.isApproverFor(project) || !!delegatorFor(project, pet, false); };
+      // Mirrors the server: a delegate covers items assigned to an active delegator who holds the stage role.
+      function delegatorFor(project, pet, review) {
+        if (!project || !pet) return null;
+        var assignedEmail = review ? pet.reviewerEmail : pet.approverEmail;
+        var assignedName = review ? project.accountableExecLead : project.accountableExec;
+        return (vm.delegators || []).filter(function (d) {
+          return (review ? d.canReview : d.canApprove) && (assignedEmail ? sameEmail(d.email, assignedEmail) : sameName(d.displayName, assignedName));
+        })[0] || null;
+      }
+      vm.delegatedFrom = function (project, pet, stage) {
+        if (!project || !pet) return "";
+        var review = stage ? stage === "review" : pet.status === "Pending Review";
+        var direct = review
+          ? sameEmail(vm.session && vm.session.email, pet.reviewerEmail) || vm.isReviewerFor(project)
+          : sameEmail(vm.session && vm.session.email, pet.approverEmail) || vm.isApproverFor(project);
+        if (direct) return "";
+        var delegator = delegatorFor(project, pet, review);
+        return delegator ? (delegator.displayName || delegator.email) : "";
+      };
       vm.setUploadFile = function (file) {
         if (file && !validateUploadFileSize(file)) { vm.uploadFile = null; vm.uploadFiles = []; redraw(); return; }
         vm.uploadFile = file;
@@ -3250,6 +3273,7 @@
       }
       vm.saveModal = function () {
         var type = vm.modal.type;
+        if (type === "profile") { saveDelegation(); return; }
         if (type === "user") { vm.saveManagedUser(); return; }
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
         if (type === "project" && !validateProjectRegistration(true)) return;
@@ -3878,6 +3902,7 @@
           vm.budgets = data.budgets || [];
           vm.jira = data.jira || [];
           vm.budgetUsage = data.budgetUsage || [];
+          vm.delegators = data.delegators || [];
           vm.nonProjectBudgetUsage = data.nonProjectBudgetUsage || [];
           vm.nonProjectOpex = data.nonProjectOpex || [];
           refreshSelectedBudgetUsageRows();
@@ -4051,6 +4076,70 @@
       function previewRoleUsers() {
         return normalizeRoleUsers([]);
       }
+      function dateInputValue(value) {
+        var match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value || ""));
+        return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+      }
+      function dateApiValue(value) {
+        if (!value) return null;
+        var date = value instanceof Date ? value : dateInputValue(value);
+        if (!date || isNaN(date.getTime())) return null;
+        return date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2) + "-" + ("0" + date.getDate()).slice(-2);
+      }
+      vm.delegationEligible = function () { return vm.hasRole("Reviewer") || vm.hasRole("Approver"); };
+      vm.openProfile = function () {
+        vm.delegation = null;
+        vm.delegationCandidates = [];
+        vm.receivedDelegations = vm.delegators || [];
+        vm.form = { delegateUserId: null, startDate: dateInputValue(dateApiValue(new Date())), endDate: null };
+        vm.modal = { type: "profile", kicker: "ACCOUNT SETTINGS", title: "My profile", submit: "Save delegation" };
+        loadDelegation();
+        redraw();
+      };
+      function loadDelegation() {
+        if (vm.demo) return $q.when();
+        var candidates = vm.delegationEligible() ? $http.get("api/delegation/candidates") : $q.when({ data: [] });
+        return $q.all([$http.get("api/delegation"), candidates]).then(function (responses) {
+          var data = responses[0].data || {};
+          vm.delegation = data.delegation || null;
+          vm.receivedDelegations = data.received || [];
+          vm.delegationCandidates = responses[1].data || [];
+          if (vm.delegation && vm.modal && vm.modal.type === "profile") {
+            vm.form.delegateUserId = vm.delegation.delegateUserId;
+            vm.form.startDate = dateInputValue(vm.delegation.startDate);
+            vm.form.endDate = dateInputValue(vm.delegation.endDate);
+            if (!vm.delegationCandidates.some(function (u) { return Number(u.userId) === Number(vm.delegation.delegateUserId); }))
+              vm.delegationCandidates.push({ userId: vm.delegation.delegateUserId, displayName: vm.delegation.delegateName, email: vm.delegation.delegateEmail });
+          }
+          if (vm.modal && vm.modal.type === "profile") vm.modal.submit = vm.delegation ? "Update delegation" : "Save delegation";
+          redraw();
+          $timeout(function () { window.jQuery("select[falcon-select2]").trigger("change.select2"); }, 0, false);
+        }, function (response) { noticeError(responseMessage(response, "Unable to load your delegation.")); });
+      }
+      function saveDelegation() {
+        if (!vm.delegationEligible()) { noticeError("Delegation is available to Reviewers and Approvers only."); return; }
+        if (!vm.form.delegateUserId) { noticeError("Select a delegate."); return; }
+        if (vm.session && vm.delegationCandidates.some(function (u) { return Number(u.userId) === Number(vm.form.delegateUserId) && sameEmail(u.email, vm.session.email); })) { noticeError("You cannot delegate to yourself."); return; }
+        var payload = { delegateUserId: Number(vm.form.delegateUserId), startDate: dateApiValue(vm.form.startDate), endDate: dateApiValue(vm.form.endDate) };
+        if (payload.endDate && payload.startDate && payload.endDate < payload.startDate) { noticeError("End date cannot be before the start date."); return; }
+        if (vm.demo) { noticeError("Connect to the server to manage delegation."); return; }
+        var isUpdate = !!vm.delegation;
+        $http.post("api/delegation", payload).then(function () {
+          notice(isUpdate ? "Delegation updated" : "Delegation saved");
+          vm.close();
+        }, function (response) { noticeError(responseMessage(response, "Unable to save the delegation.")); });
+      }
+      vm.revokeDelegation = function () {
+        if (!vm.delegation || !window.confirm("Revoke delegation to " + (vm.delegation.delegateName || vm.delegation.delegateEmail) + "? Their access to your review/approval items ends immediately.")) return;
+        $http.post("api/delegation/revoke").then(function () {
+          notice("Delegation revoked");
+          vm.delegation = null;
+          vm.form.delegateUserId = null;
+          vm.form.endDate = null;
+          vm.modal.submit = "Save delegation";
+          redraw();
+        }, function (response) { noticeError(responseMessage(response, "Unable to revoke the delegation.")); });
+      };
       vm.saveUserRoles = function (user) {
         var selected = user.elevatedRole ? [user.elevatedRole] : [];
         if (vm.demo) { user.roleList = selected.length ? "Requestor, " + selected.join(", ") : "Requestor"; vm.updateRoleView(true); notice("Roles updated"); return; }
