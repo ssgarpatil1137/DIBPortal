@@ -11,7 +11,8 @@ namespace DFM.Web.Controllers
     [RoutePrefix("api/auth")]
     public class AuthController : ApiController
     {
-        internal const int SessionTimeoutMinutes = 10;
+        // Sliding token lifetime; kept above the 25-minute client idle logout so the token never expires before the client signs out.
+        internal const int SessionTimeoutMinutes = 30;
 
         [AllowAnonymous, HttpPost, Route("login")]
         public IHttpActionResult Login(LoginRequest request)

@@ -30,7 +30,31 @@
         },
       };
     })
-    .controller("PortfolioController", function ($http, $timeout, $q) {
+    .factory("dfmSessionInterceptor", function ($q, $rootScope) {
+      function isApi(config) { return /^api\//i.test(config && config.url || ""); }
+      // Login/setup/reset return 401 for bad credentials, so only api/auth/session counts as a session check.
+      function isAnonymousAuth(config) { var url = config && config.url || ""; return /^api\/auth\//i.test(url) && !/^api\/auth\/session/i.test(url); }
+      return {
+        response: function (response) {
+          var config = response && response.config || {};
+          if (isApi(config) && !isAnonymousAuth(config)) {
+            $rootScope.$broadcast("dfm:serverTouched");
+            var method = String(config.method || "GET").toUpperCase();
+            if (method !== "GET" && !/\/preview$/i.test(config.url)) $rootScope.$broadcast("dfm:dataChanged");
+          }
+          return response;
+        },
+        responseError: function (response) {
+          var config = response && response.config || {};
+          if (response && response.status === 401 && isApi(config) && !isAnonymousAuth(config)) $rootScope.$broadcast("dfm:sessionExpired");
+          return $q.reject(response);
+        },
+      };
+    })
+    .config(function ($httpProvider) {
+      $httpProvider.interceptors.push("dfmSessionInterceptor");
+    })
+    .controller("PortfolioController", function ($http, $timeout, $q, $scope, $interval) {
       var vm = this;
       vm.session = null;
       var rememberedEmail = rememberedLoginEmail();
@@ -2929,6 +2953,7 @@
         vm.selectedBudgetUsageRows = [];
         vm.budgetLineDocumentFiles = {};
         vm.invoiceDocumentFile = null;
+        if (pendingRefresh) scheduleAutoRefresh();
         redraw();
       };
       function runBulkImport(kind, parentId, onDone) {
@@ -3964,7 +3989,7 @@
           loadRoles(true);
         }, function (response) { noticeError(responseMessage(response, "Unable to delete user.")); });
       };
-      vm.refreshTransactions = function () {
+      vm.refreshTransactions = function (silent) {
         if (vm.refreshing) return;
         vm.refreshing = true;
         var loadedProjectIds = (vm.projects || []).filter(function (project) { return project.expanded || project.petsLoaded; }).map(function (project) { return project.projectId; });
@@ -3972,7 +3997,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.refreshing = false;
-          notice("Transactions refreshed");
+          if (!silent) notice("Transactions refreshed");
           redraw();
           return;
         }
@@ -3981,7 +4006,7 @@
         }).then(function () {
           return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors"), loadGlFunds(vm.tab === "gl")]);
         }).then(function () {
-          notice("Transactions refreshed");
+          if (!silent) notice("Transactions refreshed");
           vm.refreshing = false;
           redraw();
         }, function () {
@@ -3989,6 +4014,66 @@
           redraw();
         });
       };
+
+      // Session management: 25-minute idle logout, keep-alive while the user is active,
+      // and an automatic refresh after a child page (modal) submit.
+      var idleTimeoutMs = 25 * 60 * 1000;
+      var keepAliveMs = 5 * 60 * 1000;
+      var lastActivity = Date.now();
+      var lastServerTouch = Date.now();
+      var keepAliveInFlight = false;
+      var pendingRefresh = false;
+      var autoRefreshTimer = null;
+      function sessionActive() {
+        return !!(vm.session && !vm.demo && sessionStorage.getItem("dfmToken"));
+      }
+      function expireSession(message) {
+        if (!vm.session) return;
+        pendingRefresh = false;
+        if (autoRefreshTimer) { $timeout.cancel(autoRefreshTimer); autoRefreshTimer = null; }
+        if (vm.modal) vm.close();
+        vm.signOut();
+        noticeError(message);
+      }
+      function checkIdle() {
+        if (sessionActive() && Date.now() - lastActivity >= idleTimeoutMs) {
+          expireSession("You were signed out after 25 minutes of inactivity. Please sign in again.");
+          return true;
+        }
+        return false;
+      }
+      function recordActivity() {
+        // Check before recording so the first click after a long idle period (or sleep) cannot submit stale data.
+        if (checkIdle()) { $scope.$applyAsync(); return; }
+        lastActivity = Date.now();
+        if (sessionActive() && !keepAliveInFlight && lastActivity - lastServerTouch >= keepAliveMs) {
+          keepAliveInFlight = true;
+          $http.get("api/auth/session", { params: { _: Date.now() } }).finally(function () { keepAliveInFlight = false; });
+        }
+      }
+      function scheduleAutoRefresh() {
+        if (autoRefreshTimer) $timeout.cancel(autoRefreshTimer);
+        autoRefreshTimer = $timeout(function () {
+          autoRefreshTimer = null;
+          if (!pendingRefresh || vm.modal || !sessionActive()) return;
+          // Wait for chained saves (attachments, follow-up loads) to finish before refreshing.
+          if ($http.pendingRequests.length || vm.refreshing) { scheduleAutoRefresh(); return; }
+          pendingRefresh = false;
+          vm.refreshTransactions(true);
+        }, 600);
+      }
+      ["mousemove", "mousedown", "keydown", "wheel", "touchstart", "scroll"].forEach(function (eventName) {
+        document.addEventListener(eventName, recordActivity, { capture: true, passive: true });
+      });
+      document.addEventListener("visibilitychange", function () { if (!document.hidden && checkIdle()) $scope.$applyAsync(); });
+      $interval(checkIdle, 30 * 1000);
+      $scope.$on("dfm:serverTouched", function () { lastServerTouch = Date.now(); });
+      $scope.$on("dfm:sessionExpired", function () { expireSession("Your session has expired. Please sign in again."); });
+      $scope.$on("dfm:dataChanged", function () {
+        pendingRefresh = true;
+        if (!vm.modal) scheduleAutoRefresh();
+      });
+
       if (!restoreSession()) {
         prepareProjects();
         vm.updateView();
