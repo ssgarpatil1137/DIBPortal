@@ -111,6 +111,9 @@
       vm.reportProjectSearch = "";
       vm.reportProjectStatusFilter = "";
       vm.reportProjectBudgetTypeFilter = "";
+      vm.reportProjectPlatformFilter = "";
+      vm.reportPlatformOptions = [];
+      vm.platformReportRows = [];
       vm.reportProjectPage = 1;
       vm.reportProjectPageSize = 10;
       vm.reportProjectPageCount = 1;
@@ -178,6 +181,13 @@
       vm.vendorPageCount = 1;
       vm.vendorFilteredCount = 0;
       vm.visibleVendors = [];
+      vm.platforms = [];
+      vm.platformSearch = "";
+      vm.platformPage = 1;
+      vm.platformPageSize = 20;
+      vm.platformPageCount = 1;
+      vm.platformFilteredCount = 0;
+      vm.visiblePlatforms = [];
       vm.glFunds = [];
       vm.nonProjectOpex = [];
       vm.glSearch = "";
@@ -218,6 +228,7 @@
         { id: "budgets", label: "CAPEX / OPEX", icon: "landmark", roles: ["Admin", "Master"] },
         { id: "currencies", label: "Currency", icon: "coins", roles: ["Admin", "Master"] },
         { id: "vendors", label: "Vendors", icon: "store", roles: ["Admin", "Master"] },
+        { id: "platforms", label: "Platform Master", icon: "layers", roles: ["Admin", "Master"] },
         { id: "gl", label: "GL Management", icon: "badge-dollar-sign", roles: ["Admin", "Master"] },
         { id: "roles", label: "User management", icon: "users", roles: ["Admin", "Master"] },
         {
@@ -256,6 +267,7 @@
           budgets: "Budget source control",
           currencies: "Currency maintenance",
           vendors: "Vendor maintenance",
+          platforms: "Platform maintenance",
           roles: "User management",
           reports: "Management reporting",
         }[vm.tab];
@@ -295,6 +307,7 @@
             loadDashboard();
             loadCurrencies(false);
             loadVendors(false);
+            loadPlatforms(false);
             loadGlFunds(false);
             loadRoles(false);
           } else if (mode === "reset") { vm.auth.resetToken = response.data.resetToken; vm.auth.mode = "complete"; }
@@ -356,14 +369,14 @@
         var loadedFromCache = false;
         try {
           var cached = angular.fromJson(sessionStorage.getItem("dfmSession") || "null");
-          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadVendors(false); loadGlFunds(false); loadRoles(false); }
+          if (cached && cached.email) { loadedFromCache = true; applySession(cached, token); updateNavigation(); loadDashboard(); loadCurrencies(false); loadVendors(false); loadPlatforms(false); loadGlFunds(false); loadRoles(false); }
         } catch (ignore) { }
         $http.get("api/auth/session").then(function (response) {
           applySession(response.data, token);
           rememberSession(response.data);
           updateNavigation();
           if (loadedFromCache) vm.updateView(true);
-          else { loadDashboard(); loadCurrencies(false); loadVendors(false); loadGlFunds(false); loadRoles(false); }
+          else { loadDashboard(); loadCurrencies(false); loadVendors(false); loadPlatforms(false); loadGlFunds(false); loadRoles(false); }
           redraw();
         }, function () { vm.signOut(); });
         return true;
@@ -392,6 +405,7 @@
         vm.tab = tabId;
         if (tabId === "currencies") loadCurrencies(true);
         if (tabId === "vendors") loadVendors(true);
+        if (tabId === "platforms") loadPlatforms(true);
         if (tabId === "gl") loadGlFunds(true);
         if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
@@ -1590,17 +1604,51 @@
       };
       vm.updateReportProjectView = function (keepPage) {
         var query = (vm.reportProjectSearch || "").toLowerCase();
+        var platformFilter = String(vm.reportProjectPlatformFilter || "");
         var filtered = (vm.projects || []).filter(function (project) {
           var statusMatch = projectHasStatus(project, project.pets || [], vm.reportProjectStatusFilter);
           var budgetTypeMatch = !vm.reportProjectBudgetTypeFilter || String(project.budgetType || "").toUpperCase() === vm.reportProjectBudgetTypeFilter;
-          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
-          return statusMatch && budgetTypeMatch && queryMatch;
+          var platformMatch = !platformFilter ||
+            (platformFilter === "none" ? vm.isOpexContract(project) && !project.platformId : String(project.platformId || "") === platformFilter);
+          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.platformName, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && budgetTypeMatch && platformMatch && queryMatch;
         });
+        buildPlatformReport(filtered);
         vm.reportProjectFilteredCount = filtered.length;
         vm.reportProjectPageCount = Math.max(1, Math.ceil(filtered.length / vm.reportProjectPageSize));
         if (!keepPage || vm.reportProjectPage > vm.reportProjectPageCount) vm.reportProjectPage = 1;
         var start = (vm.reportProjectPage - 1) * vm.reportProjectPageSize;
         vm.visibleReportProjects = filtered.slice(start, start + vm.reportProjectPageSize);
+      };
+      // Platform-wise summary of OPEX Contracts, grouped by the standardized Platform ID.
+      function buildPlatformReport(projects) {
+        var optionsById = {};
+        (vm.platforms || []).forEach(function (platform) { optionsById[platform.platformId] = { platformId: String(platform.platformId), name: platform.name }; });
+        (vm.projects || []).forEach(function (project) {
+          if (project.platformId && !optionsById[project.platformId]) optionsById[project.platformId] = { platformId: String(project.platformId), name: project.platformName || "Platform " + project.platformId };
+        });
+        vm.reportPlatformOptions = Object.keys(optionsById).map(function (key) { return optionsById[key]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+        var groups = {};
+        (projects || []).filter(vm.isOpexContract).forEach(function (project) {
+          var key = project.platformId ? String(project.platformId) : "none";
+          var group = groups[key] || (groups[key] = { key: key, name: project.platformId ? (project.platformName || (optionsById[project.platformId] || {}).name) : "Not assigned", contracts: 0, petCount: 0, budgetLineCount: 0, invoiceCount: 0, totalBudget: 0, invoicedAmount: 0 });
+          group.contracts++;
+          group.petCount += Number(project.petCount) || 0;
+          group.budgetLineCount += Number(project.budgetLineCount) || 0;
+          group.invoiceCount += Number(project.invoiceCount) || 0;
+          group.totalBudget += Number(vm.projectBudgetAmount(project)) || 0;
+          group.invoicedAmount += Number(project.invoicedAmount) || 0;
+        });
+        vm.platformReportRows = Object.keys(groups).map(function (key) { return groups[key]; }).sort(function (a, b) {
+          if (a.key === "none") return 1;
+          if (b.key === "none") return -1;
+          return String(a.name).localeCompare(String(b.name));
+        });
+      }
+      vm.filterReportByPlatform = function (row) {
+        vm.reportProjectPlatformFilter = row ? row.key : "";
+        vm.updateReportProjectView();
+        redraw();
       };
       // Budget line Status (stored in BudgetLines.CamStatus) lifecycle: Raised to Vendor > Memo in Progress > Memo Approved > LPO in Progress > LPO Approved > Completed.
       vm.approvalMonitorStages = {
@@ -2049,6 +2097,7 @@
                 p.projectName,
                 p.accountableExecLead,
                 p.requestorEmail,
+                p.platformName,
               ]
                 .join(" ")
                 .toLowerCase()
@@ -2074,6 +2123,7 @@
         vm.updateBudgetView(keepPage);
         vm.updateCurrencyView(keepPage);
         vm.updateVendorView(keepPage);
+        vm.updatePlatformView(keepPage);
         vm.updateGlView(keepPage);
         vm.updateReportView();
         vm.updateReportProjectView(keepPage);
@@ -2085,6 +2135,7 @@
       vm.changeBudgetPage = function (page) { vm.budgetPage = Math.max(1, Math.min(vm.budgetPageCount, page)); vm.updateBudgetView(true); redraw(); };
       vm.changeCurrencyPage = function (page) { vm.currencyPage = Math.max(1, Math.min(vm.currencyPageCount, page)); vm.updateCurrencyView(true); redraw(); };
       vm.changeVendorPage = function (page) { vm.vendorPage = Math.max(1, Math.min(vm.vendorPageCount, page)); vm.updateVendorView(true); redraw(); };
+      vm.changePlatformPage = function (page) { vm.platformPage = Math.max(1, Math.min(vm.platformPageCount, page)); vm.updatePlatformView(true); redraw(); };
       vm.changeGlPage = function (page) { vm.glPage = Math.max(1, Math.min(vm.glPageCount, page)); vm.updateGlView(true); redraw(); };
       vm.changeReportProjectPage = function (page) { vm.reportProjectPage = Math.max(1, Math.min(vm.reportProjectPageCount, page)); vm.updateReportProjectView(true); redraw(); };
       vm.changeRolePage = function (page) { vm.rolePage = Math.max(1, Math.min(vm.rolePageCount, page)); vm.updateRoleView(true); redraw(); };
@@ -2216,6 +2267,17 @@
         if (!keepPage || vm.vendorPage > vm.vendorPageCount) vm.vendorPage = 1;
         var start = (vm.vendorPage - 1) * vm.vendorPageSize;
         vm.visibleVendors = filtered.slice(start, start + vm.vendorPageSize);
+      };
+      vm.updatePlatformView = function (keepPage) {
+        var query = (vm.platformSearch || "").toLowerCase();
+        var filtered = (vm.platforms || []).filter(function (platform) {
+          return !query || [platform.name, platform.description, platform.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
+        });
+        vm.platformFilteredCount = filtered.length;
+        vm.platformPageCount = Math.max(1, Math.ceil(filtered.length / vm.platformPageSize));
+        if (!keepPage || vm.platformPage > vm.platformPageCount) vm.platformPage = 1;
+        var start = (vm.platformPage - 1) * vm.platformPageSize;
+        vm.visiblePlatforms = filtered.slice(start, start + vm.platformPageSize);
       };
       vm.updateGlView = function (keepPage) {
         var query = (vm.glSearch || "").toLowerCase();
@@ -2351,7 +2413,7 @@
           },
         );
         vm.form.isOpexContract = isOpexContract;
-        if (isOpexContract) { vm.userDirectory = []; loadUserDirectory(); }
+        if (isOpexContract) { vm.userDirectory = []; loadUserDirectory(); loadPlatforms(false); }
         vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
@@ -2794,6 +2856,65 @@
         };
         redraw();
       };
+      vm.openPlatform = function (platform) {
+        vm.selectedPlatform = platform || null;
+        vm.form = angular.copy(platform || { name: "", description: "", isActive: true });
+        vm.modal = {
+          type: "platform",
+          kicker: "MASTER CONTROL",
+          title: platform ? "Edit " + platform.name : "Add platform",
+          submit: platform ? "Update platform" : "Add platform",
+        };
+        redraw();
+      };
+      vm.togglePlatform = function (platform) {
+        if (!platform) return;
+        var payload = angular.extend(angular.copy(platform), { isActive: !platform.isActive });
+        if (vm.demo) {
+          platform.isActive = payload.isActive;
+          vm.updatePlatformView(true);
+          notice(platform.isActive ? "Platform enabled" : "Platform disabled");
+          return;
+        }
+        $http.post("api/portfolio/platforms", payload).then(function (response) {
+          angular.extend(platform, response.data || payload);
+          vm.updatePlatformView(true);
+          notice(platform.isActive ? "Platform enabled" : "Platform disabled");
+          redraw();
+        }, function (response) { noticeError(responseMessage(response, "Unable to update platform status.")); });
+      };
+      vm.platformOptions = function () {
+        var selected = vm.form && vm.form.platformId;
+        var options = (vm.platforms || []).filter(function (platform) { return platform && (platform.isActive || String(platform.platformId) === String(selected)); });
+        if (selected && vm.form.platformName && !options.some(function (platform) { return String(platform.platformId) === String(selected); })) options.push({ platformId: selected, name: vm.form.platformName });
+        return options;
+      };
+      vm.addPlatformInline = function () {
+        var name = String(vm.form && vm.form.newPlatformName || "").trim();
+        if (!name) { noticeError("Enter the new platform name."); return; }
+        if (!validatePlatformDuplicate({ name: name })) return;
+        if (vm.demo) {
+          var demoPlatform = { platformId: Date.now(), name: name, isActive: true, contractCount: 0 };
+          vm.platforms.push(demoPlatform);
+          vm.form.platformId = demoPlatform.platformId;
+          vm.form.newPlatformName = "";
+          vm.form.addingPlatform = false;
+          vm.updatePlatformView(true);
+          notice("Platform added");
+          return;
+        }
+        $http.post("api/portfolio/platforms", { name: name, isActive: true }).then(function (response) {
+          var saved = response.data || {};
+          vm.platforms.push(saved);
+          vm.updatePlatformView(true);
+          vm.form.platformId = saved.platformId;
+          vm.form.newPlatformName = "";
+          vm.form.addingPlatform = false;
+          notice("Platform " + saved.name + " added");
+          redraw();
+          $timeout(function () { window.jQuery("select[falcon-select2]").trigger("change.select2"); }, 0, false);
+        }, function (response) { noticeError(responseMessage(response, "Unable to add platform.")); });
+      };
       vm.openGlFund = function (gl) {
         vm.selectedGlFundItem = gl || null;
         vm.form = angular.copy(gl || { glNumber: "", glName: "", fundAmount: 0, isActive: true });
@@ -3133,6 +3254,7 @@
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
         if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.form.isEdit && !vm.form.isOpexContract && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
+        if (type === "project" && vm.form.isOpexContract && !vm.form.isEdit && !vm.form.platformId) { noticeError("Platform is required."); return; }
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
@@ -3152,6 +3274,7 @@
             budgetType: vm.form.budgetType || null,
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
             isOpexContract: !!vm.form.isOpexContract,
+            platformId: vm.form.isOpexContract ? (vm.form.platformId || null) : null,
           };
           $http.post("api/portfolio/projects", payload).then(function (response) {
             notice(payload.isOpexContract ? (payload.projectId ? "OPEX Contract updated" : "OPEX Contract registered") : payload.projectId ? "Project updated" : "Project registered");
@@ -3604,6 +3727,32 @@
             return;
           }
         }
+        if (type === "platform") {
+          if (!vm.form || !String(vm.form.name || "").trim()) { noticeError("Platform name is required."); return; }
+          vm.form.name = String(vm.form.name || "").trim();
+          vm.form.description = String(vm.form.description || "").trim();
+          if (vm.form.name.length > 200) { noticeError("Platform name cannot exceed 200 characters."); return; }
+          if (vm.form.description.length > 500) { noticeError("Description cannot exceed 500 characters."); return; }
+          if (!validatePlatformDuplicate(vm.form)) return;
+          if (vm.demo) {
+            if (vm.selectedPlatform) angular.extend(vm.selectedPlatform, vm.form);
+            else { vm.form.platformId = Date.now(); vm.form.contractCount = 0; vm.platforms.push(vm.form); }
+            vm.updatePlatformView(true);
+            notice("Platform saved");
+          } else {
+            var isNewPlatform = !vm.selectedPlatform;
+            $http.post("api/portfolio/platforms", vm.form).then(function (response) {
+              var saved = response.data || vm.form;
+              if (vm.selectedPlatform) angular.extend(vm.selectedPlatform, saved);
+              else vm.platforms.push(saved);
+              vm.updatePlatformView(true);
+              notice(isNewPlatform ? "Platform " + saved.name + " added" : "Platform " + saved.name + " updated");
+              vm.close();
+              redraw();
+            }, function (response) { noticeError(responseMessage(response, "Unable to save platform.")); });
+            return;
+          }
+        }
         if (type === "gl") {
           if (!vm.form || !String(vm.form.glNumber || "").trim()) { noticeError("GL Number is required."); return; }
           if (!String(vm.form.glName || "").trim()) { noticeError("GL Description/Name is required."); return; }
@@ -3820,6 +3969,26 @@
           if (showError || vm.tab === "vendors") noticeError(responseMessage(response, "Unable to load vendors."));
         });
       }
+      function loadPlatforms(showError) {
+        if (vm.demo) { vm.updatePlatformView(true); return $q.when(); }
+        return $http.get("api/portfolio/platforms").then(function (response) {
+          vm.platforms = response.data || [];
+          vm.updatePlatformView(true);
+          vm.updateReportProjectView(true);
+          redraw();
+        }, function (response) {
+          if (showError || vm.tab === "platforms") noticeError(responseMessage(response, "Unable to load platforms."));
+        });
+      }
+      function validatePlatformDuplicate(platform) {
+        var name = String(platform && platform.name || "").trim().toLowerCase();
+        var platformId = platform && platform.platformId;
+        var duplicate = (vm.platforms || []).filter(function (item) {
+          return item && String(item.name || "").trim().toLowerCase() === name && (!platformId || String(item.platformId) !== String(platformId));
+        })[0];
+        if (duplicate) { noticeError("Platform already exists."); return false; }
+        return true;
+      }
       function loadGlFunds(showError) {
         if (vm.demo) { vm.updateGlView(true); return $q.when(); }
         return $http.get("api/portfolio/gl-funds").then(function (response) {
@@ -4004,7 +4173,7 @@
         loadDashboard().then(function () {
           return $q.all(loadedProjectIds.map(function (projectId) { return refreshProjectPets(projectId, true, true); }));
         }).then(function () {
-          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors"), loadGlFunds(vm.tab === "gl")]);
+          return $q.all([loadRoles(vm.tab === "roles"), loadCurrencies(vm.tab === "currencies"), loadVendors(vm.tab === "vendors"), loadPlatforms(vm.tab === "platforms"), loadGlFunds(vm.tab === "gl")]);
         }).then(function () {
           if (!silent) notice("Transactions refreshed");
           vm.refreshing = false;

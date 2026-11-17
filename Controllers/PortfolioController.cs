@@ -426,6 +426,44 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
+        private const string PlatformSelect = @"SELECT pl.PlatformId,pl.Name,pl.Description,pl.IsActive,pl.CreatedUtc,pl.CreatedBy,pl.UpdatedUtc,pl.UpdatedBy,
+            (SELECT COUNT(*) FROM dbo.Projects p WHERE p.PlatformId=pl.PlatformId) ContractCount
+            FROM dbo.Platforms pl";
+
+        [HttpGet, Route("platforms")]
+        public IHttpActionResult Platforms()
+        {
+            try
+            {
+                var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
+                return Ok(Db.Query(PlatformSelect + " WHERE @includeInactive=1 OR pl.IsActive=1 ORDER BY pl.Name", P("@includeInactive", includeInactive)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("platforms")]
+        public IHttpActionResult SavePlatform(PlatformRequest value)
+        {
+            if (value == null) return BadRequest("Platform details are required.");
+            value.Name = (value.Name ?? "").Trim();
+            value.Description = (value.Description ?? "").Trim();
+            if (value.Name.Length == 0) return BadRequest("Platform name is required.");
+            if (value.Name.Length > 200) return BadRequest("Platform name cannot exceed 200 characters.");
+            if (value.Description.Length > 500) return BadRequest("Description cannot exceed 500 characters.");
+            try
+            {
+                return Ok(Db.Query(@"DECLARE @SavedPlatformId INT = NULLIF(@PlatformId,0);
+                    IF @SavedPlatformId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Platforms WHERE PlatformId=@SavedPlatformId) THROW 50070,'Platform was not found.',1;
+                    IF EXISTS(SELECT 1 FROM dbo.Platforms WHERE NormalizedName=UPPER(@Name) AND (@SavedPlatformId IS NULL OR PlatformId<>@SavedPlatformId)) THROW 50071,'Platform already exists.',1;
+                    IF @SavedPlatformId IS NULL
+                    BEGIN INSERT dbo.Platforms(Name,Description,IsActive,CreatedBy,UpdatedBy) VALUES(@Name,NULLIF(@Description,''),@IsActive,@User,@User); SET @SavedPlatformId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Platforms SET Name=@Name,Description=NULLIF(@Description,''),IsActive=@IsActive,UpdatedUtc=SYSUTCDATETIME(),UpdatedBy=@User WHERE PlatformId=@SavedPlatformId;
+                    " + PlatformSelect + " WHERE pl.PlatformId=@SavedPlatformId",
+                    P("@PlatformId", value.PlatformId ?? 0), P("@Name", value.Name), P("@Description", value.Description), P("@IsActive", value.IsActive), P("@User", User.Identity.Name)).FirstOrDefault());
+            }
+            catch (SqlException ex) { return BadRequest(ex.Number == 2601 || ex.Number == 2627 ? "Platform already exists." : ex.Message); }
+        }
+
         [HttpGet, Route("pets/{petId:int}/history")]
         public IHttpActionResult History(int petId)
         {
@@ -523,6 +561,7 @@ namespace DFM.Web.Controllers
             {
                 PreserveRegisteredProjectIdentity(value);
                 ApplyOpexContractRules(value);
+                ValidatePlatformSelection(value);
                 var duplicate = DuplicateProjectRegistrationMessage(value);
                 if (duplicate != null) return BadRequest(duplicate);
                 value.BudgetType = NormalizeBudgetType(value.BudgetType);
@@ -549,6 +588,8 @@ namespace DFM.Web.Controllers
                 var saved = rows.FirstOrDefault();
                 var projectId = SavedProjectId(saved, value.ProjectId);
                 PersistProjectSizing(projectId, value, User.Identity.Name);
+                if (projectId.HasValue && value.IsOpexContract && value.PlatformId.HasValue)
+                    Db.Execute("UPDATE dbo.Projects SET PlatformId=@PlatformId WHERE ProjectId=@ProjectId", P("@PlatformId", value.PlatformId), P("@ProjectId", projectId.Value));
                 return Ok(RefreshedProject(projectId) ?? saved);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -622,6 +663,21 @@ namespace DFM.Web.Controllers
             {
                 throw new ArgumentException("Project type \"" + OpexContract.ProjectTypeName + "\" is reserved. Use Register OPEX Contract instead.");
             }
+        }
+
+        // Platform applies only to OPEX Contracts: required on registration; existing contracts without one can still be edited.
+        private static void ValidatePlatformSelection(ProjectRequest value)
+        {
+            if (!value.IsOpexContract) { value.PlatformId = null; return; }
+            if (!value.PlatformId.HasValue)
+            {
+                if (!value.ProjectId.HasValue) throw new ArgumentException("Platform is required.");
+                return;
+            }
+            var platform = Db.Query(@"SELECT pl.IsActive,CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND p.PlatformId=pl.PlatformId) THEN 1 ELSE 0 END AS bit) IsCurrent
+                FROM dbo.Platforms pl WHERE pl.PlatformId=@PlatformId", P("@PlatformId", value.PlatformId), P("@ProjectId", value.ProjectId)).FirstOrDefault();
+            if (platform == null) throw new ArgumentException("Selected platform was not found.");
+            if (!Convert.ToBoolean(platform["IsActive"]) && !Convert.ToBoolean(platform["IsCurrent"])) throw new ArgumentException("Selected platform is inactive. Choose an active platform.");
         }
 
         [ApiAuthorize("Requestor", "Reviewer", "Approver", "Admin", "Master"), HttpDelete, Route("projects/{projectId:int}")]

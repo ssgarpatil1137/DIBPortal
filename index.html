@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=32" />
+    <link rel="stylesheet" href="app/styles.css?v=33" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -212,7 +212,7 @@
                     {{project.projectName}}
                   </span>
                 </td>
-                <td>{{project.projectType}}</td>
+                <td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small></td>
                 <td title="{{project.accountableExecLead}}">{{project.accountableExecLead}}</td>
                 <td title="{{project.smeLead}}">{{project.smeLead}}</td>
                 <td title="{{project.projectManager}}">{{project.projectManager}}</td>
@@ -623,6 +623,29 @@
         <div class="pagination" ng-if="vm.vendorPageCount>1"><button class="icon-btn" ng-disabled="vm.vendorPage===1" ng-click="vm.changeVendorPage(vm.vendorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.vendorPage}} of {{vm.vendorPageCount}}</span><button class="icon-btn" ng-disabled="vm.vendorPage===vm.vendorPageCount" ng-click="vm.changeVendorPage(vm.vendorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
 
+      <section ng-if="vm.tab==='platforms'" class="workspace vendor-workspace">
+        <div class="section-bar">
+          <div>
+            <h2>Platform Master</h2>
+            <span>Maintain standardized platform values used by OPEX Contracts and platform-wise reporting.</span>
+          </div>
+          <button class="btn secondary" ng-click="vm.openPlatform()"><i data-lucide="plus"></i>Add Platform</button>
+          <div class="filters">
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.platformSearch" ng-change="vm.updatePlatformView()" placeholder="Search platform, description, status" /></label>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table class="data-table vendor-register">
+            <thead><tr><th>Platform name</th><th>Description</th><th>OPEX Contracts</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="platform in vm.visiblePlatforms track by platform.platformId"><td>{{platform.name}}</td><td title="{{platform.description}}"><span class="truncate-cell wide-cell">{{platform.description}}</span></td><td><span class="count-chip">{{platform.contractCount||0}}</span></td><td><span class="status" ng-class="platform.isActive?'approved':'rejected'">{{platform.isActive?'Active':'Inactive'}}</span></td><td title="{{platform.updatedBy}}">{{platform.updatedUtc|date:'dd-MMM-yyyy'}}</td><td><button class="icon-btn" title="Edit platform" ng-click="vm.openPlatform(platform)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{platform.isActive?'Disable':'Enable'}} platform" ng-click="vm.togglePlatform(platform)"><i data-lucide="power"></i></button></td></tr>
+              <tr ng-if="!vm.visiblePlatforms.length"><td colspan="6"><div class="empty inline-empty"><i data-lucide="layers"></i><strong>No platforms match the search.</strong></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" ng-if="vm.platformPageCount>1"><button class="icon-btn" ng-disabled="vm.platformPage===1" ng-click="vm.changePlatformPage(vm.platformPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.platformPage}} of {{vm.platformPageCount}}</span><button class="icon-btn" ng-disabled="vm.platformPage===vm.platformPageCount" ng-click="vm.changePlatformPage(vm.platformPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
+      </section>
+
       <section ng-if="vm.tab==='gl'" class="workspace gl-workspace">
         <div class="section-bar">
           <div>
@@ -920,6 +943,20 @@
             </div>
           </div>
         </div>
+        <div class="section-bar report-project-bar" ng-if="vm.platformReportRows.length">
+          <div>
+            <h2>Platform-wise OPEX Contracts</h2>
+            <span>Grouped by standardized platform. Select a platform to filter project details.</span>
+          </div>
+        </div>
+        <div class="table-scroll" ng-if="vm.platformReportRows.length">
+          <table class="data-table projects platform-report">
+            <thead><tr><th>Platform</th><th>OPEX Contracts</th><th>PETs</th><th>Budget lines</th><th>Invoices</th><th>Total budget</th><th>Invoiced</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="row in vm.platformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.petCount}}</span></td><td><span class="count-chip">{{row.budgetLineCount}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="filter"></i>{{vm.reportProjectPlatformFilter===row.key?'Clear filter':'Filter'}}</button></td></tr>
+            </tbody>
+          </table>
+        </div>
         <div class="section-bar report-project-bar">
           <div>
             <h2>Project details</h2>
@@ -929,13 +966,14 @@
             <label class="search"><i data-lucide="search"></i><input ng-model="vm.reportProjectSearch" ng-change="vm.updateReportProjectView()" placeholder="Search ID, project, owner" /></label>
             <select ng-model="vm.reportProjectStatusFilter" ng-change="vm.updateReportProjectView()"><option value="">All statuses</option><option>Active</option><option>Registered</option><option>Pending Review</option><option>Pending Approval</option><option>Approved</option><option>Rejected</option><option>Sent Back</option></select>
             <select ng-model="vm.reportProjectBudgetTypeFilter" ng-change="vm.updateReportProjectView()"><option value="">All budget types</option><option value="CAPEX">CAPEX</option><option value="OPEX">OPEX</option></select>
+            <select ng-model="vm.reportProjectPlatformFilter" ng-change="vm.updateReportProjectView()"><option value="">All platforms</option><option ng-repeat="platform in vm.reportPlatformOptions track by platform.platformId" value="{{platform.platformId}}">{{platform.name}}</option><option value="none">OPEX Contract - no platform</option></select>
           </div>
         </div>
         <div class="table-scroll">
           <table class="data-table projects">
             <thead><tr><th>Project ID</th><th>Project name</th><th>Type</th><th>Budget type</th><th>Accountable Exec Lead</th><th>SME Lead</th><th>Project Manager</th><th>Budget source</th><th>Total budget</th><th>PET items</th><th>Rejected PETs</th><th>Budget lines</th><th>Invoices</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="project in vm.visibleReportProjects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}</td><td><span class="budget-type">{{project.budgetType||'Not supplied'}}</span></td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.rejectedPetCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+              <tr ng-repeat="project in vm.visibleReportProjects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small></td><td><span class="budget-type">{{project.budgetType||'Not supplied'}}</span></td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.rejectedPetCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
               <tr ng-if="!vm.visibleReportProjects.length"><td colspan="15"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects match the selected filter.</strong></div></td></tr>
             </tbody>
           </table>
@@ -1042,6 +1080,13 @@
               ><label ng-if="vm.form.isOpexContract">Accountable Exec Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExecLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">Accountable Executive<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExec" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">SME Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.smeLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory"><option value="">Select user</option></select></label
+              ><label ng-if="vm.form.isOpexContract">Platform<select falcon-select2 data-placeholder="Search platform" ng-model="vm.form.platformId" ng-options="pl.platformId as pl.name for pl in vm.platformOptions()" ng-required="!vm.form.isEdit"><option value="">Select platform</option></select></label
+              ><div class="full platform-inline-add" ng-if="vm.form.isOpexContract&&vm.hasRole('Admin')">
+                <button type="button" class="btn compact secondary" ng-if="!vm.form.addingPlatform" ng-click="vm.form.addingPlatform=true"><i data-lucide="plus"></i>Add new platform</button>
+                <label ng-if="vm.form.addingPlatform">New platform name<input ng-model="vm.form.newPlatformName" maxlength="200" placeholder="Enter standardized platform name" /></label>
+                <button type="button" class="btn compact primary" ng-if="vm.form.addingPlatform" ng-click="vm.addPlatformInline()"><i data-lucide="check"></i>Save platform</button>
+                <button type="button" class="btn compact secondary" ng-if="vm.form.addingPlatform" ng-click="vm.form.addingPlatform=false;vm.form.newPlatformName=''">Cancel</button>
+              </div
               ><div class="project-sizing full" ng-if="!vm.form.isOpexContract">
                 <div class="sizing-head">
                   <div><small>Project Sizing</small><strong>{{vm.form.projectSize||'Select scoring'}}</strong></div>
@@ -1658,6 +1703,18 @@
                   required /></label
               ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>
+            <div ng-if="vm.modal.type==='platform'" class="form-grid">
+              <label class="full"
+                >Platform name<input
+                  ng-model="vm.form.name"
+                  maxlength="200"
+                  required /></label
+              ><label class="full"
+                >Description<input
+                  ng-model="vm.form.description"
+                  maxlength="500" /></label
+              ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
+            </div>
             <div ng-if="vm.modal.type==='gl'" class="form-grid">
               <label
                 >GL Number<input
@@ -1870,6 +1927,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=35"></script>
+    <script src="app/app.js?v=36"></script>
   </body>
 </html>
