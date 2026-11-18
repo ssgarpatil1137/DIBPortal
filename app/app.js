@@ -1433,6 +1433,7 @@
         return existing + spendItemFinalAed(item || {});
       }
       function projectBudgetAmount(project) {
+        if (vm.isOpexContract(project)) return parseNumericInput(project && project.contractBudget);
         return parseNumericInput(project && project.budget) || parseNumericInput(project && project.availableBudget);
       }
       vm.projectBudgetAmount = projectBudgetAmount;
@@ -3065,6 +3066,7 @@
           pet: "templates/pet-upload-template.csv",
           budget: "templates/budget-upload-template.csv",
           invoice: "templates/invoice-upload-template.csv",
+          contractInvoice: "templates/invoice-upload-template.csv",
           sources: "templates/sources-upload-template.csv",
           nonProject: "templates/non-project-opex-upload-template.csv",
         };
@@ -3079,6 +3081,8 @@
                 ? "OPEX Contract line item"
               : kind === "sources"
                 ? "Synchronize CAPEX / OPEX"
+                : kind === "contractInvoice"
+                  ? "Upload OPEX Contract invoices"
                 : "Upload " + kind + " records",
           submit: kind === "pet" ? "Save PET rows" : kind === "nonProject" ? "Import OPEX rows" : "Upload files",
           template: templates[kind],
@@ -3091,6 +3095,8 @@
                   ? "Add a single legacy OPEX Contract line item manually by selecting an OPEX source from CAPEX / OPEX, or import multiple rows from the template. Supporting documents are optional."
               : kind === "pet"
                 ? "Upload the Excel or CSV, review the rows below, edit any fields, or add PET rows manually before saving."
+                : kind === "contractInvoice"
+                  ? "Use the regular invoice CSV or Excel columns. Budget Line ID is ignored; every imported invoice is linked directly to this OPEX Contract. Status must be In Progress or Paid."
                 : "Use the supplied columns in CSV, XLSX, or XLSM format. Invalid rows are rejected with a row-level reason.",
         };
         vm.uploadFile = null;
@@ -3884,7 +3890,7 @@
         if (type === "upload" && vm.modal.kind !== "attachment" && vm.modal.kind !== "sources" && !vm.demo) {
           var item = vm.form.item;
           var kind = vm.modal.kind;
-          var parentId = kind === "pet" ? item.projectId : kind === "budget" ? item.petId : kind === "invoice" ? item.budgetLineId : null;
+          var parentId = kind === "pet" ? item.projectId : kind === "budget" ? item.petId : kind === "invoice" ? item.budgetLineId : kind === "contractInvoice" ? item.projectId : null;
           if (!parentId) { noticeError("Unable to determine where to import these rows."); return; }
           if (kind === "pet") {
             if (!validatePetUploadRows(true)) return;

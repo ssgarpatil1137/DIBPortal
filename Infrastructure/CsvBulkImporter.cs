@@ -28,11 +28,13 @@ namespace DFM.Web.Infrastructure
         public static int ImportRows(string kind, int parentId, List<List<string>> rows, string user, string sourceName)
         {
             if (rows.Count < 2) throw new ArgumentException("The " + sourceName + " has no data rows.");
-            rows = TableFromHeader(rows, RequiredColumns(kind), sourceName);
+            var directContractInvoice = kind.Equals("contractInvoice", StringComparison.OrdinalIgnoreCase);
+            var importKind = directContractInvoice ? "invoice" : kind;
+            rows = TableFromHeader(rows, RequiredColumns(importKind), sourceName);
             var headers = HeaderMap(rows[0]);
-            if (kind.Equals("pet", StringComparison.OrdinalIgnoreCase)) return ImportPets(parentId, rows, headers, user);
-            if (kind.Equals("budget", StringComparison.OrdinalIgnoreCase)) return ImportBudgetLines(parentId, rows, headers, user);
-            if (kind.Equals("invoice", StringComparison.OrdinalIgnoreCase)) return ImportInvoices(parentId, rows, headers, user);
+            if (importKind.Equals("pet", StringComparison.OrdinalIgnoreCase)) return ImportPets(parentId, rows, headers, user);
+            if (importKind.Equals("budget", StringComparison.OrdinalIgnoreCase)) return ImportBudgetLines(parentId, rows, headers, user);
+            if (importKind.Equals("invoice", StringComparison.OrdinalIgnoreCase)) return ImportInvoices(parentId, rows, headers, user, directContractInvoice);
             throw new ArgumentException("Unknown import kind.");
         }
 
@@ -235,19 +237,55 @@ namespace DFM.Web.Infrastructure
             return imported;
         }
 
-        private static int ImportInvoices(int defaultBudgetLineId, List<List<string>> rows, Dictionary<string, int> headers, string user)
+        private static int ImportInvoices(int parentId, List<List<string>> rows, Dictionary<string, int> headers, string user, bool directContractInvoice)
         {
             RequireAny(headers, "vendorname", new[] { "vendorname", "vendor", "supplier" });
             RequireAny(headers, "invoicenumber", new[] { "invoicenumber", "invoice", "number" });
             RequireAny(headers, "invoiceamount", new[] { "invoiceamount", "amount" });
+            Dictionary<string, object> contract = null;
+            if (directContractInvoice)
+            {
+                contract = Db.Query("SELECT ProjectId,ContractBudget,RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId AND ProjectType=@ProjectType", P("@ProjectId", parentId), P("@ProjectType", OpexContract.ProjectTypeName)).FirstOrDefault();
+                if (contract == null) throw new ArgumentException("OPEX Contract was not found.");
+                if (!string.Equals(Convert.ToString(contract["RequestorEmail"]), user, StringComparison.OrdinalIgnoreCase) && !UserHasMasterRole(user)) throw new ArgumentException("You are not allowed to import invoices for this OPEX Contract.");
+            }
             var imported = 0;
             for (var index = 1; index < rows.Count; index++)
             {
-                var row = rows[index]; if (Empty(row) || !HasInvoiceData(row, headers)) continue; var lineId = defaultBudgetLineId > 0 ? defaultBudgetLineId : IntAny(row, headers, 0, "budgetlineid", "budgetline", "lineid"); if (lineId <= 0) throw new ArgumentException("Budget Line ID is required for every Invoice row."); var amount = DecimalAny(row, headers, 0, "invoiceamount", "amount"); DateTime paymentDate; object date = DateTime.TryParse(GetAny(row, headers, "", "paymentdate", "date"), CultureInfo.InvariantCulture, DateTimeStyles.None, out paymentDate) ? (object)paymentDate : null;
-                AmountValidation.ValidateInvoiceAmount(lineId, null, amount);
-                Db.Query("EXEC dbo.sp_SaveInvoice NULL,@line,@vendor,@justification,@gl,@number,@amount,@status,@paymentDate,@user", P("@line", lineId), P("@vendor", GetAny(row, headers, "", "vendorname", "vendor", "supplier")), P("@justification", GetAny(row, headers, "", "justification", "description")), P("@gl", GetAny(row, headers, "", "glnumber", "gl")), P("@number", GetAny(row, headers, "", "invoicenumber", "invoice", "number")), P("@amount", amount), P("@status", GetAny(row, headers, "Raised", "invoicestatus", "status")), P("@paymentDate", date), P("@user", user)); imported++;
+                var row = rows[index]; if (Empty(row) || !HasInvoiceData(row, headers)) continue;
+                var lineId = directContractInvoice ? 0 : parentId > 0 ? parentId : IntAny(row, headers, 0, "budgetlineid", "budgetline", "lineid");
+                if (!directContractInvoice && lineId <= 0) throw new ArgumentException("Budget Line ID is required for every Invoice row.");
+                var vendor = GetAny(row, headers, "", "vendorname", "vendor", "supplier");
+                var number = GetAny(row, headers, "", "invoicenumber", "invoice", "number");
+                var amount = DecimalAny(row, headers, 0, "invoiceamount", "amount");
+                var status = GetAny(row, headers, directContractInvoice ? "In Progress" : "Raised", "invoicestatus", "status");
+                if (directContractInvoice && status == "Raised") status = "In Progress";
+                DateTime paymentDate; object date = DateTime.TryParse(GetAny(row, headers, "", "paymentdate", "date"), CultureInfo.InvariantCulture, DateTimeStyles.None, out paymentDate) ? (object)paymentDate : null;
+                if (directContractInvoice)
+                {
+                    if (string.IsNullOrWhiteSpace(vendor) || string.IsNullOrWhiteSpace(number) || amount <= 0) throw new ArgumentException("Vendor Name, Invoice Number, and a positive Invoice Amount are required for every OPEX Contract invoice row.");
+                    if (status != "In Progress" && status != "Paid") throw new ArgumentException("OPEX Contract invoice status must be In Progress or Paid.");
+                    if (status == "Paid" && date == null) throw new ArgumentException("Payment Date is required for every Paid OPEX Contract invoice row.");
+                    if (status == "In Progress") date = null;
+                    var total = Db.Query("SELECT ISNULL(SUM(InvoiceAmount),0) Total FROM dbo.Invoices WHERE ProjectId=@ProjectId", P("@ProjectId", parentId)).FirstOrDefault();
+                    var budget = contract["ContractBudget"] == null || contract["ContractBudget"] == DBNull.Value ? 0 : Convert.ToDecimal(contract["ContractBudget"]);
+                    if (Convert.ToDecimal(total["Total"]) + amount > budget) throw new ArgumentException("OPEX Contract invoice total cannot exceed the Contract Budget.");
+                    Db.Query("EXEC dbo.sp_SaveInvoice NULL,NULL,@vendor,@justification,@gl,@number,@amount,@status,@paymentDate,@user,@project", P("@vendor", vendor), P("@justification", GetAny(row, headers, "", "justification", "description")), P("@gl", GetAny(row, headers, "", "glnumber", "gl")), P("@number", number), P("@amount", amount), P("@status", status), P("@paymentDate", date), P("@user", user), P("@project", parentId));
+                }
+                else
+                {
+                    AmountValidation.ValidateInvoiceAmount(lineId, null, amount);
+                    Db.Query("EXEC dbo.sp_SaveInvoice NULL,@line,@vendor,@justification,@gl,@number,@amount,@status,@paymentDate,@user", P("@line", lineId), P("@vendor", vendor), P("@justification", GetAny(row, headers, "", "justification", "description")), P("@gl", GetAny(row, headers, "", "glnumber", "gl")), P("@number", number), P("@amount", amount), P("@status", status), P("@paymentDate", date), P("@user", user));
+                }
+                imported++;
             }
             return imported;
+        }
+
+        private static bool UserHasMasterRole(string email)
+        {
+            return Db.Query(@"SELECT TOP 1 1 Found FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId
+                WHERE LOWER(u.Email)=LOWER(@Email) AND r.Name='Master'", P("@Email", email)).Count > 0;
         }
 
         private static readonly string[] SourceIdAliases = { "externalid", "budgetsource", "sourceid", "source", "budgetcode", "budgetid", "code", "id" };

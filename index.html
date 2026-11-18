@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=34" />
+    <link rel="stylesheet" href="app/styles.css?v=35" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -170,19 +170,19 @@
         </div>
         <div class="empty" ng-if="group.title&&!group.projects.length&&!vm.visibleNonProjectOpex.length"><i data-lucide="sheet"></i><strong>No OPEX Contracts found.</strong></div>
         <div class="table-scroll" ng-if="!group.title||group.projects.length">
-          <table class="data-table projects project-register-table">
+          <table class="data-table projects project-register-table" ng-class="{'opex-contract-register-table':group.key==='opexContracts'}">
             <thead>
               <tr>
                 <th class="expander"></th>
-                <th>Project ID</th>
-                <th>Project name</th>
+                <th>{{group.key==='opexContracts'?'Contract Number':'Project ID'}}</th>
+                <th>{{group.key==='opexContracts'?'Initiative / Title':'Project name'}}</th>
                 <th>Type</th>
                 <th>Accountable Exec Lead</th>
                 <th>SME Lead</th>
                 <th>Project Manager</th>
                 <th>Requestor</th>
-                <th>PET items</th>
-                <th>Budget lines</th>
+                <th ng-if="group.key!=='opexContracts'">PET items</th>
+                <th ng-if="group.key!=='opexContracts'">Budget lines</th>
                 <th>Invoices</th>
                 <th>Total budget</th>
                 <th>Created</th>
@@ -213,13 +213,13 @@
                     {{project.projectName}}
                   </span>
                 </td>
-                <td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small><small ng-if="project.contractYear" class="platform-tag" title="Contract year">{{project.contractYear}}</small><small ng-if="project.contractEndDate&&!project.isExpiredUnclosed" class="contract-expiry" title="Contract expiry">Ends {{project.contractEndDate|date:'dd-MMM-yyyy'}} · {{project.daysToExpiry}} days</small><small ng-if="project.isExpiredUnclosed" class="contract-expired" title="Expired contract is still open">Expired {{project.contractEndDate|date:'dd-MMM-yyyy'}} · Open</small></td>
+                <td class="project-type-cell" title="{{project.projectType}} · {{project.platformName}} · {{project.contractYear}}">{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small><small ng-if="project.contractYear" class="platform-tag" title="Contract year">{{project.contractYear}}</small><small ng-if="project.contractEndDate&&!project.isExpiredUnclosed" class="contract-expiry" title="Contract expiry">Ends {{project.contractEndDate|date:'dd-MMM-yyyy'}} · {{project.daysToExpiry}} days</small><small ng-if="project.isExpiredUnclosed" class="contract-expired" title="Expired contract is still open">Expired {{project.contractEndDate|date:'dd-MMM-yyyy'}} · Open</small></td>
                 <td title="{{project.accountableExecLead}}">{{project.accountableExecLead}}</td>
                 <td title="{{project.smeLead}}">{{project.smeLead}}</td>
                 <td title="{{project.projectManager}}">{{project.projectManager}}</td>
                 <td title="{{project.requestorName||project.requestorEmail}}">{{project.requestorName||project.requestorEmail}}</td>
-                <td><span class="count-chip">{{project.spendRequestCount}}</span></td>
-                <td><span class="count-chip">{{project.budgetLineCount}}</span></td>
+                <td ng-if="!vm.isOpexContract(project)"><span class="count-chip">{{project.spendRequestCount}}</span></td>
+                <td ng-if="!vm.isOpexContract(project)"><span class="count-chip">{{project.budgetLineCount}}</span></td>
                 <td><span class="count-chip">{{project.invoiceCount}}</span></td>
                 <td>{{vm.money(vm.projectBudgetAmount(project))}}</td>
                 <td>{{project.createdUtc | date:'dd-MMM-yyyy'}}</td>
@@ -271,6 +271,13 @@
                       <i data-lucide="receipt-text"></i></button
                     ><button
                       class="icon-btn"
+                      title="Upload invoices from CSV or Excel"
+                      ng-if="vm.can('request')&&vm.isOpexContract(project)"
+                      ng-click="vm.openUpload('contractInvoice',project)"
+                    >
+                      <i data-lucide="upload"></i></button
+                    ><button
+                      class="icon-btn"
                       title="View invoices"
                       ng-if="vm.isOpexContract(project)&&project.invoiceCount>0"
                       ng-click="vm.toggleProject(project)"
@@ -300,7 +307,7 @@
                   <div class="child-panel">
                     <div class="child-title" ng-if="vm.isOpexContract(project)">
                       <div><span class="level-label">CONTRACT INVOICES</span><strong>{{project.contractNumber}} · {{project.vendorName}}</strong></div>
-                      <button class="btn compact primary" ng-if="vm.can('request')" ng-click="vm.openContractInvoice(project)"><i data-lucide="plus"></i>Add invoice</button>
+                      <div class="row-actions" ng-if="vm.can('request')"><button class="btn compact secondary" ng-click="vm.openUpload('contractInvoice',project)"><i data-lucide="upload"></i>Upload invoices</button><button class="btn compact primary" ng-click="vm.openContractInvoice(project)"><i data-lucide="plus"></i>Add invoice</button></div>
                     </div>
                     <div class="empty" ng-if="vm.isOpexContract(project)&&!project.invoices.length">
                       <i data-lucide="receipt-text"></i><strong>No invoices recorded for this contract.</strong>
@@ -980,9 +987,9 @@
         </div>
         <div class="table-scroll" ng-if="vm.platformReportRows.length">
           <table class="data-table projects platform-report">
-            <thead><tr><th>Platform</th><th>OPEX Contracts</th><th>PETs</th><th>Budget lines</th><th>Invoices</th><th>Total budget</th><th>Invoiced</th><th>Action</th></tr></thead>
+            <thead><tr><th>Platform</th><th>OPEX Contracts</th><th>Invoices</th><th>Total budget</th><th>Invoiced</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="row in vm.platformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.petCount}}</span></td><td><span class="count-chip">{{row.budgetLineCount}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="filter"></i>{{vm.reportProjectPlatformFilter===row.key?'Clear filter':'Filter'}}</button></td></tr>
+              <tr ng-repeat="row in vm.platformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="filter"></i>{{vm.reportProjectPlatformFilter===row.key?'Clear filter':'Filter'}}</button></td></tr>
             </tbody>
           </table>
         </div>
@@ -2006,6 +2013,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=40"></script>
+    <script src="app/app.js?v=41"></script>
   </body>
 </html>

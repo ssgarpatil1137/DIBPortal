@@ -1755,7 +1755,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
         public async Task<IHttpActionResult> Bulk(string kind, int parentId)
         {
             if (IsApproverOnly()) return RejectApproverWrite();
-            if (!new[] { "pet", "budget", "invoice" }.Contains(kind, StringComparer.OrdinalIgnoreCase)) return BadRequest("Unknown template type.");
+            if (!new[] { "pet", "budget", "invoice", "contractInvoice" }.Contains(kind, StringComparer.OrdinalIgnoreCase)) return BadRequest("Unknown template type.");
             try
             {
                 int imported;

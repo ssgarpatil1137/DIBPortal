@@ -1947,6 +1947,36 @@ main {
   background: #fff;
   box-shadow: 0 6px 18px rgba(14, 63, 43, 0.12);
 }
+.project-register-table .project-type-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.project-register-table.opex-contract-register-table th:nth-child(4),
+.project-register-table.opex-contract-register-table td:nth-child(4) {
+  width: 170px;
+  min-width: 170px;
+}
+.project-register-table.opex-contract-register-table th:nth-child(9),
+.project-register-table.opex-contract-register-table td:nth-child(9) {
+  width: 72px;
+  text-align: center;
+}
+.project-register-table.opex-contract-register-table th:nth-child(10),
+.project-register-table.opex-contract-register-table td:nth-child(10) {
+  width: 120px;
+  text-align: right;
+}
+.project-register-table.opex-contract-register-table th:nth-child(11),
+.project-register-table.opex-contract-register-table td:nth-child(11) { width: 96px; }
+.project-register-table.opex-contract-register-table th:nth-child(12),
+.project-register-table.opex-contract-register-table td:nth-child(12) {
+  width: 190px;
+  position: sticky;
+  right: 0;
+  overflow: visible;
+  background: var(--paper);
+  box-shadow: -1px 0 0 var(--line), -10px 0 18px rgba(14, 63, 43, 0.08);
+}
 .project-register-table .project-row > td:not(:last-child):hover .project-name,
 .project-register-table .project-row > td:not(:last-child):hover .truncate-cell,
 .project-register-table .project-row > td:not(:last-child):hover .text-link,
