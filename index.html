@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=33" />
+    <link rel="stylesheet" href="app/styles.css?v=34" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -161,7 +161,7 @@
               <option>Approved</option>
                             <option>Rejected</option>
                             <option>Sent Back</option>
-            </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option><option value="opexContract">OPEX Contract</option></select>
+            </select><select ng-model="vm.viewFilter" ng-change="vm.updateView()"><option value="all">All requests</option><option value="my">My requests</option><option value="pendingReview">Pending my review</option><option value="pendingApproval">Pending my approval</option><option value="approved">My approved requests</option><option value="reviewed">My reviewed requests</option><option value="jira">JIRA requests</option><option value="nonJira">Non-JIRA requests</option><option value="opexContract">OPEX Contract</option></select><select ng-model="vm.contractYearFilter" ng-change="vm.updateView()"><option value="">All contract years</option><option ng-repeat="year in vm.contractYearOptions track by year" value="{{year}}">{{year}}</option></select>
           </div>
         </div>
         <div ng-repeat="group in vm.projectGroups track by group.key">
@@ -192,7 +192,7 @@
             <tbody
               ng-repeat="project in group.projects track by project.projectId"
             >
-              <tr class="project-row">
+              <tr class="project-row" ng-class="{'expired-contract-row':project.isExpiredUnclosed}">
                 <td>
                   <button ng-if="vm.canExpandProject(project)"
                     class="icon-btn disclosure"
@@ -213,7 +213,7 @@
                     {{project.projectName}}
                   </span>
                 </td>
-                <td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small></td>
+                <td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small><small ng-if="project.contractYear" class="platform-tag" title="Contract year">{{project.contractYear}}</small><small ng-if="project.contractEndDate&&!project.isExpiredUnclosed" class="contract-expiry" title="Contract expiry">Ends {{project.contractEndDate|date:'dd-MMM-yyyy'}} · {{project.daysToExpiry}} days</small><small ng-if="project.isExpiredUnclosed" class="contract-expired" title="Expired contract is still open">Expired {{project.contractEndDate|date:'dd-MMM-yyyy'}} · Open</small></td>
                 <td title="{{project.accountableExecLead}}">{{project.accountableExecLead}}</td>
                 <td title="{{project.smeLead}}">{{project.smeLead}}</td>
                 <td title="{{project.projectManager}}">{{project.projectManager}}</td>
@@ -1057,7 +1057,7 @@
               ><p class="form-hint full" ng-if="vm.form.isOpexContract">OPEX Contract: PET Requests, Budget Lines, Contracts and Invoices are not routed for review or approval.</p
               ><h3 class="form-section-title full">{{vm.form.isOpexContract?'OPEX Contract details':'Project details'}}</h3>
               <label
-                >Project name<input
+                >{{vm.form.isOpexContract?'Initiative / Title':'Project name'}}<input
                   ng-model="vm.form.projectName"
                   ng-change="vm.form.isJira||vm.validateProjectRegistration(true)"
                   ng-readonly="vm.form.isJira"
@@ -1082,11 +1082,30 @@
               ><label ng-if="vm.form.isOpexContract">Accountable Executive<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExec" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">SME Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.smeLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory"><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">Platform<select falcon-select2 data-placeholder="Search platform" ng-model="vm.form.platformId" ng-options="pl.platformId as pl.name for pl in vm.platformOptions()" ng-required="!vm.form.isEdit"><option value="">Select platform</option></select></label
+              ><label ng-if="vm.form.isOpexContract">Vendor<select falcon-select2 data-placeholder="Search vendor" ng-model="vm.form.vendorId" ng-options="vendor.vendorId as vendor.name for vendor in vm.contractVendorOptions()" ng-required="!vm.form.isEdit"><option value="">Select vendor</option></select></label
+              ><div class="full platform-inline-add" ng-if="vm.form.isOpexContract&&(vm.hasRole('Admin')||vm.hasRole('Master'))">
+                <button type="button" class="btn compact secondary" ng-if="!vm.form.addingVendor" ng-click="vm.form.addingVendor=true"><i data-lucide="plus"></i>Add new vendor</button>
+                <label ng-if="vm.form.addingVendor">New vendor name<input ng-model="vm.form.newVendorName" maxlength="300" placeholder="Enter vendor name" /></label>
+                <button type="button" class="btn compact primary" ng-if="vm.form.addingVendor" ng-click="vm.addContractVendorInline()"><i data-lucide="check"></i>Save vendor</button>
+                <button type="button" class="btn compact secondary" ng-if="vm.form.addingVendor" ng-click="vm.form.addingVendor=false;vm.form.newVendorName=''">Cancel</button>
+              </div
               ><div class="full platform-inline-add" ng-if="vm.form.isOpexContract&&vm.hasRole('Admin')">
                 <button type="button" class="btn compact secondary" ng-if="!vm.form.addingPlatform" ng-click="vm.form.addingPlatform=true"><i data-lucide="plus"></i>Add new platform</button>
                 <label ng-if="vm.form.addingPlatform">New platform name<input ng-model="vm.form.newPlatformName" maxlength="200" placeholder="Enter standardized platform name" /></label>
                 <button type="button" class="btn compact primary" ng-if="vm.form.addingPlatform" ng-click="vm.addPlatformInline()"><i data-lucide="check"></i>Save platform</button>
                 <button type="button" class="btn compact secondary" ng-if="vm.form.addingPlatform" ng-click="vm.form.addingPlatform=false;vm.form.newPlatformName=''">Cancel</button>
+              </div
+              ><div class="full contract-detail-grid" ng-if="vm.form.isOpexContract">
+                <label>Contract number<input ng-model="vm.form.contractNumber" ng-change="vm.validateProjectRegistration(true)" maxlength="100" ng-required="!vm.form.isEdit" /></label>
+                <label>Contract status<select ng-model="vm.form.contractStatus"><option>Open</option><option>Closed</option></select></label>
+                <label>Contract start date<input type="date" ng-model="vm.form.contractStartDate" ng-required="!vm.form.isEdit" /></label>
+                <label>Contract end date<input type="date" ng-model="vm.form.contractEndDate" ng-required="!vm.form.isEdit" /></label>
+                <label>Contract budget<input type="text" inputmode="decimal" ng-model="vm.form.contractBudget" ng-required="!vm.form.isEdit" /></label>
+                <label>GL number<input ng-model="vm.form.contractGlNumber" maxlength="50" /></label>
+                <label>Memo / CAM ID<input ng-model="vm.form.memoCamId" maxlength="100" /></label>
+                <label>CAM status<select ng-model="vm.form.memoCamStatus"><option value="">Select status</option><option>Raised to Vendor</option><option>CAM In Progress</option><option>Memo in Progress</option><option>Memo Approved</option><option>LPO in Progress</option><option>LPO Approved</option><option>Completed</option></select></label>
+                <label class="full">LPO / Service Order number<input ng-model="vm.form.lpoSoNumber" maxlength="100" /></label>
+                <label class="full">Description<textarea ng-model="vm.form.contractDescription" maxlength="2000"></textarea></label>
               </div
               ><div class="project-sizing full" ng-if="!vm.form.isOpexContract">
                 <div class="sizing-head">
@@ -1544,7 +1563,7 @@
                   ng-model="vm.form.invoiceNumber"
                   required /></label
               ><label class="full"
-                >Justification<input ng-model="vm.form.justification" /></label
+                >{{vm.isOpexContract(vm.selectedProject)?'Description':'Justification'}}<input ng-model="vm.form.justification" /></label
               ><label>GL number<input ng-model="vm.form.glNumber" readonly /></label
               ><label
                 >Invoice amount<input
@@ -1554,10 +1573,11 @@
                   required /></label
               ><label
                 >Invoice status<select ng-model="vm.form.invoiceStatus">
-                  <option>Raised</option>
-                  <option>Received</option>
-                  <option>Outstanding</option>
-                  <option>Settled</option>
+                  <option ng-if="vm.isOpexContract(vm.selectedProject)">In Progress</option>
+                  <option ng-if="!vm.isOpexContract(vm.selectedProject)">Raised</option>
+                  <option ng-if="!vm.isOpexContract(vm.selectedProject)">Received</option>
+                  <option ng-if="!vm.isOpexContract(vm.selectedProject)">Outstanding</option>
+                  <option ng-if="!vm.isOpexContract(vm.selectedProject)">Settled</option>
                   <option>Paid</option>
                 </select></label
               ><label
@@ -1954,6 +1974,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=38"></script>
+    <script src="app/app.js?v=39"></script>
   </body>
 </html>

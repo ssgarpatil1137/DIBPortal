@@ -544,7 +544,11 @@ namespace DFM.Web.Controllers
         {
             if (value == null || value.ProjectId.HasValue) return null;
             Dictionary<string, object> existing;
-            if (value.IsJira && !string.IsNullOrWhiteSpace(value.JiraKey))
+            if (value.IsOpexContract && !string.IsNullOrWhiteSpace(value.ContractNumber))
+            {
+                existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE ProjectType=@Type AND UPPER(LTRIM(RTRIM(ISNULL(ContractNumber,''))))=UPPER(LTRIM(RTRIM(@ContractNumber)))", P("@Type", OpexContract.ProjectTypeName), P("@ContractNumber", value.ContractNumber)).FirstOrDefault();
+            }
+            else if (value.IsJira && !string.IsNullOrWhiteSpace(value.JiraKey))
             {
                 existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE UPPER(LTRIM(RTRIM(ISNULL(JiraKey,''))))=UPPER(LTRIM(RTRIM(@JiraKey)))", P("@JiraKey", value.JiraKey)).FirstOrDefault();
             }
@@ -552,7 +556,7 @@ namespace DFM.Web.Controllers
             {
                 existing = Db.Query("SELECT TOP 1 ProjectCode FROM dbo.Projects WHERE LOWER(LTRIM(RTRIM(ProjectName)))=LOWER(LTRIM(RTRIM(@ProjectName)))", P("@ProjectName", value.ProjectName)).FirstOrDefault();
             }
-            return existing == null ? null : "This project is already registered as " + Convert.ToString(existing["ProjectCode"]) + ".";
+            return existing == null ? null : (value.IsOpexContract ? "This contract number is already registered as " : "This project is already registered as ") + Convert.ToString(existing["ProjectCode"]) + ".";
         }
 
         [ApiAuthorize("Requestor", "Master"), HttpPost, Route("projects")]
@@ -591,8 +595,7 @@ namespace DFM.Web.Controllers
                 var saved = rows.FirstOrDefault();
                 var projectId = SavedProjectId(saved, value.ProjectId);
                 PersistProjectSizing(projectId, value, User.Identity.Name);
-                if (projectId.HasValue && value.IsOpexContract && value.PlatformId.HasValue)
-                    Db.Execute("UPDATE dbo.Projects SET PlatformId=@PlatformId WHERE ProjectId=@ProjectId", P("@PlatformId", value.PlatformId), P("@ProjectId", projectId.Value));
+                if (projectId.HasValue && value.IsOpexContract) PersistOpexContract(projectId.Value, value);
                 return Ok(RefreshedProject(projectId) ?? saved);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -661,11 +664,53 @@ namespace DFM.Web.Controllers
                     value.JiraKey = null;
                 }
                 if (!string.IsNullOrWhiteSpace(value.BudgetType) && !value.BudgetType.Trim().Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("OPEX Contract budget type must be OPEX.");
+                ValidateOpexContractDetails(value);
             }
             else if (OpexContract.IsProjectType(value.ProjectType))
             {
                 throw new ArgumentException("Project type \"" + OpexContract.ProjectTypeName + "\" is reserved. Use Register OPEX Contract instead.");
             }
+        }
+
+        private static void ValidateOpexContractDetails(ProjectRequest value)
+        {
+            if (!value.ProjectId.HasValue)
+            {
+                if (!value.VendorId.HasValue) throw new ArgumentException("Vendor is required.");
+                if (string.IsNullOrWhiteSpace(value.ContractNumber)) throw new ArgumentException("Contract number is required.");
+                if (!value.ContractStartDate.HasValue || !value.ContractEndDate.HasValue) throw new ArgumentException("Contract start and end dates are required.");
+                if (!value.ContractBudget.HasValue) throw new ArgumentException("Contract budget is required.");
+            }
+            if (value.ContractStartDate.HasValue && value.ContractEndDate.HasValue && value.ContractEndDate.Value.Date < value.ContractStartDate.Value.Date) throw new ArgumentException("Contract end date cannot be before the start date.");
+            if (value.ContractBudget.HasValue && value.ContractBudget.Value < 0) throw new ArgumentException("Contract budget cannot be negative.");
+            value.ContractNumber = string.IsNullOrWhiteSpace(value.ContractNumber) ? null : value.ContractNumber.Trim();
+            value.ContractStatus = string.IsNullOrWhiteSpace(value.ContractStatus) ? "Open" : value.ContractStatus.Trim();
+            if (value.ContractStatus != "Open" && value.ContractStatus != "Closed") throw new ArgumentException("Contract status must be Open or Closed.");
+            var camStatuses = new[] { "Raised to Vendor", "CAM In Progress", "Memo in Progress", "Memo Approved", "LPO in Progress", "LPO Approved", "Completed" };
+            if (!string.IsNullOrWhiteSpace(value.MemoCamStatus) && !camStatuses.Contains(value.MemoCamStatus)) throw new ArgumentException("Select a valid CAM status.");
+        }
+
+        private static void PersistOpexContract(int projectId, ProjectRequest value)
+        {
+            var vendor = value.VendorId.HasValue ? Db.Query("SELECT IsActive FROM dbo.Vendors WHERE VendorId=@VendorId", P("@VendorId", value.VendorId)).FirstOrDefault() : null;
+            if (value.VendorId.HasValue && vendor == null) throw new ArgumentException("Selected vendor was not found.");
+            if (value.ContractStatus == "Closed")
+            {
+                var unpaid = Db.Query(@"SELECT TOP 1 i.InvoiceId FROM dbo.Invoices i
+                    JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+                    JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                    WHERE pet.ProjectId=@ProjectId AND (i.InvoiceStatus<>N'Paid' OR i.PaymentDate IS NULL)", P("@ProjectId", projectId)).FirstOrDefault();
+                if (unpaid != null) throw new ArgumentException("The contract cannot be closed until all invoices are Paid and have a payment date.");
+            }
+            Db.Execute(@"UPDATE dbo.Projects SET PlatformId=@PlatformId,VendorId=@VendorId,ContractNumber=@ContractNumber,
+                ContractStartDate=@StartDate,ContractEndDate=@EndDate,ContractBudget=@ContractBudget,ContractGlNumber=@GlNumber,
+                MemoCamId=@MemoCamId,MemoCamStatus=@MemoCamStatus,LpoSoNumber=@LpoSoNumber,ContractDescription=@Description,
+                ContractStatus=@ContractStatus,ContractClosedDate=CASE WHEN @ContractStatus=N'Closed' THEN ISNULL(ContractClosedDate,CONVERT(date,GETDATE())) ELSE NULL END,
+                UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId",
+                P("@PlatformId", value.PlatformId), P("@VendorId", value.VendorId), P("@ContractNumber", value.ContractNumber),
+                P("@StartDate", value.ContractStartDate), P("@EndDate", value.ContractEndDate), P("@ContractBudget", value.ContractBudget),
+                P("@GlNumber", value.ContractGlNumber), P("@MemoCamId", value.MemoCamId), P("@MemoCamStatus", value.MemoCamStatus),
+                P("@LpoSoNumber", value.LpoSoNumber), P("@Description", value.ContractDescription), P("@ContractStatus", value.ContractStatus), P("@ProjectId", projectId));
         }
 
         // Platform applies only to OPEX Contracts: required on registration; existing contracts without one can still be edited.
@@ -1098,7 +1143,19 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
         public IHttpActionResult SaveInvoice(InvoiceRequest value)
         {
             if (IsApproverOnly()) return RejectApproverWrite();
-            try { AmountValidation.ValidateInvoiceAmount(value.BudgetLineId, value.InvoiceId, value.InvoiceAmount); return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault()); }
+            try
+            {
+                var project = Db.Query(@"SELECT p.ProjectType FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE bl.BudgetLineId=@BudgetLineId", P("@BudgetLineId", value.BudgetLineId)).FirstOrDefault();
+                if (project == null) throw new ArgumentException("Budget line was not found.");
+                if (OpexContract.IsProjectType(Convert.ToString(project["ProjectType"])))
+                {
+                    if (value.InvoiceStatus != "In Progress" && value.InvoiceStatus != "Paid") throw new ArgumentException("OPEX Contract invoice status must be In Progress or Paid.");
+                    if (value.InvoiceStatus == "Paid" && !value.PaymentDate.HasValue) throw new ArgumentException("Payment date is required for a Paid invoice.");
+                    if (value.InvoiceStatus == "In Progress") value.PaymentDate = null;
+                }
+                AmountValidation.ValidateInvoiceAmount(value.BudgetLineId, value.InvoiceId, value.InvoiceAmount);
+                return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault());
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
         }
@@ -1400,7 +1457,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();
                 var dataFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("dataFile", StringComparison.OrdinalIgnoreCase));
                 var supportingFile = files.FirstOrDefault(file => MultipartFieldName(file).Equals("supportingFile", StringComparison.OrdinalIgnoreCase));
-                if (dataFile == null) return BadRequest("Choose the Non-Project OPEX CSV or Excel file first.");
+                if (dataFile == null) return BadRequest("Choose the legacy OPEX Contract CSV or Excel file first.");
 
                 var sourceFileName = Path.GetFileName(dataFile.Headers.ContentDisposition.FileName.Trim('"'));
                 var extension = Path.GetExtension(sourceFileName).ToLowerInvariant();
@@ -1411,7 +1468,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                     ? CsvBulkImporter.Parse(System.Text.Encoding.UTF8.GetString(sourceBytes))
                     : SpreadsheetTableReader.Read(new MemoryStream(sourceBytes));
                 var importRows = ParseNonProjectOpexRows(rows, sourceFileName);
-                if (importRows.Count == 0) return BadRequest("The upload has no Non-Project OPEX data rows.");
+                if (importRows.Count == 0) return BadRequest("The upload has no legacy OPEX Contract data rows.");
 
                 var batch = Db.Query("INSERT dbo.NonProjectOpexBatches(SourceFile,CreatedBy) VALUES(@source,@user); SELECT CONVERT(int,SCOPE_IDENTITY()) NonProjectOpexBatchId", P("@source", AttachmentColumnValue(sourceFileName, 260, "upload.csv")), P("@user", User.Identity.Name)).FirstOrDefault();
                 var batchId = Convert.ToInt32(batch["NonProjectOpexBatchId"]);
@@ -1431,16 +1488,16 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
-            catch (Exception ex) { return BadRequest("Unable to import Non-Project OPEX rows. " + ex.Message); }
+            catch (Exception ex) { return BadRequest("Unable to import legacy OPEX Contract rows. " + ex.Message); }
         }
 
         private static Dictionary<string, object> NonProjectOpexRequestRow(NonProjectOpexRequest value)
         {
-            if (value == null) throw new ArgumentException("Non-Project OPEX details are required.");
+            if (value == null) throw new ArgumentException("Legacy OPEX Contract details are required.");
             value.Initiative = RequiredImportText(value.Initiative, "Initiative", 500);
             value.LineItem = RequiredImportText(value.LineItem, "Line Item", 200);
             value.BudgetType = RequiredImportText(value.BudgetType, "Budget Type", 10);
-            if (!value.BudgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Budget Type must be OPEX. Non-Project records are OPEX only.");
+            if (!value.BudgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Budget Type must be OPEX. OPEX Contract records are OPEX only.");
             value.Vendor = RequiredImportText(value.Vendor, "Vendor", 300);
             if (value.AmountApprovedAed <= 0) throw new ArgumentException("Amount Apprd(AED) must be greater than zero.");
             return new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase)
@@ -1505,7 +1562,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                     break;
                 }
             }
-            if (headerRow < 0) throw new ArgumentException("The " + sourceName + " must contain all columns from the Non-Project OPEX template.");
+            if (headerRow < 0) throw new ArgumentException("The " + sourceName + " must contain all columns from the legacy OPEX Contract template.");
 
             var result = new List<Dictionary<string, object>>();
             for (var rowIndex = headerRow + 1; rowIndex < rows.Count; rowIndex++)
@@ -1517,7 +1574,7 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
                 var lineItem = ImportText(cells, headerMap, "Line Item", 200, true, rowNumber);
                 var budgetType = ImportText(cells, headerMap, "Budget Type", 10, true, rowNumber);
                 if (!budgetType.Equals("OPEX", StringComparison.OrdinalIgnoreCase) && !budgetType.Equals("Opex", StringComparison.OrdinalIgnoreCase))
-                    throw new ArgumentException("Row " + rowNumber + ": Budget Type must be Opex. Non-Project records are OPEX only.");
+                    throw new ArgumentException("Row " + rowNumber + ": Budget Type must be Opex. OPEX Contract records are OPEX only.");
                 var amountApproved = ImportDecimal(cells, headerMap, "Amount Apprd(AED)", false, rowNumber);
                 if (amountApproved.Value <= 0) throw new ArgumentException("Row " + rowNumber + ": Amount Apprd(AED) must be greater than zero.");
                 var vendor = ImportText(cells, headerMap, "Vendor", 300, true, rowNumber);

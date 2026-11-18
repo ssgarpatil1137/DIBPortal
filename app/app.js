@@ -71,6 +71,7 @@
       vm.search = "";
       vm.statusFilter = "";
       vm.viewFilter = "all";
+      vm.contractYearFilter = "";
       vm.page = 1;
       vm.pageSize = 10;
       vm.pageCount = 1;
@@ -428,7 +429,7 @@
           maximumFractionDigits: 2,
         }).format(Number(value) || 0);
       };
-      vm.projectDisplayId = function (project) { return project && project.jiraKey ? project.jiraKey : project.projectCode; };
+      vm.projectDisplayId = function (project) { return project && vm.isOpexContract(project) && project.contractNumber ? project.contractNumber : project && project.jiraKey ? project.jiraKey : project.projectCode; };
       vm.opexContractType = "OPEX Contract";
       vm.isOpexContract = function (project) { return !!project && String(project.projectType || "").trim().toLowerCase() === vm.opexContractType.toLowerCase(); };
       vm.selectNonProjectOpexSource = function () {
@@ -2114,6 +2115,7 @@
           return (
             viewMatch &&
             statusMatch &&
+            (!vm.contractYearFilter || (vm.isOpexContract(p) && p.contractYear === vm.contractYearFilter)) &&
             (!query ||
               [
                 p.projectCode,
@@ -2122,6 +2124,9 @@
                 p.accountableExecLead,
                 p.requestorEmail,
                 p.platformName,
+                p.vendorName,
+                p.contractNumber,
+                p.contractYear,
               ]
                 .join(" ")
                 .toLowerCase()
@@ -2129,6 +2134,7 @@
           );
         });
         var opexContracts = filtered.filter(vm.isOpexContract);
+        vm.contractYearOptions = (vm.projects || []).filter(vm.isOpexContract).map(function (project) { return project.contractYear; }).filter(function (year, index, years) { return year && years.indexOf(year) === index; }).sort().reverse();
         filtered = filtered.filter(function (p) { return !vm.isOpexContract(p); });
         vm.filteredCount = filtered.length;
         vm.pageCount = Math.max(1, Math.ceil(filtered.length / vm.pageSize));
@@ -2137,7 +2143,7 @@
         vm.visibleProjects = filtered.slice(start, start + vm.pageSize);
         vm.visibleOpexContracts = opexContracts;
         vm.projectGroups = (vm.viewFilter === "opexContract" ? [] : [{ key: "projects", projects: vm.visibleProjects }])
-          .concat([{ key: "opexContracts", title: "OPEX Contract line items", projects: opexContracts }]);
+          .concat([{ key: "opexContracts", title: "OPEX Contracts", projects: opexContracts }]);
         vm.visibleNonProjectOpex = (vm.nonProjectOpex || []).filter(function (row) {
           return !query || [row.initiative, row.platform, row.lineItem, row.opexReference, row.vendor, row.createdBy]
             .join(" ").toLowerCase().indexOf(query) >= 0;
@@ -2434,10 +2440,18 @@
             budgetType: isOpexContract ? "OPEX" : "",
             budgetSourceId: null,
             requiresPet: true,
+            contractStatus: isOpexContract ? "Open" : null,
           },
         );
         vm.form.isOpexContract = isOpexContract;
-        if (isOpexContract) { vm.userDirectory = []; loadUserDirectory(); loadPlatforms(false); }
+        if (isOpexContract) {
+          vm.userDirectory = [];
+          loadUserDirectory();
+          loadPlatforms(false);
+          loadVendors(false);
+          if (vm.form.contractStartDate) vm.form.contractStartDate = new Date(vm.form.contractStartDate);
+          if (vm.form.contractEndDate) vm.form.contractEndDate = new Date(vm.form.contractEndDate);
+        }
         vm.form.isEdit = !!project;
         normalizeProjectSizing(vm.form);
         vm.form.projectSizingScores = parseProjectSizingScores(vm.form.projectSizingScores);
@@ -2453,13 +2467,15 @@
         var currentProjectId = vm.form.projectId;
         var jiraKey = normalizedRegistrationValue(vm.form.isJira ? vm.form.jiraKey : "");
         var projectName = normalizedRegistrationValue(vm.form.projectName);
-        if (!jiraKey && !projectName) return null;
+        var contractNumber = normalizedRegistrationValue(vm.form.isOpexContract ? vm.form.contractNumber : "");
+        if (!jiraKey && !projectName && !contractNumber) return null;
         return (vm.projects || []).filter(function (project) {
           if (!project) return false;
           if (currentProjectId && String(project.projectId) === String(currentProjectId)) return false;
           var existingJiraKey = normalizedRegistrationValue(project.jiraKey);
           var existingProjectName = normalizedRegistrationValue(project.projectName);
-          return (jiraKey && existingJiraKey === jiraKey) || (projectName && existingProjectName === projectName);
+          var existingContractNumber = normalizedRegistrationValue(project.contractNumber);
+          return vm.form.isOpexContract ? contractNumber && existingContractNumber === contractNumber : (jiraKey && existingJiraKey === jiraKey) || (projectName && existingProjectName === projectName);
         })[0] || null;
       }
       function validateProjectRegistration(showToast) {
@@ -2784,7 +2800,7 @@
             budgetLineId: line.budgetLineId,
             vendorName: line.vendor,
             glNumber: line.glNumber,
-            invoiceStatus: "Raised",
+            invoiceStatus: vm.isOpexContract(vm.selectedProject) ? "In Progress" : "Raised",
           },
         );
         if (vm.form.paymentDate)
@@ -2938,6 +2954,34 @@
           redraw();
           $timeout(function () { window.jQuery("select[falcon-select2]").trigger("change.select2"); }, 0, false);
         }, function (response) { noticeError(responseMessage(response, "Unable to add platform.")); });
+      };
+      vm.contractVendorOptions = function () {
+        var selected = vm.form && vm.form.vendorId;
+        return (vm.vendors || []).filter(function (vendor) { return vendor && (vendor.isActive || String(vendor.vendorId) === String(selected)); });
+      };
+      vm.addContractVendorInline = function () {
+        var name = String(vm.form && vm.form.newVendorName || "").trim();
+        if (!name) { noticeError("Enter the new vendor name."); return; }
+        if (!validateVendorDuplicate({ name: name })) return;
+        if (vm.demo) {
+          var demoVendor = { vendorId: Date.now(), name: name, isActive: true };
+          vm.vendors.push(demoVendor);
+          vm.form.vendorId = demoVendor.vendorId;
+          vm.form.newVendorName = "";
+          vm.form.addingVendor = false;
+          notice("Vendor added");
+          return;
+        }
+        $http.post("api/portfolio/vendors", { name: name, isActive: true }).then(function (response) {
+          var saved = response.data || {};
+          vm.vendors.push(saved);
+          vm.form.vendorId = saved.vendorId;
+          vm.form.newVendorName = "";
+          vm.form.addingVendor = false;
+          notice("Vendor " + saved.name + " added");
+          redraw();
+          $timeout(function () { window.jQuery("select[falcon-select2]").trigger("change.select2"); }, 0, false);
+        }, function (response) { noticeError(responseMessage(response, "Unable to add vendor.")); });
       };
       vm.openGlFund = function (gl) {
         vm.selectedGlFundItem = gl || null;
@@ -3280,6 +3324,7 @@
         if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.form.isEdit && !vm.form.isOpexContract && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
         if (type === "project" && vm.form.isOpexContract && !vm.form.isEdit && !vm.form.platformId) { noticeError("Platform is required."); return; }
+        if (type === "project" && vm.form.isOpexContract && !vm.form.isEdit && (!vm.form.vendorId || !vm.form.contractNumber || !vm.form.contractStartDate || !vm.form.contractEndDate || vm.form.contractBudget == null)) { noticeError("Vendor, contract number, dates and budget are required."); return; }
         if (type === "project" && !vm.demo) {
           // Registration is one-time (no projectId -> insert); every save after that is an
           // update against the same projectId, so a project can be edited any number of times.
@@ -3300,6 +3345,17 @@
             budgetSourceId: vm.form.budgetType ? vm.form.budgetSourceId : null,
             isOpexContract: !!vm.form.isOpexContract,
             platformId: vm.form.isOpexContract ? (vm.form.platformId || null) : null,
+            vendorId: vm.form.isOpexContract ? (vm.form.vendorId || null) : null,
+            contractNumber: vm.form.isOpexContract ? vm.form.contractNumber : null,
+            contractStartDate: vm.form.isOpexContract ? vm.form.contractStartDate : null,
+            contractEndDate: vm.form.isOpexContract ? vm.form.contractEndDate : null,
+            contractBudget: vm.form.isOpexContract ? parseNumericInput(vm.form.contractBudget) : null,
+            contractGlNumber: vm.form.isOpexContract ? vm.form.contractGlNumber : null,
+            memoCamId: vm.form.isOpexContract ? vm.form.memoCamId : null,
+            memoCamStatus: vm.form.isOpexContract ? vm.form.memoCamStatus : null,
+            lpoSoNumber: vm.form.isOpexContract ? vm.form.lpoSoNumber : null,
+            contractDescription: vm.form.isOpexContract ? vm.form.contractDescription : null,
+            contractStatus: vm.form.isOpexContract ? (vm.form.contractStatus || "Open") : null,
           };
           $http.post("api/portfolio/projects", payload).then(function (response) {
             notice(payload.isOpexContract ? (payload.projectId ? "OPEX Contract updated" : "OPEX Contract registered") : payload.projectId ? "Project updated" : "Project registered");
