@@ -46,7 +46,7 @@ namespace DFM.Web.Controllers
                     CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(x.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
                         OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests x ON x.PetId=s.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(s.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
                         OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(bl.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
-                        OR EXISTS(SELECT 1 FROM dbo.Invoices i JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE (i.ProjectId=p.ProjectId OR x.ProjectId=p.ProjectId) AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
                         THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord
                     FROM dbo.vw_ProjectPortfolio p
                     OUTER APPLY (SELECT
@@ -95,11 +95,11 @@ namespace DFM.Web.Controllers
         {
             try
             {
-                return Ok(Db.Query(@"SELECT i.InvoiceId,i.BudgetLineId,bl.PetId,pet.ProjectId,i.VendorName,i.InvoiceNumber,i.InvoiceAmount,i.InvoiceStatus,i.PaymentDate,i.CreatedUtc
+                return Ok(Db.Query(@"SELECT i.InvoiceId,i.BudgetLineId,bl.PetId,COALESCE(i.ProjectId,pet.ProjectId) ProjectId,i.VendorName,i.InvoiceNumber,i.InvoiceAmount,i.InvoiceStatus,i.PaymentDate,i.CreatedUtc
                     FROM dbo.Invoices i
-                    JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
-                    JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
-                    WHERE (@AllStatuses=1 OR pet.Status='Approved')
+                    LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+                    LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                    WHERE i.ProjectId IS NOT NULL OR @AllStatuses=1 OR pet.Status='Approved'
                     ORDER BY i.InvoiceId", P("@AllStatuses", allStatuses)));
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -117,7 +117,7 @@ namespace DFM.Web.Controllers
                                 WHERE (EntityType IN ('BudgetLineCAM','BudgetLineLPO')
                                     AND EntityId IN (SELECT b.BudgetLineId FROM dbo.BudgetLines b JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))
                                     OR (EntityType='InvoiceDocument'
-                                    AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i JOIN dbo.BudgetLines b ON b.BudgetLineId=i.BudgetLineId JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE p.ProjectId=@ProjectId))", P("@ProjectId", projectId)));
+                                    AND EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines b ON b.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests p ON p.PetId=b.PetId WHERE i.ProjectId=@ProjectId OR p.ProjectId=@ProjectId))", P("@ProjectId", projectId)));
             return Ok(new {
                 project = sets[0].FirstOrDefault(),
                 pets = sets[1],
@@ -582,6 +582,7 @@ namespace DFM.Web.Controllers
                     if (existing != null && existing["RequiresPet"] != null) requiresPet = Convert.ToBoolean(existing["RequiresPet"]);
                     if (existing != null && existing["SkipReview"] != null) skipReview = Convert.ToBoolean(existing["SkipReview"]);
                 }
+                if (value.IsOpexContract) { requiresPet = false; skipReview = true; }
                 List<Dictionary<string, object>> rows;
                 try
                 {
@@ -697,9 +698,9 @@ namespace DFM.Web.Controllers
             if (value.ContractStatus == "Closed")
             {
                 var unpaid = Db.Query(@"SELECT TOP 1 i.InvoiceId FROM dbo.Invoices i
-                    JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
-                    JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
-                    WHERE pet.ProjectId=@ProjectId AND (i.InvoiceStatus<>N'Paid' OR i.PaymentDate IS NULL)", P("@ProjectId", projectId)).FirstOrDefault();
+                    LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+                    LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                    WHERE (i.ProjectId=@ProjectId OR pet.ProjectId=@ProjectId) AND (i.InvoiceStatus<>N'Paid' OR i.PaymentDate IS NULL)", P("@ProjectId", projectId)).FirstOrDefault();
                 if (unpaid != null) throw new ArgumentException("The contract cannot be closed until all invoices are Paid and have a payment date.");
             }
             Db.Execute(@"UPDATE dbo.Projects SET PlatformId=@PlatformId,VendorId=@VendorId,ContractNumber=@ContractNumber,
@@ -774,6 +775,7 @@ DECLARE @RequestorEmail nvarchar(254);
 SELECT @RequestorEmail=RequestorEmail FROM dbo.Projects WHERE ProjectId=@ProjectId;
 IF @RequestorEmail IS NULL BEGIN RAISERROR('Project not found.',16,1); RETURN; END;
 IF EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId) BEGIN RAISERROR('This project has PET requests; delete them first.',16,1); RETURN; END;
+IF EXISTS(SELECT 1 FROM dbo.Invoices WHERE ProjectId=@ProjectId) BEGIN RAISERROR('This OPEX Contract has invoices; delete them first.',16,1); RETURN; END;
 IF @IsElevated=0 AND UPPER(LTRIM(RTRIM(ISNULL(@RequestorEmail,''))))<>UPPER(LTRIM(RTRIM(ISNULL(@User,'')))) BEGIN RAISERROR('You are not allowed to delete this project.',16,1); RETURN; END;
 DELETE FROM dbo.Attachments WHERE EntityType='Project' AND EntityId=@ProjectId;
 DELETE FROM dbo.Projects WHERE ProjectId=@ProjectId;",
@@ -816,9 +818,8 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             if (value == null) return BadRequest("PET details are required.");
             try
             {
+                if (OpexContract.IsProject(value.ProjectId)) return BadRequest("OPEX Contracts do not use PET Requests. Add invoices directly to the contract.");
                 EnsureProjectBudgetSelection(value);
-                var isOpexContract = OpexContract.IsProject(value.ProjectId);
-                if (isOpexContract) value.ReviewRequired = false;
                 if (value.PetId.HasValue)
                 {
                     var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
@@ -844,11 +845,6 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 var saved = SavePetRow(value, isSentBack).FirstOrDefault();
                 var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
                 if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems, User.Identity.Name);
-                if (isOpexContract)
-                {
-                    OpexContract.FinalizePet(petId, !value.PetId.HasValue, User.Identity.Name);
-                    if (saved != null) saved["Status"] = "Approved";
-                }
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -1052,6 +1048,8 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             try
             {
                 if (value == null) return BadRequest("Budget Line details are required.");
+                var projectType = Db.Query("SELECT p.ProjectType FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE pet.PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
+                if (projectType != null && OpexContract.IsProjectType(Convert.ToString(projectType["ProjectType"]))) return BadRequest("OPEX Contracts do not use Budget Lines. Add invoices directly to the contract.");
                 if (!value.BudgetLineId.HasValue)
                 {
                     var approvedPet = Db.Query("SELECT PetId FROM dbo.PETRequests WHERE PetId=@PetId AND Status='Approved'", P("@PetId", value.PetId)).FirstOrDefault();
@@ -1145,16 +1143,32 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
             if (IsApproverOnly()) return RejectApproverWrite();
             try
             {
-                var project = Db.Query(@"SELECT p.ProjectType FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE bl.BudgetLineId=@BudgetLineId", P("@BudgetLineId", value.BudgetLineId)).FirstOrDefault();
-                if (project == null) throw new ArgumentException("Budget line was not found.");
-                if (OpexContract.IsProjectType(Convert.ToString(project["ProjectType"])))
+                if (value == null) throw new ArgumentException("Invoice details are required.");
+                var project = value.ProjectId.HasValue
+                    ? Db.Query("SELECT ProjectId,ProjectType,RequestorEmail,ContractBudget FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId)).FirstOrDefault()
+                    : Db.Query(@"SELECT p.ProjectId,p.ProjectType,p.RequestorEmail,CAST(NULL AS decimal(19,2)) ContractBudget FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE bl.BudgetLineId=@BudgetLineId", P("@BudgetLineId", value.BudgetLineId)).FirstOrDefault();
+                if (project == null) throw new ArgumentException(value.ProjectId.HasValue ? "OPEX Contract was not found." : "Budget line was not found.");
+                var isOpexContract = OpexContract.IsProjectType(Convert.ToString(project["ProjectType"]));
+                if (isOpexContract)
                 {
+                    if (!value.ProjectId.HasValue || value.BudgetLineId.HasValue) throw new ArgumentException("OPEX Contract invoices must be linked directly to the contract.");
+                    if (!User.IsInRole("Master") && !string.Equals(Convert.ToString(project["RequestorEmail"]), User.Identity.Name, StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("You are not allowed to add invoices to this OPEX Contract.");
+                    if (string.IsNullOrWhiteSpace(value.InvoiceNumber)) throw new ArgumentException("Invoice number is required.");
+                    if (string.IsNullOrWhiteSpace(value.VendorName)) throw new ArgumentException("Vendor is required.");
+                    if (value.InvoiceAmount <= 0) throw new ArgumentException("Invoice amount must be greater than zero.");
                     if (value.InvoiceStatus != "In Progress" && value.InvoiceStatus != "Paid") throw new ArgumentException("OPEX Contract invoice status must be In Progress or Paid.");
                     if (value.InvoiceStatus == "Paid" && !value.PaymentDate.HasValue) throw new ArgumentException("Payment date is required for a Paid invoice.");
                     if (value.InvoiceStatus == "In Progress") value.PaymentDate = null;
+                    var total = Db.Query("SELECT ISNULL(SUM(InvoiceAmount),0) Total FROM dbo.Invoices WHERE ProjectId=@ProjectId AND (@InvoiceId IS NULL OR InvoiceId<>@InvoiceId)", P("@ProjectId", value.ProjectId), P("@InvoiceId", value.InvoiceId)).FirstOrDefault();
+                    var contractBudget = project["ContractBudget"] == null || project["ContractBudget"] == DBNull.Value ? 0 : Convert.ToDecimal(project["ContractBudget"]);
+                    if (Convert.ToDecimal(total["Total"]) + value.InvoiceAmount > contractBudget) throw new ArgumentException("Invoice total cannot exceed the OPEX Contract budget.");
                 }
-                AmountValidation.ValidateInvoiceAmount(value.BudgetLineId, value.InvoiceId, value.InvoiceAmount);
-                return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name)).FirstOrDefault());
+                else
+                {
+                    if (value.ProjectId.HasValue || !value.BudgetLineId.HasValue) throw new ArgumentException("Regular Project invoices must be linked to a Budget Line.");
+                    AmountValidation.ValidateInvoiceAmount(value.BudgetLineId.Value, value.InvoiceId, value.InvoiceAmount);
+                }
+                return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User,@Project", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name), P("@Project", value.ProjectId)).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
@@ -1186,9 +1200,9 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
 DECLARE @ProjectId int, @Status nvarchar(50), @RequestorEmail nvarchar(254);
 SELECT @ProjectId=p.ProjectId, @Status=i.InvoiceStatus, @RequestorEmail=p.RequestorEmail
 FROM dbo.Invoices i
-JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
-JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
-JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
+LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+JOIN dbo.Projects p ON p.ProjectId=COALESCE(i.ProjectId,pet.ProjectId)
 WHERE i.InvoiceId=@InvoiceId;
 IF @ProjectId IS NULL BEGIN RAISERROR('Invoice not found.',16,1); RETURN; END;
 IF UPPER(LTRIM(RTRIM(ISNULL(@Status,'')))) IN ('SETTLED','PAID') BEGIN RAISERROR('Settled or Paid invoices cannot be deleted.',16,1); RETURN; END;
@@ -1281,6 +1295,16 @@ DELETE FROM dbo.Invoices WHERE InvoiceId=@InvoiceId;",
             if (IsApproverOnly()) return RejectApproverWrite();
             try
             {
+                if (entityType != null && entityType.Equals("InvoiceDocument", StringComparison.OrdinalIgnoreCase))
+                {
+                    var owner = Db.Query(@"SELECT i.ProjectId,p.RequestorEmail FROM dbo.Invoices i
+                        LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
+                        LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
+                        JOIN dbo.Projects p ON p.ProjectId=COALESCE(i.ProjectId,pet.ProjectId)
+                        WHERE i.InvoiceId=@InvoiceId", P("@InvoiceId", entityId)).FirstOrDefault();
+                    if (owner == null) return BadRequest("Invoice was not found.");
+                    if (owner["ProjectId"] != null && owner["ProjectId"] != DBNull.Value && !User.IsInRole("Master") && !string.Equals(Convert.ToString(owner["RequestorEmail"]), User.Identity.Name, StringComparison.OrdinalIgnoreCase)) return Content(HttpStatusCode.Forbidden, "You are not allowed to upload documents to this invoice.");
+                }
                 if (!Request.Content.IsMimeMultipartContent()) return Content(HttpStatusCode.UnsupportedMediaType, "Use multipart/form-data.");
                 var provider = await Request.Content.ReadAsMultipartAsync(new MultipartMemoryStreamProvider());
                 var files = provider.Contents.Where(content => content.Headers.ContentDisposition != null && !string.IsNullOrWhiteSpace(content.Headers.ContentDisposition.FileName)).ToList();

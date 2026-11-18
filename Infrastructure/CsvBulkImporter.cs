@@ -49,6 +49,7 @@ namespace DFM.Web.Infrastructure
 
         public static int ImportPetRows(int projectId, IEnumerable<PetUploadRowRequest> rows, string user)
         {
+            if (OpexContract.IsProject(projectId)) throw new ArgumentException("OPEX Contracts do not use PET Requests. Add invoices directly to the contract.");
             var sourceRows = (rows ?? Enumerable.Empty<PetUploadRowRequest>()).Where(row => row != null && HasPetUploadData(row)).ToList();
             var petReference = sourceRows.Select(row => row.PetReference).FirstOrDefault(reference => !string.IsNullOrWhiteSpace(reference));
             if (string.IsNullOrWhiteSpace(petReference)) petReference = GeneratedPetReference();
@@ -56,8 +57,6 @@ namespace DFM.Web.Infrastructure
             EnsurePetLineIds(uploadRows, true);
             if (uploadRows.Count == 0) throw new ArgumentException("Add at least one PET row before saving.");
             VendorMaintenance.EnsureVendors(uploadRows, row => row.Vendor);
-            var isOpexContract = OpexContract.IsProject(projectId);
-            if (isOpexContract) uploadRows.ForEach(row => row.ReviewRequired = false);
             var imported = 0;
             foreach (var group in uploadRows.GroupBy(row => row.PetReference, StringComparer.OrdinalIgnoreCase))
             {
@@ -82,7 +81,6 @@ namespace DFM.Web.Infrastructure
                     if (!ProcedureParameterError(ex)) throw;
                     result = Db.Query("EXEC dbo.sp_SavePet @PetId,@project,@code,@amount,@currency,@user", P("@PetId", petId == 0 ? (object)null : petId), P("@project", projectId), P("@code", group.Key), P("@amount", uploadedTotal), P("@currency", firstRow.Currency), P("@user", user));
                 }
-                var isNewPet = petId == 0;
                 if (petId == 0) petId = Convert.ToInt32(result[0]["PetId"]);
                 foreach (var item in group)
                 {
@@ -96,7 +94,6 @@ namespace DFM.Web.Infrastructure
                         Db.Query("EXEC dbo.sp_SaveSpendItem NULL,@pet,@head,@topic,@vendor,@costType,@unitType,@units,@unitPrice,@currency,@foreign,@aed,@contingency,@gl", P("@pet", petId), P("@head", item.Head), P("@topic", item.Topic), P("@vendor", item.Vendor), P("@costType", item.CostType), P("@unitType", item.UnitType), P("@units", item.Units), P("@unitPrice", item.UnitPrice), P("@currency", item.Currency), P("@foreign", item.ForeignAmount), P("@aed", item.AedAmount), P("@contingency", item.ContingencyPercent), P("@gl", item.GlNumber)); imported++;
                     }
                 }
-                if (isOpexContract) OpexContract.FinalizePet(petId, isNewPet, user);
             }
             return imported;
         }

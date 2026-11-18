@@ -1271,6 +1271,7 @@
           notice("Invoice deleted");
           vm.invoices = (vm.invoices || []).filter(function (item) { return Number(item.invoiceId) !== Number(invoice.invoiceId); });
           if (vm.selectedLine && vm.selectedLine.invoices) vm.selectedLine.invoices = vm.invoices;
+          if (!vm.selectedLine && vm.selectedProject) vm.selectedProject.invoices = vm.invoices;
           loadDashboard().then(function () {
             if (!projectId) return;
             refreshProjectPets(projectId, true).then(function () {
@@ -1282,6 +1283,7 @@
                 vm.selectedLine = refreshedLine;
                 vm.invoices = refreshedLine.invoices || [];
               }
+              if (!budgetLineId && vm.selectedProject) vm.invoices = vm.selectedProject.invoices || [];
             });
           });
         }, function (response) { noticeError(responseMessage(response, "Unable to delete this Invoice.")); });
@@ -2092,7 +2094,7 @@
         });
       };
       vm.visibleInvoices = function (line) {
-        return (line && line.invoices || []).filter(function (invoice) {
+        return (line && line.invoices || vm.invoices || []).filter(function (invoice) {
           return vm.viewFilter !== "my" || createdByCurrentUser(invoice);
         });
       };
@@ -2360,6 +2362,7 @@
           if (typeof project.petsLoaded === "undefined") project.petsLoaded = angular.isArray(project.pets);
           project.pets = project.pets || [];
           project.budgetLines = project.budgetLines || [];
+          project.invoices = project.invoices || [];
           project.petCount = project.petsLoaded ? project.pets.length : Number(project.petCount) || 0;
           project.approvedPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Approved"; }).length : Number(project.approvedPetCount) || 0;
           project.pendingReviewPetCount = project.petsLoaded ? project.pets.filter(function (pet) { return pet.status === "Pending Review"; }).length : Number(project.pendingReviewPetCount) || 0;
@@ -2372,7 +2375,7 @@
           if (!project.petsLoaded) return;
           project.spendRequestCount = 0;
           project.budgetLineCount = 0;
-          project.invoiceCount = 0;
+          project.invoiceCount = project.invoices.length;
           project.budgetLines = [];
           project.pets.forEach(function (pet) {
             pet.spendItems = pet.spendItems || [];
@@ -2406,6 +2409,8 @@
           var data = response.data;
           if (data.project) angular.extend(project, normalizeProjectSizing(data.project));
           project.pets = data.pets || [];
+          project.invoices = (data.invoices || []).filter(function (invoice) { return Number(invoice.projectId) === Number(project.projectId); });
+          project.invoices.forEach(function (invoice) { invoice.attachments = (data.attachments || []).filter(function (attachment) { return Number(attachment.entityId) === Number(invoice.invoiceId) && String(attachment.entityType || "").toLowerCase() === "invoicedocument"; }); });
           var budgetLineAttachmentTypes = budgetLineDocumentEntityTypes();
           project.pets.forEach(function (pet) {
             pet.spendItems = (data.spendItems || []).filter(function (item) { return item.petId === pet.petId; }).map(normalizeSpendItem);
@@ -2418,7 +2423,7 @@
           });
           project.petsLoaded = true;
           project.loading = false;
-          project.expanded = keepExpandedState ? !!project.expanded : expandRegardless || project.pets.length > 0;
+          project.expanded = keepExpandedState ? !!project.expanded : expandRegardless || project.pets.length > 0 || project.invoices.length > 0;
           prepareProjects();
           vm.updateView(true);
           redraw();
@@ -2439,7 +2444,7 @@
             projectSize: "",
             budgetType: isOpexContract ? "OPEX" : "",
             budgetSourceId: null,
-            requiresPet: true,
+            requiresPet: !isOpexContract,
             contractStatus: isOpexContract ? "Open" : null,
           },
         );
@@ -2789,17 +2794,18 @@
         if (!pet) return;
         vm.openBudgetLine(pet);
       };
-      vm.openInvoice = function (line, invoice) {
+      vm.openInvoice = function (line, invoice, project) {
         vm.selectedLine = line;
         vm.invoiceDocumentFile = null;
-        vm.selectedProject = vm.projects.filter(function (p) {
+        vm.selectedProject = project || vm.projects.filter(function (p) {
           return p.pets.some(function (pet) { return pet.budgetLines && pet.budgetLines.indexOf(line) >= 0; });
         })[0];
         vm.form = angular.copy(
           invoice || {
-            budgetLineId: line.budgetLineId,
-            vendorName: line.vendor,
-            glNumber: line.glNumber,
+            projectId: vm.isOpexContract(vm.selectedProject) ? vm.selectedProject.projectId : null,
+            budgetLineId: line ? line.budgetLineId : null,
+            vendorName: line ? line.vendor : vm.selectedProject.vendorName,
+            glNumber: line ? line.glNumber : vm.selectedProject.contractGlNumber,
             invoiceStatus: vm.isOpexContract(vm.selectedProject) ? "In Progress" : "Raised",
           },
         );
@@ -2811,6 +2817,14 @@
           title: invoice ? "Update invoice" : "Add invoice",
           submit: "Save invoice",
         };
+        redraw();
+      };
+      vm.openContractInvoice = function (project, invoice) { vm.openInvoice(null, invoice, project); };
+      vm.openContractInvoiceView = function (project) {
+        vm.selectedProject = project;
+        vm.selectedLine = null;
+        vm.invoices = project.invoices || [];
+        vm.modal = { type: "invoiceView", kicker: "OPEX CONTRACT INVOICES", title: "Invoices · " + (project.contractNumber || project.projectName) };
         redraw();
       };
       vm.openBudgetLineDocuments = function (line) {
@@ -3674,7 +3688,11 @@
         }
         if (type === "invoice" && !vm.demo) {
           if (!validateNumericInput(vm.form && vm.form.invoiceAmount, "Invoice amount", false)) return;
-          var invoicePayload = angular.extend({}, vm.form, { budgetLineId: vm.selectedLine.budgetLineId });
+          var directContractInvoice = vm.isOpexContract(vm.selectedProject);
+          var invoicePayload = angular.extend({}, vm.form, {
+            projectId: directContractInvoice ? vm.selectedProject.projectId : null,
+            budgetLineId: directContractInvoice ? null : vm.selectedLine.budgetLineId,
+          });
           invoicePayload.invoiceAmount = parseNumericInput(invoicePayload.invoiceAmount);
           var invoiceProjectId = vm.selectedProject && vm.selectedProject.projectId;
           $http.post("api/portfolio/invoices", invoicePayload).then(function (response) {
@@ -3695,15 +3713,16 @@
         if (type === "invoice") {
           if (!validateNumericInput(vm.form && vm.form.invoiceAmount, "Invoice amount", false)) return;
           vm.form.invoiceAmount = parseNumericInput(vm.form.invoiceAmount);
+          var invoiceList = vm.selectedLine ? vm.selectedLine.invoices : vm.selectedProject.invoices;
           var oldInvoice =
             vm.form.invoiceId &&
-            vm.selectedLine.invoices.filter(function (x) {
+            invoiceList.filter(function (x) {
               return x.invoiceId === vm.form.invoiceId;
             })[0];
           if (oldInvoice) angular.extend(oldInvoice, vm.form);
           else {
             vm.form.invoiceId = Date.now();
-            vm.selectedLine.invoices.push(vm.form);
+            invoiceList.push(vm.form);
             vm.metrics.invoicesRaised++;
             vm.metrics.invoicesOutstanding++;
           }
