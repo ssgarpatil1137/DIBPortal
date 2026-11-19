@@ -47,6 +47,10 @@
         <button type="button" class="icon-btn" title="Close navigation" aria-label="Close navigation" ng-click="vm.navOpen=false"><i data-lucide="x"></i></button>
       </div>
       <nav class="report-sidebar-nav" ng-if="vm.tab==='reports'" aria-label="Portfolio reports">
+        <div class="report-nav-group report-workspace-links">
+          <span>Workspace tools</span>
+          <button type="button" ng-repeat="tab in vm.navTabs" ng-if="tab.id!=='reports'" ng-click="vm.setTab(tab.id)"><i data-lucide="{{tab.icon}}"></i>{{tab.label}}</button>
+        </div>
         <button type="button" ng-class="{active:vm.reportSection==='overview'}" ng-click="vm.navigateReport('overview')"><i data-lucide="layout-dashboard"></i>Overview</button>
         <button type="button" ng-class="{active:vm.reportSection==='approval'}" ng-click="vm.navigateReport('approval')"><i data-lucide="stamp"></i>Approval Monitoring</button>
         <div class="report-nav-group">
@@ -65,10 +69,6 @@
         <div class="report-nav-group">
           <span>Project Reports</span>
           <button type="button" ng-class="{active:vm.reportSection==='projects'}" ng-click="vm.navigateReport('projects')"><i data-lucide="folder-kanban"></i>Project Details</button>
-        </div>
-        <div class="report-nav-group report-workspace-links">
-          <span>Workspace tools</span>
-          <button type="button" ng-repeat="tab in vm.navTabs" ng-if="tab.id!=='reports'" ng-click="vm.setTab(tab.id)"><i data-lucide="{{tab.icon}}"></i>{{tab.label}}</button>
         </div>
       </nav>
       <nav id="workspace-tabs" class="tabs" ng-if="vm.tab!=='reports'" aria-label="Workspace">
