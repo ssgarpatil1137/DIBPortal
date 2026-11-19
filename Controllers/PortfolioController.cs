@@ -11,6 +11,7 @@ using System.Globalization;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using DFM.Web.Infrastructure;
 using DFM.Web.Models;
@@ -43,11 +44,8 @@ namespace DFM.Web.Controllers
                     ISNULL(petCounts.PendingApprovalPetCount,0) PendingApprovalPetCount,
                     ISNULL(petCounts.RejectedPetCount,0) RejectedPetCount,
                     ISNULL(petCounts.SentBackPetCount,0) SentBackPetCount,
-                    CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(x.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
-                        OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests x ON x.PetId=s.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(s.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
-                        OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(bl.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
-                        OR EXISTS(SELECT 1 FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE (i.ProjectId=p.ProjectId OR x.ProjectId=p.ProjectId) AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
-                        THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord
+                    CAST(CASE WHEN activity.HasMyCreatedRecord=1 THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord,
+                    CAST(CASE WHEN assignment.HasMyPendingAssignment=1 THEN 1 ELSE 0 END AS bit) HasMyPendingAssignment
                     FROM dbo.vw_ProjectPortfolio p
                     OUTER APPLY (SELECT
                         SUM(CASE WHEN x.Status='Approved' THEN 1 ELSE 0 END) ApprovedPetCount,
@@ -56,7 +54,25 @@ namespace DFM.Web.Controllers
                         SUM(CASE WHEN x.Status='Rejected' THEN 1 ELSE 0 END) RejectedPetCount,
                         SUM(CASE WHEN x.Status='Sent Back' THEN 1 ELSE 0 END) SentBackPetCount
                         FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId) petCounts
-                    ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name)),
+                    OUTER APPLY (SELECT CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.PETRequests x WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(x.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests x ON x.PetId=s.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(s.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE x.ProjectId=p.ProjectId AND LOWER(LTRIM(RTRIM(ISNULL(bl.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user))))
+                        OR EXISTS(SELECT 1 FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests x ON x.PetId=bl.PetId WHERE (i.ProjectId=p.ProjectId OR x.ProjectId=p.ProjectId) AND LOWER(LTRIM(RTRIM(ISNULL(i.CreatedBy,''))))=LOWER(LTRIM(RTRIM(@user)))) THEN 1 ELSE 0 END AS bit) HasMyCreatedRecord) activity
+                    OUTER APPLY (SELECT TOP 1 DisplayName FROM dbo.Users WHERE LOWER(Email)=LOWER(@user)) currentUser
+                    OUTER APPLY (SELECT CAST(CASE WHEN EXISTS(
+                        SELECT 1 FROM dbo.PETRequests pet WHERE pet.ProjectId=p.ProjectId AND (
+                            (pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))
+                            OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))
+                        )
+                    ) OR EXISTS(
+                        SELECT 1 FROM dbo.PETRequests pet JOIN dbo.vw_ActiveDelegations d ON LOWER(d.DelegateEmail)=LOWER(@user)
+                        WHERE pet.ProjectId=p.ProjectId AND (
+                            (d.DelegatorCanReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))
+                            OR (d.DelegatorCanApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))
+                        )
+                    ) THEN 1 ELSE 0 END AS bit) HasMyPendingAssignment) assignment
+                    WHERE @includeAll=1 OR LOWER(ISNULL(p.RequestorEmail,''))=LOWER(@user) OR activity.HasMyCreatedRecord=1 OR assignment.HasMyPendingAssignment=1
+                    ORDER BY p.CreatedUtc DESC", P("@user", User.Identity.Name), P("@includeAll", User.IsInRole("Admin") || User.IsInRole("Master"))),
                 approvalPets = Db.Query(@"SELECT pet.* FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId CROSS APPLY (SELECT DisplayName FROM dbo.Users WHERE Email=@user) currentUser WHERE LTRIM(RTRIM(ISNULL(p.ProjectType,'')))<>'OPEX Contract' AND ((@canReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@user) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (@canApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@user) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))) ORDER BY pet.CreatedUtc DESC", P("@user", User.Identity.Name), P("@canReview", canReview), P("@canApprove", canApprove)).Concat(DelegatedApprovalPets()).ToList(),
                 delegators = DelegationController.ReceivedDelegations(User.Identity.Name),
                 budgets = Db.Query("EXEC dbo.sp_GetBudgetSources"),
@@ -108,6 +124,7 @@ namespace DFM.Web.Controllers
         [HttpGet, Route("projects/{projectId:int}")]
         public IHttpActionResult Project(int projectId)
         {
+            if (!CanAccessProject(projectId)) return Content(HttpStatusCode.Forbidden, "You are not authorized to view this project.");
             var sets = Db.QueryMultiple("EXEC dbo.sp_GetProjectDetail @id", new SqlParameter("@id", projectId));
             var budgetLines = sets[3];
             AttachBudgetLineSourceSpendItems(budgetLines);
@@ -126,6 +143,42 @@ namespace DFM.Web.Controllers
                 invoices = sets[4],
                 attachments = attachments
             });
+        }
+
+        [HttpGet, Route("projects/{projectId:int}/audit")]
+        public IHttpActionResult ProjectAudit(int projectId)
+        {
+            if (!CanAccessProject(projectId)) return Content(HttpStatusCode.Forbidden, "You are not authorized to view this project activity.");
+            return Ok(Db.Query(@"SELECT EntityType,EntityId,ActionName,UserEmail,Detail,ActionUtc,OldValue,NewValue FROM (
+                SELECT 'Project' EntityType,p.ProjectId EntityId,'Created' ActionName,COALESCE(p.CreatedBy,p.RequestorEmail) UserEmail,p.ProjectName Detail,p.CreatedUtc ActionUtc,CAST(NULL AS nvarchar(max)) OldValue,CAST(NULL AS nvarchar(max)) NewValue FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='Project' AND a.EntityId=p.ProjectId AND a.ActionName='Create')
+                UNION ALL SELECT 'PETRequest',pet.PetId,'Created',pet.CreatedBy,pet.Code,pet.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.PETRequests pet WHERE pet.ProjectId=@ProjectId
+                UNION ALL SELECT 'SpendItem',s.SpendItemId,'Created',s.CreatedBy,s.Description,s.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId WHERE pet.ProjectId=@ProjectId AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='SpendItem' AND a.EntityId=s.SpendItemId AND a.ActionName='Create')
+                UNION ALL SELECT 'BudgetLine',bl.BudgetLineId,'Created',bl.CreatedBy,bl.Justification,bl.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=@ProjectId AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='BudgetLine' AND a.EntityId=bl.BudgetLineId AND a.ActionName='Create')
+                UNION ALL SELECT 'Invoice',i.InvoiceId,'Created',i.CreatedBy,i.InvoiceNumber,i.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE (i.ProjectId=@ProjectId OR pet.ProjectId=@ProjectId) AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='Invoice' AND a.EntityId=i.InvoiceId AND a.ActionName='Create')
+                UNION ALL SELECT a.EntityType,a.EntityId,a.ActionName,a.UserEmail,a.Detail,a.ActionUtc,a.OldValue,a.NewValue FROM dbo.AuditLog a WHERE (a.EntityType='Project' AND a.EntityId=@ProjectId)
+                    OR (a.EntityType='PETRequest' AND a.EntityId IN (SELECT PetId FROM dbo.PETRequests WHERE ProjectId=@ProjectId))
+                    OR (a.EntityType='SpendItem' AND a.EntityId IN (SELECT s.SpendItemId FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId WHERE pet.ProjectId=@ProjectId))
+                    OR (a.EntityType='BudgetLine' AND a.EntityId IN (SELECT bl.BudgetLineId FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=@ProjectId))
+                    OR (a.EntityType='Invoice' AND a.EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE i.ProjectId=@ProjectId OR pet.ProjectId=@ProjectId))
+                UNION ALL SELECT 'Workflow',h.PetId,h.ToStatus,h.ActionBy,h.Comments,h.ActionUtc,CONVERT(nvarchar(max),h.FromStatus),CONVERT(nvarchar(max),h.ToStatus) FROM dbo.WorkflowHistory h JOIN dbo.PETRequests pet ON pet.PetId=h.PetId WHERE pet.ProjectId=@ProjectId
+            ) activity ORDER BY ActionUtc DESC", P("@ProjectId", projectId)));
+        }
+
+        private bool CanAccessProject(int projectId)
+        {
+            if (User.IsInRole("Admin") || User.IsInRole("Master")) return true;
+            return Db.Query(@"SELECT TOP 1 1 Allowed FROM dbo.Projects p
+                LEFT JOIN dbo.Users currentUser ON LOWER(currentUser.Email)=LOWER(@User)
+                WHERE p.ProjectId=@ProjectId AND (
+                    LOWER(ISNULL(p.RequestorEmail,''))=LOWER(@User)
+                    OR EXISTS(SELECT 1 FROM dbo.PETRequests pet WHERE pet.ProjectId=p.ProjectId AND (LOWER(ISNULL(pet.CreatedBy,''))=LOWER(@User) OR (pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(@User) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,'')))))) OR (pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(@User) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(currentUser.DisplayName,''))))))))
+                    OR EXISTS(SELECT 1 FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId WHERE pet.ProjectId=p.ProjectId AND LOWER(ISNULL(s.CreatedBy,''))=LOWER(@User))
+                    OR EXISTS(SELECT 1 FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=p.ProjectId AND LOWER(ISNULL(bl.CreatedBy,''))=LOWER(@User))
+                    OR EXISTS(SELECT 1 FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE (i.ProjectId=p.ProjectId OR pet.ProjectId=p.ProjectId) AND LOWER(ISNULL(i.CreatedBy,''))=LOWER(@User))
+                    OR EXISTS(SELECT 1 FROM dbo.PETRequests pet JOIN dbo.vw_ActiveDelegations d ON LOWER(d.DelegateEmail)=LOWER(@User) WHERE pet.ProjectId=p.ProjectId AND (
+                        (d.DelegatorCanReview=1 AND pet.Status='Pending Review' AND (LOWER(ISNULL(pet.ReviewerEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ReviewerEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExecLead,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))
+                        OR (d.DelegatorCanApprove=1 AND pet.Status='Pending Approval' AND (LOWER(ISNULL(pet.ApproverEmail,''))=LOWER(d.DelegatorEmail) OR (ISNULL(pet.ApproverEmail,'')='' AND LTRIM(RTRIM(ISNULL(p.AccountableExec,'')))=LTRIM(RTRIM(ISNULL(d.DelegatorName,''))))))))
+                )", P("@ProjectId", projectId), P("@User", User.Identity.Name)).Count > 0;
         }
 
         [ApiAuthorize("Admin"), HttpGet, Route("roles")]
@@ -298,7 +351,12 @@ namespace DFM.Web.Controllers
         [HttpGet, Route("user-directory")]
         public IHttpActionResult UserDirectory()
         {
-            try { return Ok(Db.Query("SELECT DisplayName,Email FROM dbo.Users WHERE IsActive=1 AND PortalAccess=1 AND NULLIF(LTRIM(RTRIM(DisplayName)),'') IS NOT NULL ORDER BY DisplayName")); }
+            try
+            {
+                return Ok(Db.Query(@"SELECT u.DisplayName,u.Email,
+                    STUFF((SELECT ','+r.Name FROM dbo.UserRoles ur JOIN dbo.Roles r ON r.RoleId=ur.RoleId WHERE ur.UserId=u.UserId ORDER BY r.Name FOR XML PATH('')),1,1,'') Roles
+                    FROM dbo.Users u WHERE u.IsActive=1 AND u.PortalAccess=1 AND NULLIF(LTRIM(RTRIM(u.DisplayName)),'') IS NOT NULL ORDER BY u.DisplayName"));
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
@@ -337,6 +395,33 @@ namespace DFM.Web.Controllers
             {
                 var includeInactive = User.IsInRole("Admin") || User.IsInRole("Master");
                 return Ok(Db.Query("SELECT VendorId,Name,IsActive,CreatedUtc,UpdatedUtc FROM dbo.Vendors WHERE @includeInactive=1 OR IsActive=1 ORDER BY Name", P("@includeInactive", includeInactive)));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("vendors/{vendorId:int}/contracts")]
+        public IHttpActionResult VendorContracts(int vendorId)
+        {
+            try
+            {
+                var vendor = Db.Query("SELECT VendorId,Name,IsActive FROM dbo.Vendors WHERE VendorId=@VendorId", P("@VendorId", vendorId)).FirstOrDefault();
+                if (vendor == null) return NotFound();
+                var contracts = Db.Query(@"SELECT p.*,
+                    ISNULL(invoiceSummary.InvoiceCount,0) DirectInvoiceCount,
+                    ISNULL(invoiceSummary.InvoicedAmount,0) DirectInvoicedAmount,
+                    ISNULL(invoiceSummary.PendingPaymentAmount,0) PendingPaymentAmount,
+                    invoiceSummary.InvoiceSummary
+                    FROM dbo.vw_ProjectPortfolio p
+                    OUTER APPLY (SELECT COUNT(*) InvoiceCount,
+                        SUM(i.InvoiceAmount) InvoicedAmount,
+                        SUM(CASE WHEN i.InvoiceStatus NOT IN ('Paid','Settled') THEN i.InvoiceAmount ELSE 0 END) PendingPaymentAmount,
+                        STUFF((SELECT ', ' + ISNULL(i2.InvoiceNumber,'') + ' [' + ISNULL(i2.InvoiceStatus,'') + '] ' + CONVERT(nvarchar(30),i2.InvoiceAmount)
+                            FROM dbo.Invoices i2 WHERE i2.ProjectId=p.ProjectId ORDER BY i2.InvoiceId
+                            FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,'') InvoiceSummary
+                        FROM dbo.Invoices i WHERE i.ProjectId=p.ProjectId) invoiceSummary
+                    WHERE p.VendorId=@VendorId AND p.ProjectType=N'OPEX Contract'
+                    ORDER BY p.ContractEndDate,p.ContractNumber", P("@VendorId", vendorId));
+                return Ok(new { vendor = vendor, contracts = contracts });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -583,6 +668,9 @@ namespace DFM.Web.Controllers
                     if (existing != null && existing["SkipReview"] != null) skipReview = Convert.ToBoolean(existing["SkipReview"]);
                 }
                 if (value.IsOpexContract) { requiresPet = false; skipReview = true; }
+                var previousProject = value.ProjectId.HasValue
+                    ? Db.Query("SELECT * FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", value.ProjectId.Value)).FirstOrDefault()
+                    : null;
                 List<Dictionary<string, object>> rows;
                 try
                 {
@@ -597,6 +685,12 @@ namespace DFM.Web.Controllers
                 var projectId = SavedProjectId(saved, value.ProjectId);
                 PersistProjectSizing(projectId, value, User.Identity.Name);
                 if (projectId.HasValue && value.IsOpexContract) PersistOpexContract(projectId.Value, value);
+                if (projectId.HasValue)
+                {
+                    Db.Execute("UPDATE dbo.Projects SET CreatedBy=COALESCE(CreatedBy,RequestorEmail),UpdatedBy=@User,UpdatedUtc=SYSUTCDATETIME() WHERE ProjectId=@ProjectId", P("@User", User.Identity.Name), P("@ProjectId", projectId.Value));
+                    var currentProject = Db.Query("SELECT * FROM dbo.Projects WHERE ProjectId=@ProjectId", P("@ProjectId", projectId.Value)).FirstOrDefault();
+                    RecordAudit("Project", projectId.Value, value.ProjectId.HasValue ? "Update" : "Create", User.Identity.Name, value.ProjectName, previousProject, currentProject);
+                }
                 return Ok(RefreshedProject(projectId) ?? saved);
             }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
@@ -607,6 +701,19 @@ namespace DFM.Web.Controllers
         {
             if (saved != null && saved.ContainsKey("ProjectId") && saved["ProjectId"] != null && saved["ProjectId"] != DBNull.Value) return Convert.ToInt32(saved["ProjectId"]);
             return fallback;
+        }
+
+        private static void RecordAudit(string entityType, int entityId, string action, string user, string detail)
+        {
+            RecordAudit(entityType, entityId, action, user, detail, null, null);
+        }
+
+        private static void RecordAudit(string entityType, int entityId, string action, string user, string detail, object oldValue, object newValue)
+        {
+            Db.Execute("INSERT dbo.AuditLog(EntityType,EntityId,ActionName,UserEmail,Detail,OldValue,NewValue) VALUES(@EntityType,@EntityId,@Action,@User,@Detail,@OldValue,@NewValue)",
+                P("@EntityType", entityType), P("@EntityId", entityId), P("@Action", action), P("@User", user), P("@Detail", detail),
+                P("@OldValue", oldValue == null ? null : JsonConvert.SerializeObject(oldValue)),
+                P("@NewValue", newValue == null ? null : JsonConvert.SerializeObject(newValue)));
         }
 
         private static void PersistProjectSizing(int? projectId, ProjectRequest value, string userName)
@@ -820,11 +927,12 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             {
                 if (OpexContract.IsProject(value.ProjectId)) return BadRequest("OPEX Contracts do not use PET Requests. Add invoices directly to the contract.");
                 EnsureProjectBudgetSelection(value);
+                Dictionary<string, object> previousPet = null;
                 if (value.PetId.HasValue)
                 {
-                    var existing = Db.Query("SELECT ProjectId,Status FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
-                    if (existing == null) return BadRequest("PET request was not found.");
-                    var existingStatus = Convert.ToString(existing["Status"]).Trim();
+                    previousPet = Db.Query("SELECT * FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", value.PetId)).FirstOrDefault();
+                    if (previousPet == null) return BadRequest("PET request was not found.");
+                    var existingStatus = Convert.ToString(previousPet["Status"]).Trim();
                     if (!EditablePetStatus(existingStatus)) return BadRequest("PET requests can be edited only while Pending Review or Sent Back.");
                 }
                 if (value.SpendItems != null && value.SpendItems.Count > 0)
@@ -844,11 +952,58 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 }
                 var saved = SavePetRow(value, isSentBack).FirstOrDefault();
                 var petId = value.PetId ?? Convert.ToInt32(saved["PetId"]);
+                PersistPetAssignments(petId, value.ReviewerEmail, value.ApproverEmail, value.ReviewRequired, User.Identity.Name);
                 if (value.SpendItems != null && value.SpendItems.Count > 0) SyncPetSpendItems(petId, value.SpendItems, User.Identity.Name);
+                var currentPet = Db.Query("SELECT * FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
+                RecordAudit("PETRequest", petId, value.PetId.HasValue ? "Update" : "Create", User.Identity.Name, value.Code, previousPet, currentPet);
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }
+        }
+
+        private static void PersistPetAssignments(int petId, string reviewerEmail, string approverEmail, bool? reviewRequired, string actor)
+        {
+            var current = Db.Query("SELECT ReviewerEmail,ApproverEmail,ReviewRequired FROM dbo.PETRequests WHERE PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
+            if (current == null) throw new ArgumentException("PET request was not found.");
+            var needsReview = reviewRequired.HasValue ? reviewRequired.Value : Convert.ToBoolean(current["ReviewRequired"] ?? true);
+            var reviewer = string.IsNullOrWhiteSpace(reviewerEmail) ? Convert.ToString(current["ReviewerEmail"]) : reviewerEmail.Trim();
+            var approver = string.IsNullOrWhiteSpace(approverEmail) ? Convert.ToString(current["ApproverEmail"]) : approverEmail.Trim();
+            if (needsReview) ValidateAssignmentUser(reviewer, "Reviewer");
+            ValidateAssignmentUser(approver, "Approver");
+            var nextReviewer = needsReview ? reviewer : null;
+            Db.Execute("UPDATE dbo.PETRequests SET ReviewerEmail=@ReviewerEmail,ApproverEmail=@ApproverEmail,UpdatedBy=@Actor,UpdatedUtc=SYSUTCDATETIME() WHERE PetId=@PetId",
+                P("@ReviewerEmail", nextReviewer), P("@ApproverEmail", approver), P("@PetId", petId), P("@Actor", actor));
+            RecordAudit("PETRequest", petId, "Assignment", actor, "Reviewer=" + (nextReviewer ?? "") + "; Approver=" + approver,
+                new { ReviewerEmail = current["ReviewerEmail"], ApproverEmail = current["ApproverEmail"], ReviewRequired = current["ReviewRequired"] },
+                new { ReviewerEmail = nextReviewer, ApproverEmail = approver, ReviewRequired = needsReview });
+        }
+
+        private static void ValidateAssignmentUser(string email, string role)
+        {
+            if (string.IsNullOrWhiteSpace(email)) throw new ArgumentException(role + " is required.");
+            var user = Db.Query(@"SELECT TOP 1 u.UserId FROM dbo.Users u JOIN dbo.UserRoles ur ON ur.UserId=u.UserId JOIN dbo.Roles r ON r.RoleId=ur.RoleId
+                WHERE LOWER(u.Email)=LOWER(@Email) AND u.IsActive=1 AND u.PortalAccess=1 AND r.Name=@Role", P("@Email", email), P("@Role", role)).FirstOrDefault();
+            if (user == null) throw new ArgumentException("Selected " + role.ToLowerInvariant() + " is not an active user with the " + role + " role.");
+        }
+
+        [ApiAuthorize("Requestor", "Admin", "Master"), HttpPost, Route("pets/{petId:int}/assignment")]
+        public IHttpActionResult UpdatePetAssignment(int petId, PetAssignmentRequest value)
+        {
+            if (value == null) return BadRequest("Reviewer and approver details are required.");
+            try
+            {
+                var pet = Db.Query(@"SELECT pet.Status,pet.ReviewRequired,p.RequestorEmail,p.ProjectType FROM dbo.PETRequests pet JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE pet.PetId=@PetId", P("@PetId", petId)).FirstOrDefault();
+                if (pet == null) return NotFound();
+                if (OpexContract.IsProjectType(Convert.ToString(pet["ProjectType"]))) return BadRequest("OPEX Contracts do not use PET assignments.");
+                if (!string.Equals(Convert.ToString(pet["Status"]), "Pending Review", StringComparison.OrdinalIgnoreCase)) return BadRequest("Assignments can be changed only while the PET is Pending Review.");
+                var elevated = User.IsInRole("Admin") || User.IsInRole("Master");
+                if (!elevated && !string.Equals(Convert.ToString(pet["RequestorEmail"]), User.Identity.Name, StringComparison.OrdinalIgnoreCase)) return Content(HttpStatusCode.Forbidden, "Only the requester or an Admin can change this assignment.");
+                PersistPetAssignments(petId, value.ReviewerEmail, value.ApproverEmail, Convert.ToBoolean(pet["ReviewRequired"] ?? true), User.Identity.Name);
+                return Ok();
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+            catch (ArgumentException ex) { return BadRequest(ex.Message); }
         }
 
         private static decimal CurrencyRateToLocal(string code, decimal fallbackRate)
@@ -914,7 +1069,19 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
             var rate = CurrencyRateToLocal(value.Currency, value.ExchangeRate);
             value.ExchangeRate = rate;
             var aedAmount = foreignAmount * rate;
-            try { AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100)); return Ok(SaveSpendItemRow(value, foreignAmount, aedAmount, User.Identity.Name)); }
+            try
+            {
+                AmountValidation.ValidateSpendItemAmount(value.PetId, value.SpendItemId, aedAmount * (1 + value.ContingencyPercent / 100));
+                var previousSpendItem = value.SpendItemId.HasValue
+                    ? Db.Query("SELECT * FROM dbo.SpendItems WHERE SpendItemId=@SpendItemId", P("@SpendItemId", value.SpendItemId.Value)).FirstOrDefault()
+                    : null;
+                var saved = SaveSpendItemRow(value, foreignAmount, aedAmount, User.Identity.Name);
+                var spendItemId = value.SpendItemId ?? Convert.ToInt32(saved["SpendItemId"]);
+                Db.Execute("UPDATE dbo.SpendItems SET UpdatedBy=@User,UpdatedUtc=SYSUTCDATETIME() WHERE SpendItemId=@Id", P("@User", User.Identity.Name), P("@Id", spendItemId));
+                var currentSpendItem = Db.Query("SELECT * FROM dbo.SpendItems WHERE SpendItemId=@SpendItemId", P("@SpendItemId", spendItemId)).FirstOrDefault();
+                RecordAudit("SpendItem", spendItemId, value.SpendItemId.HasValue ? "Update" : "Create", User.Identity.Name, value.Description, previousSpendItem, currentSpendItem);
+                return Ok(saved);
+            }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (ArgumentException ex) { return BadRequest(ex.Message); }
         }
@@ -1056,11 +1223,13 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                     if (approvedPet == null) return BadRequest("Budget Lines can be added only after the selected PET is approved.");
                 }
                 object lpoStatus = null;
+                Dictionary<string, object> previousBudgetLine = null;
                 if (value.BudgetLineId.HasValue)
                 {
-                    var existing = Db.Query("SELECT PetId,LpoStatus FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", value.BudgetLineId)).FirstOrDefault();
+                    var existing = Db.Query("SELECT * FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", value.BudgetLineId)).FirstOrDefault();
                     if (existing != null)
                     {
+                        previousBudgetLine = existing;
                         value.PetId = Convert.ToInt32(existing["PetId"]);
                         lpoStatus = existing["LpoStatus"];
                     }
@@ -1078,6 +1247,9 @@ IF NOT EXISTS(SELECT 1 FROM dbo.PETRequests WHERE ProjectId=@ProjectId AND Statu
                 var saved = SaveBudgetLineRow(value, lpoStatus);
                 var budgetLineId = value.BudgetLineId ?? Convert.ToInt32(saved["BudgetLineId"]);
                 if (value.SourceSpendItemIds != null) SyncBudgetLineSourceSpendItems(budgetLineId, sourceSpendItemIds);
+                Db.Execute("UPDATE dbo.BudgetLines SET UpdatedBy=@User,UpdatedUtc=SYSUTCDATETIME() WHERE BudgetLineId=@Id", P("@User", User.Identity.Name), P("@Id", budgetLineId));
+                var currentBudgetLine = Db.Query("SELECT * FROM dbo.BudgetLines WHERE BudgetLineId=@Id", P("@Id", budgetLineId)).FirstOrDefault();
+                RecordAudit("BudgetLine", budgetLineId, value.BudgetLineId.HasValue ? "Update" : "Create", User.Identity.Name, value.Justification, previousBudgetLine, currentBudgetLine);
                 return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
@@ -1168,7 +1340,15 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
                     if (value.ProjectId.HasValue || !value.BudgetLineId.HasValue) throw new ArgumentException("Regular Project invoices must be linked to a Budget Line.");
                     AmountValidation.ValidateInvoiceAmount(value.BudgetLineId.Value, value.InvoiceId, value.InvoiceAmount);
                 }
-                return Ok(Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User,@Project", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name), P("@Project", value.ProjectId)).FirstOrDefault());
+                var previousInvoice = value.InvoiceId.HasValue
+                    ? Db.Query("SELECT * FROM dbo.Invoices WHERE InvoiceId=@InvoiceId", P("@InvoiceId", value.InvoiceId.Value)).FirstOrDefault()
+                    : null;
+                var saved = Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User,@Project", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name), P("@Project", value.ProjectId)).FirstOrDefault();
+                var invoiceId = value.InvoiceId ?? Convert.ToInt32(saved["InvoiceId"]);
+                Db.Execute("UPDATE dbo.Invoices SET UpdatedBy=@User,UpdatedUtc=SYSUTCDATETIME() WHERE InvoiceId=@Id", P("@User", User.Identity.Name), P("@Id", invoiceId));
+                var currentInvoice = Db.Query("SELECT * FROM dbo.Invoices WHERE InvoiceId=@InvoiceId", P("@InvoiceId", invoiceId)).FirstOrDefault();
+                RecordAudit("Invoice", invoiceId, value.InvoiceId.HasValue ? "Update" : "Create", User.Identity.Name, value.InvoiceNumber, previousInvoice, currentInvoice);
+                return Ok(saved);
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
             catch (Exception ex) { return BadRequest(ex.Message); }

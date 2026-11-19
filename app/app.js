@@ -70,7 +70,7 @@
       vm.demo = true;
       vm.search = "";
       vm.statusFilter = "";
-      vm.viewFilter = "all";
+      vm.viewFilter = "my";
       vm.contractYearFilter = "";
       vm.page = 1;
       vm.pageSize = 10;
@@ -115,6 +115,7 @@
       vm.reportProjectPlatformFilter = "";
       vm.reportPlatformOptions = [];
       vm.platformReportRows = [];
+      vm.contractReportRows = [];
       vm.reportProjectPage = 1;
       vm.reportProjectPageSize = 10;
       vm.reportProjectPageCount = 1;
@@ -158,6 +159,10 @@
       vm.selectedVendorKey = "";
       vm.vendor360 = null;
       vm.vendor360Tab = "projects";
+      vm.vendorContractsVendor = null;
+      vm.vendorContracts = [];
+      vm.vendorContractsLoading = false;
+      vm.vendorContractsError = "";
       vm.roleUsers = [];
       vm.delegators = [];
       vm.delegation = null;
@@ -238,12 +243,13 @@
         { id: "roles", label: "User management", icon: "users", roles: ["Admin", "Master"] },
         {
           id: "reports",
-          label: "Management report",
+          label: "Dashboard",
           icon: "chart-no-axes-combined",
           roles: ["Requestor", "Reviewer", "Approver", "Admin", "Master"],
         },
       ];
       vm.navTabs = [];
+      vm.navOpen = false;
       vm.stages = ["ITA", "Design", "Develop", "UAT", "Staging", "Live"];
       vm.metrics = {
         projectsRegistered: 0,
@@ -274,14 +280,96 @@
           vendors: "Vendor maintenance",
           platforms: "Platform maintenance",
           roles: "User management",
-          reports: "Management reporting",
+          reports: "Dashboard",
         }[vm.tab];
       };
+      function clearSessionData() {
+        vm.projects = [];
+        vm.visibleProjects = [];
+        vm.visibleOpexContracts = [];
+        vm.projectGroups = [];
+        vm.approvalItems = [];
+        vm.visibleApprovalItems = [];
+        vm.approvalSelection = {};
+        vm.bulkDecisionItems = [];
+        vm.decisionPetRows = [];
+        vm.decisionSelection = {};
+        vm.budgets = [];
+        vm.visibleBudgets = [];
+        vm.budgetUsage = [];
+        vm.nonProjectBudgetUsage = [];
+        vm.nonProjectOpex = [];
+        vm.jira = [];
+        vm.vendors = [];
+        vm.currencies = [];
+        vm.platforms = [];
+        vm.glFunds = [];
+        vm.glUtilizationRows = [];
+        vm.selectedGlUtilization = null;
+        vm.roleUsers = [];
+        vm.visibleRoleUsers = [];
+        vm.roleSummary = { reviewer: 0, approver: 0, admin: 0 };
+        vm.availableManagedRoles = [];
+        vm.delegators = [];
+        vm.delegation = null;
+        vm.delegationCandidates = [];
+        vm.receivedDelegations = [];
+        vm.userDirectory = [];
+        vm.approvalMonitorSource = [];
+        vm.visibleApprovalMonitorRows = [];
+        vm.approvalMonitorSummary = {};
+        vm.approvalMonitorLoaded = false;
+        vm.vendor360LineSource = [];
+        vm.vendor360LinesLoaded = false;
+        vm.vendorInvoiceSource = [];
+        vm.vendorInvoicesLoaded = false;
+        vm.vendorSpendRows = [];
+        vm.visibleVendorSpendRows = [];
+        vm.vendorSpendSummary = {};
+        vm.vendorContracts = [];
+        vm.vendorContractsVendor = null;
+        vm.selectedProject = null;
+        vm.selectedPet = null;
+        vm.selectedVendor = null;
+        vm.selectedVendorKey = "";
+        vm.vendor360 = null;
+        vm.selectedBudgetUsageSource = null;
+        vm.selectedBudgetUsageRows = [];
+        vm.reportBudgetUsage = [];
+        vm.reportSummary = {};
+        vm.visibleReportProjects = [];
+        vm.reportDetailProject = null;
+        vm.reportDetailBudgetUsage = [];
+        vm.reportDetailSummary = {};
+        vm.reportPlatformOptions = [];
+        vm.platformReportRows = [];
+        vm.contractReportRows = [];
+        vm.projectActivity = [];
+        vm.budgetLineSpendDetails = [];
+        vm.budgetLineVendorOptions = [];
+        vm.budgetLineSelectedSpendItems = {};
+        vm.budgetLineDocumentFiles = {};
+        vm.invoiceDocumentFile = null;
+        vm.uploadPreview = [];
+        vm.uploadFiles = [];
+        vm.uploadFile = null;
+        vm.petRowEditor = null;
+        vm.approvalMonitorFilter = "";
+        vm.modal = null;
+        vm.form = {};
+        vm.metrics = emptyReportMetrics();
+        vm.reportMetrics = emptyReportMetrics();
+        vm.search = "";
+        vm.statusFilter = "";
+        vm.viewFilter = "my";
+        vm.contractYearFilter = "";
+        vm.navOpen = false;
+      }
       vm.authTitle = function () { return vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Complete required reset" : { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
       vm.authHelp = function () { return vm.auth.mode === "login" ? "Use your synchronized Active Directory email ID." : vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Set a new password and recovery question before entering the portal." : "This anonymous step is protected by your stored security challenge."; };
       vm.authAction = function () { return vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Save credentials" : { login: "Sign in", setup: "Activate account", reset: "Verify answer", complete: "Reset password" }[vm.auth.mode]; };
-      vm.enterPreview = function () { vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
-      vm.signOut = function () { vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
+      vm.enterPreview = function () { clearSessionData(); vm.session = { displayName: "Preview User", email: "cards.requestor@dfm.ae", initials: "PU", roles: ["Requestor", "Reviewer", "Approver", "Admin"] }; vm.demo = true; vm.roleUsers = previewRoleUsers(); updateNavigation(); vm.updateRoleView(); vm.updateVendorView(); vm.updateGlView(); prepareProjects(); vm.updateView(); redraw(); };
+      vm.signOut = function () { clearSessionData(); vm.session = null; vm.demo = true; resetLoginAuth(); sessionStorage.removeItem("dfmToken"); sessionStorage.removeItem("dfmSession"); delete $http.defaults.headers.common.Authorization; redraw(); };
       function normalizeAuthEmail(value) {
         return String(value || "").trim().replace(/[;,]+$/g, "").trim().toLowerCase();
       }
@@ -409,6 +497,7 @@
       }
       vm.setTab = function (tabId) {
         vm.tab = tabId;
+        vm.navOpen = false;
         if (tabId === "currencies") loadCurrencies(true);
         if (tabId === "vendors") loadVendors(true);
         if (tabId === "platforms") loadPlatforms(true);
@@ -1638,15 +1727,39 @@
           var budgetTypeMatch = !vm.reportProjectBudgetTypeFilter || String(project.budgetType || "").toUpperCase() === vm.reportProjectBudgetTypeFilter;
           var platformMatch = !platformFilter ||
             (platformFilter === "none" ? vm.isOpexContract(project) && !project.platformId : String(project.platformId || "") === platformFilter);
-          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.platformName, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
+          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.contractNumber, project.vendorName, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.platformName, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
           return statusMatch && budgetTypeMatch && platformMatch && queryMatch;
         });
         buildPlatformReport(filtered);
+        buildContractReport(filtered);
         vm.reportProjectFilteredCount = filtered.length;
         vm.reportProjectPageCount = Math.max(1, Math.ceil(filtered.length / vm.reportProjectPageSize));
         if (!keepPage || vm.reportProjectPage > vm.reportProjectPageCount) vm.reportProjectPage = 1;
         var start = (vm.reportProjectPage - 1) * vm.reportProjectPageSize;
         vm.visibleReportProjects = filtered.slice(start, start + vm.reportProjectPageSize);
+      };
+      function directContractInvoices(project) {
+        return (vm.vendorInvoiceSource || []).filter(function (invoice) { return Number(invoice.projectId) === Number(project.projectId); });
+      }
+      function buildContractReport(projects) {
+        vm.contractReportRows = (projects || []).filter(vm.isOpexContract).map(function (project) {
+          var invoices = directContractInvoices(project);
+          var pendingInvoices = invoices.filter(function (invoice) { return !sameStatus(invoice.invoiceStatus, "Paid") && !sameStatus(invoice.invoiceStatus, "Settled"); });
+          return {
+            project: project,
+            invoiceCount: invoices.length,
+            invoicedAmount: invoices.reduce(function (total, invoice) { return total + (parseNumericInput(invoice.invoiceAmount) || 0); }, 0),
+            pendingPaymentAmount: pendingInvoices.reduce(function (total, invoice) { return total + (parseNumericInput(invoice.invoiceAmount) || 0); }, 0),
+            invoiceSummary: invoices.map(function (invoice) { return [invoice.invoiceNumber, invoice.invoiceStatus].filter(Boolean).join(" · "); }).join(", ")
+          };
+        }).sort(function (a, b) {
+          var aEnd = a.project.daysToExpiry == null ? Number.MAX_VALUE : Number(a.project.daysToExpiry);
+          var bEnd = b.project.daysToExpiry == null ? Number.MAX_VALUE : Number(b.project.daysToExpiry);
+          return aEnd - bEnd || String(a.project.contractNumber || "").localeCompare(String(b.project.contractNumber || ""));
+        });
+      }
+      vm.openReportContract = function (row) {
+        if (row && row.project) vm.openProject(row.project);
       };
       // Platform-wise summary of OPEX Contracts, grouped by the standardized Platform ID.
       function buildPlatformReport(projects) {
@@ -1663,9 +1776,10 @@
           group.contracts++;
           group.petCount += Number(project.petCount) || 0;
           group.budgetLineCount += Number(project.budgetLineCount) || 0;
-          group.invoiceCount += Number(project.invoiceCount) || 0;
+          var invoices = directContractInvoices(project);
+          group.invoiceCount += invoices.length;
           group.totalBudget += Number(vm.projectBudgetAmount(project)) || 0;
-          group.invoicedAmount += Number(project.invoicedAmount) || 0;
+          group.invoicedAmount += invoices.reduce(function (total, invoice) { return total + (parseNumericInput(invoice.invoiceAmount) || 0); }, 0);
         });
         vm.platformReportRows = Object.keys(groups).map(function (key) { return groups[key]; }).sort(function (a, b) {
           if (a.key === "none") return 1;
@@ -2108,7 +2222,7 @@
           var isMine = projectRequestorMatchesCurrentUser(p);
           var viewMatch = vm.viewFilter === "all" ||
             (vm.viewFilter === "opexContract" && vm.isOpexContract(p)) ||
-            (vm.viewFilter === "my" && projectHasCurrentUserCreatedRecord(p)) ||
+            (vm.viewFilter === "my" && (projectHasCurrentUserCreatedRecord(p) || !!p.hasMyPendingAssignment)) ||
             (vm.viewFilter === "jira" && !!p.jiraKey) ||
             (vm.viewFilter === "nonJira" && !p.jiraKey) ||
             (vm.viewFilter === "pendingReview" && pets.some(function (pet) { return pet.status === "Pending Review"; })) ||
@@ -2580,7 +2694,7 @@
           vm.reportDetailProject = project;
           vm.reportDetailBudgetUsage = rows;
           vm.reportDetailSummary = buildReportSummary(project, metrics, rows);
-          vm.modal = { type: "reportDetail", kicker: "MANAGEMENT REPORT", title: vm.projectDisplayId(project) + " · " + project.projectName };
+          vm.modal = { type: "reportDetail", kicker: "DASHBOARD REPORT", title: vm.projectDisplayId(project) + " · " + project.projectName };
           redraw();
         }
         if (!vm.demo && !project.petsLoaded) return refreshProjectPets(project.projectId, true, true).then(showReportDetails);
@@ -2594,6 +2708,31 @@
           });
         }
         openPetModal(project, pet);
+      };
+      vm.assignmentUsers = function (role) {
+        return (vm.userDirectory || []).filter(function (user) { return String(user.roles || "").split(",").indexOf(role) >= 0; });
+      };
+      function defaultPetAssignments(project) {
+        if (!vm.form || vm.isOpexContract(project)) return;
+        if (!vm.form.reviewerEmail) {
+          var reviewer = vm.assignmentUsers("Reviewer").filter(function (user) { return sameName(user.displayName, project.accountableExecLead); })[0];
+          if (reviewer) vm.form.reviewerEmail = reviewer.email;
+        }
+        if (!vm.form.approverEmail) {
+          var approver = vm.assignmentUsers("Approver").filter(function (user) { return sameName(user.displayName, project.accountableExec); })[0];
+          if (approver) vm.form.approverEmail = approver.email;
+        }
+      }
+      vm.canChangePetAssignment = function (project, pet) {
+        return pet && sameStatus(pet.status, "Pending Review") && (vm.hasRole("Admin") || vm.hasRole("Master") || sameEmail(project && project.requestorEmail, vm.session && vm.session.email));
+      };
+      vm.openPetAssignment = function (project, pet) {
+        vm.selectedProject = project;
+        vm.selectedPet = pet;
+        vm.form = { reviewerEmail: pet.reviewerEmail || "", approverEmail: pet.approverEmail || "" };
+        vm.modal = { type: "petAssignment", kicker: "WORKFLOW ASSIGNMENT", title: "Edit reviewer and approver", submit: "Save assignment" };
+        loadUserDirectory().then(function () { defaultPetAssignments(project); });
+        redraw();
       };
       function openPetModal(project, pet) {
         vm.selectedProject = project;
@@ -2633,6 +2772,7 @@
           title: pet ? "Edit " + vm.form.code : "Create PET for " + vm.projectDisplayId(project),
           submit: vm.isOpexContract(project) ? "Save PET" : pet && vm.form.status === "Sent Back" ? "Resubmit for approval" : pet ? "Save PET" : "Submit for review",
         };
+        if (!vm.isOpexContract(project)) loadUserDirectory().then(function () { defaultPetAssignments(project); });
         redraw();
       }
       vm.petVendorOnly = function () { return false; };
@@ -2730,6 +2870,24 @@
       vm.closeDecisionPetLines = function () {
         vm.decisionLinePet = null;
         redraw();
+      };
+      vm.openProjectActivity = function (project) {
+        vm.selectedProject = project;
+        vm.projectActivity = [];
+        vm.projectActivityLoading = !vm.demo;
+        vm.projectActivityError = "";
+        vm.modal = { type: "projectActivity", kicker: "PROJECT ACTIVITY", title: "Project Activity" };
+        redraw();
+        if (vm.demo) return;
+        $http.get("api/portfolio/projects/" + project.projectId + "/audit").then(function (response) {
+          vm.projectActivity = response.data || [];
+          vm.projectActivityLoading = false;
+          redraw();
+        }, function () {
+          vm.projectActivityLoading = false;
+          vm.projectActivityError = "Unable to load project activity.";
+          redraw();
+        });
       };
       vm.openHistory = function (project, pet) {
         vm.selectedProject = project;
@@ -2910,6 +3068,29 @@
           submit: vendor ? "Update vendor" : "Add vendor",
         };
         redraw();
+      };
+      vm.openVendorContracts = function (vendor) {
+        if (!vendor) return;
+        vm.vendorContractsVendor = vendor;
+        vm.vendorContracts = [];
+        vm.vendorContractsError = "";
+        vm.vendorContractsLoading = !vm.demo;
+        vm.modal = { type: "vendorContracts", kicker: "VENDOR RECORD", title: "Contracts · " + vendor.name };
+        redraw();
+        if (vm.demo) return;
+        $http.get("api/portfolio/vendors/" + vendor.vendorId + "/contracts").then(function (response) {
+          vm.vendorContracts = response.data && response.data.contracts || [];
+          vm.vendorContractsVendor = response.data && response.data.vendor || vendor;
+          vm.vendorContractsLoading = false;
+          redraw();
+        }, function (response) {
+          vm.vendorContractsLoading = false;
+          vm.vendorContractsError = responseMessage(response, "Unable to load vendor contracts.");
+          redraw();
+        });
+      };
+      vm.openVendorContract = function (contract) {
+        if (contract) vm.openProject(contract);
       };
       vm.openPlatform = function (platform) {
         vm.selectedPlatform = platform || null;
@@ -3341,6 +3522,17 @@
         if (type === "profile") { saveDelegation(); return; }
         if (type === "user") { vm.saveManagedUser(); return; }
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
+        if (type === "petAssignment") {
+          if (!vm.form.reviewerEmail || !vm.form.approverEmail) { noticeError("Select both reviewer and approver."); return; }
+          if (vm.demo) { vm.selectedPet.reviewerEmail = vm.form.reviewerEmail; vm.selectedPet.approverEmail = vm.form.approverEmail; vm.close(); return; }
+          $http.post("api/portfolio/pets/" + vm.selectedPet.petId + "/assignment", vm.form).then(function () {
+            notice("Workflow assignment updated");
+            var projectId = vm.selectedProject.projectId;
+            vm.close();
+            refreshProjectPets(projectId, true);
+          }, function (response) { noticeError(responseMessage(response, "Unable to update the workflow assignment.")); });
+          return;
+        }
         if (type === "project" && !validateProjectRegistration(true)) return;
         if (type === "project" && !vm.form.isEdit && !vm.form.isOpexContract && !vm.projectSizingComplete()) { noticeError("Project sizing is required."); return; }
         if (type === "project" && vm.form.isOpexContract && !vm.form.isEdit && !vm.form.platformId) { noticeError("Platform is required."); return; }
@@ -3453,17 +3645,11 @@
             return;
           }
           if (vm.form.status === "Sent Back" && !String(vm.form.comments || "").trim()) { noticeError("Requester comments / amendment notes are required before resubmitting."); return; }
-          if (!vm.selectedPet && (vm.uploadPreview || []).length) {
-            if (!validatePetBudgetSelection()) return;
-            var bulkPetProjectId = vm.selectedProject.projectId;
-            saveProjectBudgetSelectionIfNeeded(vm.selectedProject).then(function () {
-              savePetUploadRows(bulkPetProjectId, function () { refreshProjectPets(bulkPetProjectId, true); }, vm.form.reviewRequired);
-            }, function (response) { if (!response || !response.handled) noticeError(responseMessage(response, "Unable to save the project budget selection.")); });
-            return;
-          }
           if (!vm.selectedPet && !(vm.uploadPreview || []).length) { noticeError("Upload Excel rows or add a PET row before saving."); return; }
           if ((vm.uploadPreview || []).length && !validatePetUploadRows()) return;
           if ((vm.uploadPreview || []).length) vm.form.requestedAmount = vm.petUploadTotal;
+          if (vm.form.reviewRequired && !vm.form.reviewerEmail) { noticeError("Select a reviewer."); return; }
+          if (!vm.form.approverEmail) { noticeError("Select an approver."); return; }
           if (!validatePetRequestAmount(vm.selectedProject, vm.selectedPet, vm.form.requestedAmount)) return;
           var supportingDocument = vm.uploadFile;
           var petPayload = {
@@ -3475,6 +3661,8 @@
             vendorName: vm.form.vendorName,
             comments: vm.form.comments,
             reviewRequired: vm.form.reviewRequired,
+            reviewerEmail: vm.form.reviewRequired ? vm.form.reviewerEmail : null,
+            approverEmail: vm.form.approverEmail,
             budgetType: vm.form.budgetType || vm.selectedProject.budgetType,
             budgetSourceId: vm.form.budgetSourceId || vm.selectedProject.budgetSourceId,
           };
@@ -3992,7 +4180,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();
-          $q.all([loadApprovalMonitoring(), loadVendor360Lines(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); redraw(); });
+          $q.all([loadApprovalMonitoring(), loadVendor360Lines(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); vm.updateReportProjectView(true); redraw(); });
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();

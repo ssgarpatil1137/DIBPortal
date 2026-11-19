@@ -124,6 +124,88 @@ textarea:focus-visible {
 .tabs button.active:after {
   background: var(--gold);
 }
+.nav-toggle {
+  display: inline-flex;
+  flex: 0 0 36px;
+  justify-content: center;
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0;
+}
+.workspace-sidebar {
+  position: fixed;
+  top: 68px;
+  bottom: 0;
+  left: 0;
+  z-index: 22;
+  width: min(280px, 86vw);
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid var(--line);
+  box-shadow: 8px 0 24px rgba(16, 43, 36, 0.16);
+  transform: translateX(-105%);
+  visibility: hidden;
+  transition: transform 180ms ease, visibility 180ms linear;
+}
+.workspace-sidebar.open {
+  transform: translateX(0);
+  visibility: visible;
+}
+.sidebar-head {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 8px 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.workspace-sidebar .tabs {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  padding: 8px;
+  overflow: visible;
+}
+.workspace-sidebar .tabs button {
+  width: 100%;
+  min-height: 44px;
+  flex: 0 0 auto;
+  justify-content: flex-start;
+  padding: 0 12px;
+  color: var(--ink);
+  border-radius: 4px;
+}
+.workspace-sidebar .tabs button svg {
+  display: inline-block;
+}
+.workspace-sidebar .tabs button:after {
+  top: 8px;
+  right: auto;
+  bottom: 8px;
+  left: 0;
+  width: 3px;
+  height: auto;
+}
+.workspace-sidebar .tabs button.active {
+  color: var(--green);
+  background: #eef5f1;
+}
+.workspace-scrim {
+  position: fixed;
+  top: 68px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 21;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: rgba(8, 28, 23, 0.34);
+  cursor: pointer;
+}
 svg {
   width: 17px;
   height: 17px;
@@ -3200,6 +3282,14 @@ textarea {
     padding: 4px 8px;
     min-height: 28px;
   }
+  .nav-toggle {
+    display: inline-flex;
+    grid-column: 1 / -1;
+    grid-row: 3;
+    justify-self: start;
+    min-width: 36px;
+    min-height: 32px;
+  }
   .user-email {
     grid-column: 2 / 3;
     grid-row: 2;
@@ -3209,13 +3299,27 @@ textarea {
   }
   .tabs {
     grid-column: 1 / -1;
-    grid-row: 3;
+    grid-row: 4;
     order: initial;
     height: 30px;
     width: 100%;
     overflow-x: auto;
     overflow-y: hidden;
     scrollbar-width: none;
+  }
+  .topbar:not(.nav-open) .tabs {
+    display: none;
+  }
+  .topbar.nav-open .tabs {
+    display: flex;
+  }
+  .workspace-sidebar {
+    top: 0;
+    z-index: 32;
+  }
+  .workspace-scrim {
+    top: 0;
+    z-index: 31;
   }
   .tabs::-webkit-scrollbar {
     display: none;

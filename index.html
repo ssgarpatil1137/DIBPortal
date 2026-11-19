@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=35" />
+    <link rel="stylesheet" href="app/styles.css?v=37" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -31,7 +31,22 @@
           ><small>Demand &amp; PET control</small>
         </div>
       </div>
-      <nav class="tabs" aria-label="Workspace">
+      <button class="icon-btn nav-toggle" type="button" ng-click="vm.navOpen=!vm.navOpen" ng-attr-aria-expanded="{{vm.navOpen}}" aria-controls="workspace-tabs" ng-attr-title="{{vm.navOpen ? 'Close navigation' : 'Open navigation'}}">
+        <i data-lucide="{{vm.navOpen?'x':'menu'}}"></i>
+      </button>
+      <div class="user-area">
+        <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
+        <span class="user-email" title="{{vm.session.email}}">{{vm.session.email}}</span>
+        <button class="btn secondary topbar-btn" type="button" ng-click="vm.openProfile()"><i data-lucide="user-cog"></i>My profile</button>
+        <button class="btn secondary topbar-btn" type="button" ng-click="vm.signOut()"><i data-lucide="log-out"></i>Sign out</button>
+      </div>
+    </header>
+    <aside class="workspace-sidebar" ng-if="vm.session" ng-class="{open:vm.navOpen}" ng-attr-aria-hidden="{{!vm.navOpen}}">
+      <div class="sidebar-head">
+        <strong>Workspace</strong>
+        <button type="button" class="icon-btn" title="Close navigation" aria-label="Close navigation" ng-click="vm.navOpen=false"><i data-lucide="x"></i></button>
+      </div>
+      <nav id="workspace-tabs" class="tabs" aria-label="Workspace">
         <button
           ng-repeat="tab in vm.navTabs"
           ng-class="{active:vm.tab===tab.id}"
@@ -40,12 +55,8 @@
           <i data-lucide="{{tab.icon}}"></i>{{tab.label}}
         </button>
       </nav>
-        <span class="role-badge">{{(vm.session.roles || ['Requestor']).join(', ').replace('Master','Admin')}}</span>
-        <span class="user-email" title="{{vm.session.email}}">{{vm.session.email}}</span>
-        <button class="btn secondary topbar-btn" type="button" ng-click="vm.openProfile()"><i data-lucide="user-cog"></i>My profile</button>
-        <button class="btn secondary topbar-btn" type="button" ng-click="vm.signOut()"><i data-lucide="log-out"></i>Sign out</button>
-      </div>
-    </header>
+    </aside>
+    <button class="workspace-scrim" type="button" ng-if="vm.session&&vm.navOpen" ng-click="vm.navOpen=false" aria-label="Close navigation"></button>
 
     <main ng-if="vm.session">
       <section class="page-head">
@@ -292,6 +303,12 @@
                       <i data-lucide="table"></i></button
                     ><button
                       class="icon-btn"
+                      title="View project activity"
+                      ng-click="vm.openProjectActivity(project)"
+                    >
+                      <i data-lucide="activity"></i></button
+                    ><button
+                      class="icon-btn"
                       title="Delete project"
                       ng-if="vm.can('request')&&!project.petCount"
                       ng-click="vm.deleteProject(project)"
@@ -388,6 +405,13 @@
                                   ng-click="vm.openPet(project,pet)"
                                 >
                                   <i data-lucide="pencil"></i></button
+                                ><button
+                                  class="icon-btn"
+                                  title="Edit reviewer and approver"
+                                  ng-if="vm.canChangePetAssignment(project,pet)"
+                                  ng-click="vm.openPetAssignment(project,pet)"
+                                >
+                                  <i data-lucide="user-cog"></i></button
                                 ><button
                                   class="icon-btn"
                                   title="Workflow history"
@@ -649,10 +673,10 @@
         </div>
         <div class="table-scroll">
           <table class="data-table vendor-register">
-            <thead><tr><th>Vendor name</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Vendor name</th><th>Status</th><th>Contracts</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="vendor in vm.visibleVendors track by vendor.vendorId"><td>{{vendor.name}}</td><td><span class="status" ng-class="vendor.isActive?'approved':'rejected'">{{vendor.isActive?'Active':'Inactive'}}</span></td><td><button class="icon-btn" title="Edit vendor" ng-click="vm.openVendor(vendor)"><i data-lucide="pencil"></i></button></td></tr>
-              <tr ng-if="!vm.visibleVendors.length"><td colspan="3"><div class="empty inline-empty"><i data-lucide="store"></i><strong>No vendors match the search.</strong></div></td></tr>
+              <tr ng-repeat="vendor in vm.visibleVendors track by vendor.vendorId"><td>{{vendor.name}}</td><td><span class="status" ng-class="vendor.isActive?'approved':'rejected'">{{vendor.isActive?'Active':'Inactive'}}</span></td><td><button type="button" class="link-btn" ng-click="vm.openVendorContracts(vendor)">View contracts</button></td><td><button class="icon-btn" title="Edit vendor" ng-click="vm.openVendor(vendor)"><i data-lucide="pencil"></i></button></td></tr>
+              <tr ng-if="!vm.visibleVendors.length"><td colspan="4"><div class="empty inline-empty"><i data-lucide="store"></i><strong>No vendors match the search.</strong></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -930,7 +954,7 @@
               <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='cams'}}" ng-class="{active:vm.vendor360Tab==='cams'}" ng-click="vm.setVendor360Tab('cams')">All CAMs <b>{{vm.vendor360.cams.length}}</b></button>
               <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='lpos'}}" ng-class="{active:vm.vendor360Tab==='lpos'}" ng-click="vm.setVendor360Tab('lpos')">All LPOs <b>{{vm.vendor360.lpos.length}}</b></button>
               <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='invoices'}}" ng-class="{active:vm.vendor360Tab==='invoices'}" ng-click="vm.setVendor360Tab('invoices')">All Invoices <b>{{vm.vendor360.invoices.length}}</b></button>
-              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='contracts'}}" ng-class="{active:vm.vendor360Tab==='contracts'}" ng-click="vm.setVendor360Tab('contracts')">Active contracts (LPO approved) <b>{{vm.vendor360.contracts.length}}</b></button>
+              <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='contracts'}}" ng-class="{active:vm.vendor360Tab==='contracts'}" ng-click="vm.setVendor360Tab('contracts')">Active LPO commitments <b>{{vm.vendor360.contracts.length}}</b></button>
             </div>
             <div class="table-scroll" ng-if="vm.vendor360Tab==='projects'">
               <table class="data-table vendor-360-table">
@@ -973,7 +997,7 @@
                 <thead><tr><th>PET reference</th><th>Project</th><th>LPO number</th><th>LPO issue date</th><th>Awarded</th><th>Utilized</th><th>Outstanding</th><th>Action</th></tr></thead>
                 <tbody>
                   <tr ng-repeat="entry in vm.vendor360.contracts track by entry.line.budgetLineId"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td>{{vm.money(entry.amount-entry.invoiced)}}</td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
-                  <tr ng-if="!vm.vendor360.contracts.length"><td colspan="8"><div class="empty inline-empty"><strong>No active contracts.</strong></div></td></tr>
+                  <tr ng-if="!vm.vendor360.contracts.length"><td colspan="8"><div class="empty inline-empty"><strong>No active LPO commitments.</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -990,6 +1014,32 @@
             <thead><tr><th>Platform</th><th>OPEX Contracts</th><th>Invoices</th><th>Total budget</th><th>Invoiced</th><th>Action</th></tr></thead>
             <tbody>
               <tr ng-repeat="row in vm.platformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="filter"></i>{{vm.reportProjectPlatformFilter===row.key?'Clear filter':'Filter'}}</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="section-bar report-project-bar" ng-if="vm.contractReportRows.length">
+          <div>
+            <h2>Contract register</h2>
+            <span>{{vm.contractReportRows.length}} OPEX Contracts in view</span>
+          </div>
+        </div>
+        <div class="table-scroll" ng-if="vm.contractReportRows.length">
+          <table class="data-table projects">
+            <thead><tr><th>Contract</th><th>Vendor</th><th>Platform</th><th>Status</th><th>Start</th><th>End / expiry</th><th>Budget</th><th>Invoiced</th><th>Pending payments</th><th>Invoice details</th><th>Action</th></tr></thead>
+            <tbody>
+              <tr ng-repeat="row in vm.contractReportRows track by row.project.projectId">
+                <td>{{row.project.contractNumber}}<small>{{row.project.projectName}}</small></td>
+                <td>{{row.project.vendorName||'—'}}</td>
+                <td>{{row.project.platformName||'Not assigned'}}</td>
+                <td><span class="status" ng-class="row.project.isExpiredUnclosed?'rejected':vm.statusClass(row.project.contractStatus)">{{row.project.isExpiredUnclosed?'Expired · Open':row.project.contractStatus}}</span></td>
+                <td>{{row.project.contractStartDate|date:'dd-MMM-yyyy'}}</td>
+                <td>{{row.project.contractEndDate|date:'dd-MMM-yyyy'}}<small ng-if="row.project.daysToExpiry!=null">{{row.project.daysToExpiry<0?'Expired':row.project.daysToExpiry===0?'Expires today':row.project.daysToExpiry+' days remaining'}}</small><small ng-if="row.project.daysToExpiry==null">Expiry not set</small></td>
+                <td>{{vm.money(vm.projectBudgetAmount(row.project))}}</td>
+                <td>{{vm.money(row.invoicedAmount)}}</td>
+                <td>{{vm.money(row.pendingPaymentAmount)}}</td>
+                <td title="{{row.invoiceSummary}}"><span class="truncate-cell wide-cell">{{row.invoiceSummary||'No invoices'}}</span></td>
+                <td><button type="button" class="btn compact secondary" ng-click="vm.openReportContract(row)"><i data-lucide="external-link"></i>Open</button></td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -1024,7 +1074,7 @@
     >
       <section
         class="modal"
-        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='budgetUtilization'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'||vm.modal.type==='user'}"
+        ng-class="{'modal-wide':vm.modal.type==='jira'||vm.modal.type==='project'||vm.modal.type==='reportDetail'||vm.modal.type==='budgetUtilization'||vm.modal.type==='pet'||vm.modal.type==='budgetLine'||vm.modal.type==='decision'||vm.modal.type==='upload'||vm.modal.type==='spend'||vm.modal.type==='user'||vm.modal.type==='projectActivity'||vm.modal.type==='vendorContracts'}"
         role="dialog"
         aria-modal="true"
       >
@@ -1282,6 +1332,15 @@
                 >
               </div>
             </div>
+            <div ng-if="vm.modal.type==='petAssignment'" class="form-grid">
+              <h3 class="form-section-title full">Pending Review assignment</h3>
+              <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>PET Reference</small><strong>{{vm.selectedPet.code}}</strong></div>
+              </div>
+              <label>Reviewer<select falcon-select2 data-placeholder="Select reviewer" ng-model="vm.form.reviewerEmail" ng-options="u.email as vm.userDirectoryLabel(u) for u in vm.assignmentUsers('Reviewer')" required><option value="">Select reviewer</option></select></label>
+              <label>Approver<select falcon-select2 data-placeholder="Select approver" ng-model="vm.form.approverEmail" ng-options="u.email as vm.userDirectoryLabel(u) for u in vm.assignmentUsers('Approver')" required><option value="">Select approver</option></select></label>
+            </div>
             <div ng-if="vm.modal.type==='pet'" class="form-grid">
               <h3 class="form-section-title full">{{vm.isOpexContract(vm.selectedProject)?'OPEX Contract context':'Project context'}}</h3>
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1324,6 +1383,8 @@
               </div>
               <h3 class="form-section-title full">Submission details</h3>
               <label class="full option-check" ng-if="(!vm.selectedPet||vm.form.status==='Sent Back')&&!vm.petVendorOnly()&&!vm.isOpexContract(vm.selectedProject)"><input type="checkbox" ng-model="vm.form.reviewRequired" />Review required</label>
+              <label ng-if="!vm.isOpexContract(vm.selectedProject)&&vm.form.reviewRequired">Reviewer<select falcon-select2 data-placeholder="Select reviewer" ng-model="vm.form.reviewerEmail" ng-options="u.email as vm.userDirectoryLabel(u) for u in vm.assignmentUsers('Reviewer')" required><option value="">Select reviewer</option></select></label>
+              <label ng-if="!vm.isOpexContract(vm.selectedProject)">Approver<select falcon-select2 data-placeholder="Select approver" ng-model="vm.form.approverEmail" ng-options="u.email as vm.userDirectoryLabel(u) for u in vm.assignmentUsers('Approver')" required><option value="">Select approver</option></select></label>
               <p class="full form-hint" ng-if="vm.isOpexContract(vm.selectedProject)">OPEX Contract: this PET is approved on save. No review or approval is required.</p>
               <div class="full pet-upload-workspace" ng-if="vm.petVendorOnly()">
                 <div class="detail-grid" style="grid-template-columns:1fr 1fr">
@@ -1764,6 +1825,33 @@
                   required /></label
               ><label class="option-check"><input type="checkbox" ng-model="vm.form.isActive" />Active</label>
             </div>
+            <div ng-if="vm.modal.type==='vendorContracts'">
+              <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Vendor</small><strong>{{vm.vendorContractsVendor.name}}</strong></div>
+                <div><small>Contracts</small><strong>{{vm.vendorContracts.length}}</strong></div>
+              </div>
+              <div class="empty" ng-if="vm.vendorContractsLoading"><i data-lucide="loader-circle"></i><strong>Loading contracts...</strong></div>
+              <div class="approval-monitor-error" ng-if="vm.vendorContractsError" role="alert"><i data-lucide="alert-triangle"></i><span>{{vm.vendorContractsError}}</span></div>
+              <div class="table-scroll" ng-if="!vm.vendorContractsLoading&&!vm.vendorContractsError&&vm.vendorContracts.length">
+                <table class="nested">
+                  <thead><tr><th>Contract</th><th>Status</th><th>Start</th><th>End / expiry</th><th>Budget</th><th>Pending payments</th><th>Memo / LPO</th><th>Invoices</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr ng-repeat="contract in vm.vendorContracts track by contract.projectId">
+                      <td><strong>{{contract.contractNumber}}</strong><small>{{contract.projectName}}</small></td>
+                      <td><span class="status" ng-class="contract.isExpiredUnclosed?'rejected':vm.statusClass(contract.contractStatus)">{{contract.isExpiredUnclosed?'Expired · Open':contract.contractStatus}}</span></td>
+                      <td>{{contract.contractStartDate|date:'dd-MMM-yyyy'}}</td>
+                      <td>{{contract.contractEndDate|date:'dd-MMM-yyyy'}}<small ng-if="contract.daysToExpiry!=null">{{contract.daysToExpiry<0?'Expired':contract.daysToExpiry===0?'Expires today':contract.daysToExpiry+' days remaining'}}</small><small ng-if="contract.daysToExpiry==null">Expiry not set</small></td>
+                      <td>{{vm.money(contract.contractBudget)}}</td>
+                      <td>{{vm.money(contract.pendingPaymentAmount)}}</td>
+                      <td>{{contract.memoCamId||'—'}}<small>{{contract.memoCamStatus||''}} {{contract.lpoSoNumber||''}}</small></td>
+                      <td>{{contract.directInvoiceCount}}<small>{{contract.invoiceSummary||'No invoices'}}</small></td>
+                      <td><button type="button" class="btn compact secondary" ng-click="vm.openVendorContract(contract)"><i data-lucide="external-link"></i>Open</button></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.vendorContractsLoading&&!vm.vendorContractsError&&!vm.vendorContracts.length"><i data-lucide="file-search"></i><strong>No OPEX Contracts are linked to this vendor.</strong></div>
+            </div>
             <div ng-if="vm.modal.type==='profile'" class="form-grid">
               <h3 class="form-section-title full">Account</h3>
               <div class="full detail-grid" style="grid-template-columns:1fr 1fr 1fr">
@@ -1903,6 +1991,29 @@
                 </div>
               </div>
             </div>
+            <div ng-if="vm.modal.type==='projectActivity'">
+              <div class="detail-grid" style="grid-template-columns:1fr 1fr">
+                <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
+                <div><small>Project ID</small><strong>{{vm.projectDisplayId(vm.selectedProject)}}</strong></div>
+              </div>
+              <div class="empty" ng-if="vm.projectActivityLoading">
+                <i data-lucide="activity"></i><strong>Loading project activity...</strong>
+              </div>
+              <div class="empty" ng-if="vm.projectActivityError">
+                <i data-lucide="alert-triangle"></i><strong>{{vm.projectActivityError}}</strong>
+              </div>
+              <div class="table-scroll" ng-if="!vm.projectActivityLoading&&!vm.projectActivityError&&vm.projectActivity.length">
+                <table class="nested">
+                  <thead><tr><th>Action</th><th>Record</th><th>By</th><th>Details</th><th>Before</th><th>After</th><th>When</th></tr></thead>
+                  <tbody>
+                    <tr ng-repeat="entry in vm.projectActivity track by $index"><td>{{entry.actionName}}</td><td>{{entry.entityType}} #{{entry.entityId}}</td><td>{{entry.userEmail||'—'}}</td><td>{{entry.detail||'—'}}</td><td>{{entry.oldValue||'—'}}</td><td>{{entry.newValue||'—'}}</td><td>{{entry.actionUtc|date:'dd-MMM-yyyy HH:mm'}}</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="empty" ng-if="!vm.projectActivityLoading&&!vm.projectActivityError&&!vm.projectActivity.length">
+                <i data-lucide="activity"></i><strong>No project activity recorded yet.</strong>
+              </div>
+            </div>
             <div ng-if="vm.modal.type==='history'">
               <div class="detail-grid" style="grid-template-columns:1fr 1fr">
                 <div><small>Project name</small><strong>{{vm.selectedProject.projectName}}</strong></div>
@@ -1992,7 +2103,7 @@
               </div>
             </div>
           </div>
-          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'&&vm.modal.type!=='budgetUtilization'">
+          <footer ng-if="vm.modal.type!=='jira'&&vm.modal.type!=='history'&&vm.modal.type!=='projectActivity'&&vm.modal.type!=='vendorContracts'&&vm.modal.type!=='spend'&&vm.modal.type!=='invoiceView'&&vm.modal.type!=='budgetLineDocuments'&&vm.modal.type!=='reportDetail'&&vm.modal.type!=='glUtilization'&&vm.modal.type!=='budgetUtilization'">
             <button type="button" class="btn secondary" ng-click="vm.close()">
               Cancel</button
             ><button type="submit" class="btn primary">
@@ -2013,6 +2124,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=41"></script>
+    <script src="app/app.js?v=44"></script>
   </body>
 </html>
