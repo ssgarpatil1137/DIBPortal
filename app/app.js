@@ -66,7 +66,7 @@
         { securityQuestionId: 3, question: "What is the name of your childhood best friend?" },
       ];
       vm.today = new Date();
-      vm.tab = "reports";
+      vm.tab = "portfolio";
       vm.reportSection = "overview";
       vm.reportSections = {
         overview: { title: "Executive overview", description: "Portfolio health, financial position, and immediate priorities." },
@@ -434,7 +434,7 @@
         vm.statusFilter = "";
         vm.viewFilter = "my";
         vm.contractYearFilter = "";
-        vm.tab = "reports";
+        vm.tab = "portfolio";
         vm.reportSection = "overview";
         vm.navOpen = false;
       }
@@ -566,7 +566,7 @@
       function updateNavigation() {
         var hasDelegatedTasks = (vm.delegators || []).length > 0;
         vm.navTabs = vm.tabs.filter(function (tab) { return !tab.roles || tab.roles.some(vm.hasRole) || (tab.id === "approvals" && hasDelegatedTasks); });
-        if (!vm.navTabs.some(function (tab) { return tab.id === vm.tab; })) vm.tab = "reports";
+        if (!vm.navTabs.some(function (tab) { return tab.id === vm.tab; })) vm.tab = vm.navTabs.length ? vm.navTabs[0].id : "reports";
       }
       vm.setTab = function (tabId) {
         vm.tab = tabId;
