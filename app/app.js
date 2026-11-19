@@ -66,7 +66,20 @@
         { securityQuestionId: 3, question: "What is the name of your childhood best friend?" },
       ];
       vm.today = new Date();
-      vm.tab = "portfolio";
+      vm.tab = "reports";
+      vm.reportSection = "overview";
+      vm.reportSections = {
+        overview: { title: "Executive overview", description: "Portfolio health, financial position, and immediate priorities." },
+        approval: { title: "Approval monitoring", description: "Pending CAM and LPO records requiring follow-up." },
+        "financial-pets": { title: "PET disposition", description: "Approved, in-flight, and rejected PET requests." },
+        "financial-capex": { title: "CAPEX budget utilization", description: "Approved commitments against the CAPEX budget." },
+        "financial-opex": { title: "OPEX budget utilization", description: "Approved commitments against the OPEX budget." },
+        "financial-invoices": { title: "Invoice position", description: "Outstanding and settled invoices across the portfolio." },
+        vendor: { title: "Vendor spend", description: "Awarded value, utilization, outstanding balance, and pending items by vendor." },
+        "platform-contracts": { title: "Platform-wise OPEX Contracts", description: "Contract and invoice exposure grouped by platform." },
+        "contract-register": { title: "Contract register", description: "OPEX Contract status, value, expiry, and invoice position." },
+        projects: { title: "Project details", description: "Search and review project ownership, budget, PET, and invoice information." },
+      };
       vm.demo = true;
       vm.search = "";
       vm.statusFilter = "";
@@ -121,6 +134,23 @@
       vm.reportProjectPageCount = 1;
       vm.reportProjectFilteredCount = 0;
       vm.visibleReportProjects = [];
+      vm.reportProjectSort = { key: "projectName", desc: false };
+      vm.platformReportSearch = "";
+      vm.platformReportSort = { key: "name", desc: false };
+      vm.platformReportPage = 1;
+      vm.platformReportPageSize = 10;
+      vm.platformReportPageCount = 1;
+      vm.platformReportFilteredCount = 0;
+      vm.visiblePlatformReportRows = [];
+      vm.contractReportSearch = "";
+      vm.contractReportStatusFilter = "";
+      vm.contractReportSort = { key: "expiry", desc: false };
+      vm.contractReportPage = 1;
+      vm.contractReportPageSize = 10;
+      vm.contractReportPageCount = 1;
+      vm.contractReportFilteredCount = 0;
+      vm.visibleContractReportRows = [];
+      vm.activeOpexContractCount = 0;
       vm.reportMetrics = angular.copy(vm.metrics || {});
       vm.reportBudgetUsage = [];
       vm.reportSummary = {};
@@ -134,6 +164,8 @@
       vm.approvalMonitorSummary = {};
       vm.approvalMonitorFilter = "";
       vm.approvalMonitorSearch = "";
+      vm.approvalMonitorSortKey = "pendingDays";
+      vm.approvalMonitorSortDesc = true;
       vm.approvalMonitorPage = 1;
       vm.approvalMonitorPageSize = 10;
       vm.approvalMonitorPageCount = 1;
@@ -159,6 +191,14 @@
       vm.selectedVendorKey = "";
       vm.vendor360 = null;
       vm.vendor360Tab = "projects";
+      vm.vendor360Search = "";
+      vm.vendor360SortKey = "project";
+      vm.vendor360SortDesc = false;
+      vm.vendor360Page = 1;
+      vm.vendor360PageSize = 10;
+      vm.vendor360PageCount = 1;
+      vm.vendor360FilteredCount = 0;
+      vm.visibleVendor360Rows = [];
       vm.vendorContractsVendor = null;
       vm.vendorContracts = [];
       vm.vendorContractsLoading = false;
@@ -333,6 +373,13 @@
         vm.selectedVendor = null;
         vm.selectedVendorKey = "";
         vm.vendor360 = null;
+        vm.vendor360Search = "";
+        vm.vendor360Page = 1;
+        vm.vendor360Tab = "projects";
+        vm.vendor360SortKey = "project";
+        vm.vendor360SortDesc = false;
+        vm.vendor360FilteredCount = 0;
+        vm.visibleVendor360Rows = [];
         vm.selectedBudgetUsageSource = null;
         vm.selectedBudgetUsageRows = [];
         vm.reportBudgetUsage = [];
@@ -344,6 +391,10 @@
         vm.reportPlatformOptions = [];
         vm.platformReportRows = [];
         vm.contractReportRows = [];
+        vm.reportSection = "overview";
+        vm.platformReportSearch = "";
+        vm.contractReportSearch = "";
+        vm.contractReportStatusFilter = "";
         vm.projectActivity = [];
         vm.budgetLineSpendDetails = [];
         vm.budgetLineVendorOptions = [];
@@ -355,6 +406,26 @@
         vm.uploadFile = null;
         vm.petRowEditor = null;
         vm.approvalMonitorFilter = "";
+        vm.approvalMonitorSearch = "";
+        vm.approvalMonitorSortKey = "pendingDays";
+        vm.approvalMonitorSortDesc = true;
+        vm.approvalMonitorPage = 1;
+        vm.reportProjectSearch = "";
+        vm.reportProjectStatusFilter = "";
+        vm.reportProjectBudgetTypeFilter = "";
+        vm.reportProjectPlatformFilter = "";
+        vm.reportProjectPage = 1;
+        vm.reportProjectSort = { key: "projectName", desc: false };
+        vm.platformReportSearch = "";
+        vm.platformReportSort = { key: "name", desc: false };
+        vm.platformReportPage = 1;
+        vm.contractReportSearch = "";
+        vm.contractReportStatusFilter = "";
+        vm.contractReportSort = { key: "expiry", desc: false };
+        vm.contractReportPage = 1;
+        vm.activeOpexContractCount = 0;
+        vm.vendorSpendSearch = "";
+        vm.vendorPendingFilter = "";
         vm.modal = null;
         vm.form = {};
         vm.metrics = emptyReportMetrics();
@@ -363,6 +434,8 @@
         vm.statusFilter = "";
         vm.viewFilter = "my";
         vm.contractYearFilter = "";
+        vm.tab = "reports";
+        vm.reportSection = "overview";
         vm.navOpen = false;
       }
       vm.authTitle = function () { return vm.auth.mode === "setup" && vm.auth.requiredSetup ? "Complete required reset" : { login: "Sign in", setup: "Create your password", reset: "Verify your identity", complete: "Choose a new password" }[vm.auth.mode]; };
@@ -493,10 +566,11 @@
       function updateNavigation() {
         var hasDelegatedTasks = (vm.delegators || []).length > 0;
         vm.navTabs = vm.tabs.filter(function (tab) { return !tab.roles || tab.roles.some(vm.hasRole) || (tab.id === "approvals" && hasDelegatedTasks); });
-        if (!vm.navTabs.some(function (tab) { return tab.id === vm.tab; })) vm.tab = "portfolio";
+        if (!vm.navTabs.some(function (tab) { return tab.id === vm.tab; })) vm.tab = "reports";
       }
       vm.setTab = function (tabId) {
         vm.tab = tabId;
+        if (tabId === "reports") vm.reportSection = "overview";
         vm.navOpen = false;
         if (tabId === "currencies") loadCurrencies(true);
         if (tabId === "vendors") loadVendors(true);
@@ -504,6 +578,36 @@
         if (tabId === "gl") loadGlFunds(true);
         if (tabId === "roles") loadRoles(true);
         vm.updateView(true);
+        redraw();
+      };
+      vm.navigateReport = function (section, filter) {
+        if (!vm.reportSections[section]) return;
+        vm.tab = "reports";
+        vm.reportSection = section;
+        vm.navOpen = false;
+        if (section === "projects" && filter === "all") {
+          vm.reportProjectSearch = "";
+          vm.reportProjectStatusFilter = "";
+          vm.reportProjectBudgetTypeFilter = "";
+          vm.reportProjectPlatformFilter = "";
+          vm.reportProjectPage = 1;
+        }
+        if (section === "vendor") {
+          vm.selectedVendorKey = "";
+          vm.vendor360 = null;
+        }
+        if (section === "approval") {
+          vm.approvalMonitorFilter = filter || "";
+          vm.approvalMonitorSearch = "";
+          vm.updateApprovalMonitorView();
+          if (filter) scrollToReportElement("approval-monitor-list");
+        }
+        if (section === "contract-register") {
+          vm.contractReportStatusFilter = filter || "";
+          if (filter) vm.contractReportSearch = "";
+          vm.updateContractRegisterView();
+        }
+        if (section === "projects" || section === "platform-contracts" || section === "contract-register") vm.updateReportProjectView();
         redraw();
       };
       vm.money = function (value) {
@@ -1730,19 +1834,36 @@
           var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.contractNumber, project.vendorName, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.platformName, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
           return statusMatch && budgetTypeMatch && platformMatch && queryMatch;
         });
-        buildPlatformReport(filtered);
-        buildContractReport(filtered);
+        buildPlatformReport(vm.projects);
+        buildContractReport(vm.projects);
+        vm.updatePlatformReportView(keepPage);
+        vm.updateContractRegisterView(keepPage);
+        var projectSort = vm.reportProjectSort;
+        filtered.sort(function (a, b) {
+          var left = projectSort.key === "projectId" ? vm.projectDisplayId(a) : projectSort.key === "budget" ? vm.projectBudgetAmount(a) : String(a[projectSort.key] || "").toLowerCase();
+          var right = projectSort.key === "projectId" ? vm.projectDisplayId(b) : projectSort.key === "budget" ? vm.projectBudgetAmount(b) : String(b[projectSort.key] || "").toLowerCase();
+          return (left < right ? -1 : left > right ? 1 : 0) * (projectSort.desc ? -1 : 1);
+        });
         vm.reportProjectFilteredCount = filtered.length;
         vm.reportProjectPageCount = Math.max(1, Math.ceil(filtered.length / vm.reportProjectPageSize));
         if (!keepPage || vm.reportProjectPage > vm.reportProjectPageCount) vm.reportProjectPage = 1;
         var start = (vm.reportProjectPage - 1) * vm.reportProjectPageSize;
         vm.visibleReportProjects = filtered.slice(start, start + vm.reportProjectPageSize);
       };
+      vm.sortReportProjects = function (key) {
+        vm.reportProjectSort = { key: key, desc: vm.reportProjectSort.key === key ? !vm.reportProjectSort.desc : false };
+        vm.updateReportProjectView(true);
+        redraw();
+      };
       function directContractInvoices(project) {
         return (vm.vendorInvoiceSource || []).filter(function (invoice) { return Number(invoice.projectId) === Number(project.projectId); });
       }
       function buildContractReport(projects) {
-        vm.contractReportRows = (projects || []).filter(vm.isOpexContract).map(function (project) {
+        var contracts = (projects || []).filter(vm.isOpexContract);
+        vm.activeOpexContractCount = contracts.filter(function (project) {
+          return sameStatus(project.contractStatus || "Open", "Open") && !project.isExpiredUnclosed;
+        }).length;
+        vm.contractReportRows = contracts.map(function (project) {
           var invoices = directContractInvoices(project);
           var pendingInvoices = invoices.filter(function (invoice) { return !sameStatus(invoice.invoiceStatus, "Paid") && !sameStatus(invoice.invoiceStatus, "Settled"); });
           return {
@@ -1789,7 +1910,71 @@
       }
       vm.filterReportByPlatform = function (row) {
         vm.reportProjectPlatformFilter = row ? row.key : "";
+        vm.reportSection = "projects";
+        vm.tab = "reports";
         vm.updateReportProjectView();
+        redraw();
+      };
+      vm.updatePlatformReportView = function (keepPage) {
+        var query = String(vm.platformReportSearch || "").trim().toLowerCase();
+        var sort = vm.platformReportSort;
+        var filtered = (vm.platformReportRows || []).filter(function (row) {
+          return !query || [row.name, row.contracts, row.invoiceCount].join(" ").toLowerCase().indexOf(query) >= 0;
+        }).sort(function (a, b) {
+          var left = a[sort.key];
+          var right = b[sort.key];
+          return (left < right ? -1 : left > right ? 1 : 0) * (sort.desc ? -1 : 1);
+        });
+        vm.platformReportFilteredCount = filtered.length;
+        vm.platformReportPageCount = Math.max(1, Math.ceil(filtered.length / vm.platformReportPageSize));
+        if (!keepPage || vm.platformReportPage > vm.platformReportPageCount) vm.platformReportPage = 1;
+        var start = (vm.platformReportPage - 1) * vm.platformReportPageSize;
+        vm.visiblePlatformReportRows = filtered.slice(start, start + vm.platformReportPageSize);
+      };
+      vm.sortPlatformReport = function (key) {
+        vm.platformReportSort = { key: key, desc: vm.platformReportSort.key === key ? !vm.platformReportSort.desc : false };
+        vm.updatePlatformReportView();
+        redraw();
+      };
+      vm.changePlatformReportPage = function (page) {
+        vm.platformReportPage = Math.max(1, Math.min(vm.platformReportPageCount, page));
+        vm.updatePlatformReportView(true);
+        redraw();
+      };
+      vm.updateContractRegisterView = function (keepPage) {
+        var query = String(vm.contractReportSearch || "").trim().toLowerCase();
+        var statusFilter = vm.contractReportStatusFilter;
+        var sort = vm.contractReportSort;
+        var filtered = (vm.contractReportRows || []).filter(function (row) {
+          var project = row.project;
+          var statusMatch = !statusFilter || (statusFilter === "expired" ? !!project.isExpiredUnclosed : statusFilter === "active" ? sameStatus(project.contractStatus || "Open", "Open") && !project.isExpiredUnclosed : sameStatus(project.contractStatus || "Open", statusFilter));
+          var queryMatch = !query || [project.contractNumber, project.projectName, project.vendorName, project.platformName, project.contractStatus, row.invoiceSummary].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && queryMatch;
+        }).sort(function (a, b) {
+          function sortValue(row) {
+            if (sort.key === "expiry") return row.project.daysToExpiry == null ? Number.MAX_VALUE : Number(row.project.daysToExpiry);
+            if (sort.key === "budget") return vm.projectBudgetAmount(row.project);
+            if (sort.key === "invoicedAmount" || sort.key === "pendingPaymentAmount" || sort.key === "invoiceCount") return row[sort.key];
+            return String(row.project[sort.key] || "").toLowerCase();
+          }
+          var left = sortValue(a);
+          var right = sortValue(b);
+          return (left < right ? -1 : left > right ? 1 : 0) * (sort.desc ? -1 : 1);
+        });
+        vm.contractReportFilteredCount = filtered.length;
+        vm.contractReportPageCount = Math.max(1, Math.ceil(filtered.length / vm.contractReportPageSize));
+        if (!keepPage || vm.contractReportPage > vm.contractReportPageCount) vm.contractReportPage = 1;
+        var start = (vm.contractReportPage - 1) * vm.contractReportPageSize;
+        vm.visibleContractReportRows = filtered.slice(start, start + vm.contractReportPageSize);
+      };
+      vm.sortContractReport = function (key) {
+        vm.contractReportSort = { key: key, desc: vm.contractReportSort.key === key ? !vm.contractReportSort.desc : false };
+        vm.updateContractRegisterView();
+        redraw();
+      };
+      vm.changeContractReportPage = function (page) {
+        vm.contractReportPage = Math.max(1, Math.min(vm.contractReportPageCount, page));
+        vm.updateContractRegisterView(true);
         redraw();
       };
       // Budget line Status (stored in BudgetLines.CamStatus) lifecycle: Raised to Vendor > Memo in Progress > Memo Approved > LPO in Progress > LPO Approved > Completed.
@@ -1880,7 +2065,12 @@
           var line = row.line;
           var project = row.project;
           return !query || [vm.projectDisplayId(project), project.projectName, project.projectType, project.budgetType, project.budgetSource, project.projectManager, line.petCode, line.petReference, line.vendor, line.justification, line.glNumber, line.camId, line.camStatus, line.lpoRequest].join(" ").toLowerCase().indexOf(query) >= 0;
-        }).sort(function (a, b) { return (b.pendingDays || 0) - (a.pendingDays || 0) || Number(a.line.budgetLineId) - Number(b.line.budgetLineId); });
+        }).sort(function (a, b) {
+          var key = vm.approvalMonitorSortKey;
+          var left = key === "pendingDays" ? (a.pendingDays == null ? -1 : a.pendingDays) : key === "amount" ? a.amount : String(key === "project" ? a.project.projectName : key === "vendor" ? a.line.vendor : a.line.camStatus || "").toLowerCase();
+          var right = key === "pendingDays" ? (b.pendingDays == null ? -1 : b.pendingDays) : key === "amount" ? b.amount : String(key === "project" ? b.project.projectName : key === "vendor" ? b.line.vendor : b.line.camStatus || "").toLowerCase();
+          return (left < right ? -1 : left > right ? 1 : 0) * (vm.approvalMonitorSortDesc ? -1 : 1) || Number(a.line.budgetLineId) - Number(b.line.budgetLineId);
+        });
         vm.approvalMonitorFilteredCount = filtered.length;
         vm.approvalMonitorFilteredTotal = filtered.reduce(function (total, row) { return total + row.amount; }, 0);
         vm.approvalMonitorPageCount = Math.max(1, Math.ceil(filtered.length / vm.approvalMonitorPageSize));
@@ -1890,6 +2080,7 @@
       };
       vm.approvalMonitorReady = function () { return vm.demo || (vm.approvalMonitorLoaded && !vm.approvalMonitorError); };
       vm.changeApprovalMonitorPage = function (page) { vm.approvalMonitorPage = Math.max(1, Math.min(vm.approvalMonitorPageCount, page)); vm.updateApprovalMonitorView(true); redraw(); };
+      vm.toggleApprovalMonitorSort = function () { vm.approvalMonitorSortDesc = !vm.approvalMonitorSortDesc; vm.updateApprovalMonitorView(true); redraw(); };
       function scrollToReportElement(id) {
         $timeout(function () {
           var element = document.getElementById(id);
@@ -2079,6 +2270,7 @@
         var start = (vm.vendorSpendPage - 1) * vm.vendorSpendPageSize;
         vm.visibleVendorSpendRows = filtered.slice(start, start + vm.vendorSpendPageSize);
         refreshVendor360();
+        vm.updateVendor360View(true);
       };
       vm.sortVendorSpend = function (key) {
         vm.vendorSort = { key: key, desc: vm.vendorSort.key === key ? !vm.vendorSort.desc : key !== "name" && key !== "rank" };
@@ -2107,9 +2299,15 @@
       }
       vm.openVendor360 = function (vendor) {
         if (!vendor) return;
+        vm.tab = "reports";
+        vm.reportSection = "vendor";
+        vm.navOpen = false;
         vm.selectedVendorKey = vendor.key;
         vm.vendor360Tab = "projects";
+        vm.vendor360Search = "";
+        vm.vendor360Page = 1;
         refreshVendor360();
+        vm.updateVendor360View();
         redraw();
         scrollToReportElement("vendor-spend");
       };
@@ -2121,6 +2319,59 @@
       };
       vm.setVendor360Tab = function (tab) {
         vm.vendor360Tab = tab;
+        vm.vendor360Search = "";
+        vm.vendor360Page = 1;
+        vm.updateVendor360View();
+        redraw();
+      };
+      vm.updateVendor360View = function (keepPage) {
+        if (!vm.vendor360 || !vm.vendor360.vendor) {
+          vm.visibleVendor360Rows = [];
+          vm.vendor360FilteredCount = 0;
+          vm.vendor360PageCount = 1;
+          return;
+        }
+        var source = vm.vendor360[vm.vendor360Tab] || [];
+        var query = vendorKey(vm.vendor360Search);
+        var sortKey = vm.vendor360SortKey;
+        var direction = vm.vendor360SortDesc ? -1 : 1;
+        var filtered = source.filter(function (item) {
+          var entry = item.entry || null;
+          var project = item.project || (entry && entry.project);
+          var line = item.line || (entry && entry.line);
+          var invoice = item.invoice || null;
+          var searchValue = [vm.vendor360.vendor.name, project && vm.projectDisplayId(project), project && project.projectName, project && project.budgetSource, line && line.petReference, line && line.petCode, line && line.vendor, line && line.justification, line && line.camId, line && line.camStatus, line && line.lpoRequest, line && line.lpoStatus, invoice && invoice.invoiceNumber, invoice && invoice.invoiceStatus].join(" ").toLowerCase();
+          return !query || searchValue.indexOf(query) >= 0;
+        }).sort(function (a, b) {
+          function sortValue(item) {
+            var entry = item.entry || null;
+            var project = item.project || (entry && entry.project);
+            var line = item.line || (entry && entry.line);
+            var invoice = item.invoice || null;
+            if (sortKey === "amount") return Number(item.awarded != null ? item.awarded : item.amount) || 0;
+            if (sortKey === "status") return String(invoice && invoice.invoiceStatus || line && (line.lpoStatus || line.camStatus) || "").toLowerCase();
+            if (sortKey === "age") return Number(item.days != null ? item.days : vm.vendor360Tab === "pendingLpos" || vm.vendor360Tab === "lpos" ? item.lpoPendingDays : item.camPendingDays) || 0;
+            return String(project && project.projectName || "").toLowerCase();
+          }
+          var left = sortValue(a);
+          var right = sortValue(b);
+          return (left < right ? -1 : left > right ? 1 : 0) * direction;
+        });
+        vm.vendor360FilteredCount = filtered.length;
+        vm.vendor360PageCount = Math.max(1, Math.ceil(filtered.length / vm.vendor360PageSize));
+        if (!keepPage || vm.vendor360Page > vm.vendor360PageCount) vm.vendor360Page = 1;
+        var start = (vm.vendor360Page - 1) * vm.vendor360PageSize;
+        vm.visibleVendor360Rows = filtered.slice(start, start + vm.vendor360PageSize);
+      };
+      vm.sortVendor360 = function (key) {
+        vm.vendor360SortDesc = vm.vendor360SortKey === key ? !vm.vendor360SortDesc : false;
+        vm.vendor360SortKey = key;
+        vm.updateVendor360View();
+        redraw();
+      };
+      vm.changeVendor360Page = function (page) {
+        vm.vendor360Page = Math.max(1, Math.min(vm.vendor360PageCount, page));
+        vm.updateVendor360View(true);
         redraw();
       };
       vm.editVendorLine = function (entry) {

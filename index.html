@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>Falcon Portfolio</title>
     <link rel="stylesheet" href="vendor/select2.min.css" />
-    <link rel="stylesheet" href="app/styles.css?v=38" />
+    <link rel="stylesheet" href="app/styles.css?v=39" />
   </head>
   <body ng-controller="PortfolioController as vm" ng-cloak>
     <section class="auth-shell" ng-if="!vm.session">
@@ -31,7 +31,7 @@
           ><small>Demand &amp; PET control</small>
         </div>
       </div>
-      <button class="icon-btn nav-toggle" type="button" ng-click="vm.navOpen=!vm.navOpen" ng-attr-aria-expanded="{{vm.navOpen}}" aria-controls="workspace-tabs" ng-attr-title="{{vm.navOpen ? 'Close navigation' : 'Open navigation'}}">
+      <button class="icon-btn nav-toggle" type="button" ng-click="vm.navOpen=!vm.navOpen" ng-attr-aria-expanded="{{vm.navOpen}}" aria-controls="workspace-navigation" ng-attr-title="{{vm.navOpen ? 'Close navigation' : 'Open navigation'}}">
         <i data-lucide="{{vm.navOpen?'x':'menu'}}"></i>
       </button>
       <div class="user-area">
@@ -41,12 +41,37 @@
         <button class="btn secondary topbar-btn" type="button" ng-click="vm.signOut()"><i data-lucide="log-out"></i>Sign out</button>
       </div>
     </header>
-    <aside class="workspace-sidebar" ng-if="vm.session" ng-class="{open:vm.navOpen}" ng-attr-aria-hidden="{{!vm.navOpen}}">
+    <aside id="workspace-navigation" class="workspace-sidebar" ng-if="vm.session" ng-class="{open:vm.navOpen}" ng-attr-aria-hidden="{{!vm.navOpen}}">
       <div class="sidebar-head">
-        <strong>Workspace</strong>
+        <strong>{{vm.tab==='reports'?'Portfolio reports':'Workspace'}}</strong>
         <button type="button" class="icon-btn" title="Close navigation" aria-label="Close navigation" ng-click="vm.navOpen=false"><i data-lucide="x"></i></button>
       </div>
-      <nav id="workspace-tabs" class="tabs" aria-label="Workspace">
+      <nav class="report-sidebar-nav" ng-if="vm.tab==='reports'" aria-label="Portfolio reports">
+        <button type="button" ng-class="{active:vm.reportSection==='overview'}" ng-click="vm.navigateReport('overview')"><i data-lucide="layout-dashboard"></i>Overview</button>
+        <button type="button" ng-class="{active:vm.reportSection==='approval'}" ng-click="vm.navigateReport('approval')"><i data-lucide="stamp"></i>Approval Monitoring</button>
+        <div class="report-nav-group">
+          <span>Financial Reports</span>
+          <button type="button" ng-class="{active:vm.reportSection==='financial-pets'}" ng-click="vm.navigateReport('financial-pets')"><i data-lucide="pie-chart"></i>PET Disposition</button>
+          <button type="button" ng-class="{active:vm.reportSection==='financial-capex'}" ng-click="vm.navigateReport('financial-capex')"><i data-lucide="landmark"></i>CAPEX Utilization</button>
+          <button type="button" ng-class="{active:vm.reportSection==='financial-opex'}" ng-click="vm.navigateReport('financial-opex')"><i data-lucide="wallet"></i>OPEX Utilization</button>
+          <button type="button" ng-class="{active:vm.reportSection==='financial-invoices'}" ng-click="vm.navigateReport('financial-invoices')"><i data-lucide="receipt-text"></i>Invoice Position</button>
+        </div>
+        <button type="button" ng-class="{active:vm.reportSection==='vendor'}" ng-click="vm.navigateReport('vendor')"><i data-lucide="store"></i>Vendor Spend</button>
+        <div class="report-nav-group">
+          <span>Contracts</span>
+          <button type="button" ng-class="{active:vm.reportSection==='platform-contracts'}" ng-click="vm.navigateReport('platform-contracts')"><i data-lucide="layers"></i>Platform-wise OPEX Contracts</button>
+          <button type="button" ng-class="{active:vm.reportSection==='contract-register'}" ng-click="vm.navigateReport('contract-register')"><i data-lucide="file-text"></i>Contract Register</button>
+        </div>
+        <div class="report-nav-group">
+          <span>Project Reports</span>
+          <button type="button" ng-class="{active:vm.reportSection==='projects'}" ng-click="vm.navigateReport('projects')"><i data-lucide="folder-kanban"></i>Project Details</button>
+        </div>
+        <div class="report-nav-group report-workspace-links">
+          <span>Workspace tools</span>
+          <button type="button" ng-repeat="tab in vm.navTabs" ng-if="tab.id!=='reports'" ng-click="vm.setTab(tab.id)"><i data-lucide="{{tab.icon}}"></i>{{tab.label}}</button>
+        </div>
+      </nav>
+      <nav id="workspace-tabs" class="tabs" ng-if="vm.tab!=='reports'" aria-label="Workspace">
         <button
           ng-repeat="tab in vm.navTabs"
           ng-class="{active:vm.tab===tab.id}"
@@ -87,67 +112,31 @@
         </div>
       </section>
 
-      <section class="metrics" ng-if="vm.tab==='reports'">
-        <article class="metric">
-          <div class="metric-icon green">
-        <i data-lucide="folder-kanban"></i>
-          </div>
-          <div>
-            <span>Registered projects</span
-            ><strong>{{vm.reportMetrics.projectsRegistered}}</strong
-            ><small>{{vm.reportMetrics.activeProjects}} currently active</small>
-          </div>
-        </article>
-        <article class="metric">
-          <div class="metric-icon gold"><i data-lucide="file-check-2"></i></div>
-          <div>
-            <span>Approved PETs</span
-            ><strong>{{vm.reportMetrics.petsApproved}}</strong
-            ><small>{{vm.reportMetrics.petsOnTrack}} awaiting action</small>
-          </div>
-        </article>
-        <article class="metric">
-          <div class="metric-icon blue"><i data-lucide="receipt-text"></i></div>
-          <div>
-            <span>Invoices raised</span
-            ><strong>{{vm.reportMetrics.invoicesRaised}}</strong
-            ><small>{{vm.reportMetrics.invoicesOutstanding}} outstanding</small>
-          </div>
-        </article>
-        <article class="metric wide">
-          <div class="metric-top">
-            <span>CAPEX utilization</span
-            ><b
-              >{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%</b
-            >
-          </div>
-          <div class="progress">
-            <span
-              style="width:{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%"
-            ></span>
-          </div>
-          <small
-            >{{vm.money(vm.reportMetrics.capexUtilized)}} of
-            {{vm.money(vm.reportMetrics.capexBudget)}}</small
-          >
-        </article>
-        <article class="metric wide">
-          <div class="metric-top">
-            <span>OPEX utilization</span
-            ><b
-              >{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%</b
-            >
-          </div>
-          <div class="progress goldbar">
-            <span
-              style="width:{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%"
-            ></span>
-          </div>
-          <small
-            >{{vm.money(vm.reportMetrics.opexUtilized)}} of
-            {{vm.money(vm.reportMetrics.opexBudget)}}</small
-          >
-        </article>
+      <section class="metrics executive-kpis" ng-if="vm.tab==='reports'&&vm.reportSection==='overview'" aria-label="Executive portfolio KPIs">
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('projects','all')">
+          <span class="metric-icon green"><i data-lucide="folder-kanban"></i></span>
+          <span class="metric-copy"><span>Registered Projects</span><strong>{{vm.reportMetrics.projectsRegistered}}</strong><small>{{vm.reportMetrics.activeProjects}} currently active</small></span>
+        </button>
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('financial-pets')">
+          <span class="metric-icon gold"><i data-lucide="file-check-2"></i></span>
+          <span class="metric-copy"><span>Approved PETs</span><strong>{{vm.reportMetrics.petsApproved}}</strong><small>{{vm.reportMetrics.petsOnTrack}} awaiting action</small></span>
+        </button>
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('financial-invoices')">
+          <span class="metric-icon blue"><i data-lucide="receipt-text"></i></span>
+          <span class="metric-copy"><span>Invoices Raised</span><strong>{{vm.reportMetrics.invoicesRaised}}</strong><small>{{vm.reportMetrics.invoicesOutstanding}} outstanding</small></span>
+        </button>
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('approval','cam')">
+          <span class="metric-icon gold"><i data-lucide="file-clock"></i></span>
+          <span class="metric-copy"><span>CAM Pending</span><strong>{{vm.approvalMonitorReady()?vm.approvalMonitorSummary.cam.count:'—'}}</strong><small>{{vm.approvalMonitorReady()?vm.money(vm.approvalMonitorSummary.cam.total):'Loading pending value'}}</small></span>
+        </button>
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('approval','lpo')">
+          <span class="metric-icon blue"><i data-lucide="scroll-text"></i></span>
+          <span class="metric-copy"><span>LPO Pending</span><strong>{{vm.approvalMonitorReady()?vm.approvalMonitorSummary.lpo.count:'—'}}</strong><small>{{vm.approvalMonitorReady()?vm.money(vm.approvalMonitorSummary.lpo.total):'Loading pending value'}}</small></span>
+        </button>
+        <button type="button" class="metric executive-kpi" ng-click="vm.navigateReport('contract-register','active')">
+          <span class="metric-icon green"><i data-lucide="file-text"></i></span>
+          <span class="metric-copy"><span>Active OPEX Contracts</span><strong>{{vm.activeOpexContractCount}}</strong><small>Open and in-date contracts</small></span>
+        </button>
       </section>
 
       <section ng-if="vm.tab==='portfolio'" class="workspace project-register-workspace">
@@ -753,27 +742,33 @@
       </section>
 
       <section ng-if="vm.tab==='reports'" class="reports">
-        <div class="report-band">
+        <div class="report-view-heading" ng-if="vm.reportSection!=='overview'">
+          <div><p class="eyebrow">PORTFOLIO REPORTS</p><h2>{{vm.reportSections[vm.reportSection].title}}</h2><p>{{vm.reportSections[vm.reportSection].description}}</p></div>
+        </div>
+        <div class="report-band" ng-if="vm.reportSection==='overview'">
           <div>
-            <p class="eyebrow">MANAGEMENT SNAPSHOT</p>
+            <p class="eyebrow">EXECUTIVE SNAPSHOT</p>
             <h2>Portfolio position</h2>
-            <p>
-              Approval throughput and committed PET across the active
-              register.
-            </p>
+            <p>Approved commitments and invoice position across the accessible portfolio.</p>
           </div>
           <div class="report-score">
             <strong
               >{{vm.percent(vm.reportMetrics.capexUtilized+vm.reportMetrics.opexUtilized,vm.reportMetrics.capexBudget+vm.reportMetrics.opexBudget)}}%</strong
             ><span>Total budget utilized</span>
           </div>
+          <div class="report-band-stats">
+            <div><small>Approved budget</small><strong>{{vm.money(vm.reportSummary.approvedBudget)}}</strong></div>
+            <div><small>Committed PET</small><strong>{{vm.money(vm.reportSummary.totalCommitted)}}</strong></div>
+            <div><small>Invoiced</small><strong>{{vm.money(vm.reportSummary.totalInvoiced)}}</strong></div>
+            <div><small>Remaining</small><strong>{{vm.money(vm.reportSummary.remainingBudget)}}</strong></div>
+          </div>
         </div>
-        <div class="report-grid">
-          <article>
+        <div class="report-grid" ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-pets'||vm.reportSection==='financial-capex'||vm.reportSection==='financial-opex'||vm.reportSection==='financial-invoices'">
+          <article ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-pets'">
             <h3>PET disposition</h3>
             <div
               class="donut"
-              style="--value:{{vm.percent(vm.reportMetrics.petsApproved,vm.reportMetrics.petsApproved+vm.reportMetrics.petsOnTrack+vm.reportMetrics.petsRejected)}}"
+              style="--approved:{{vm.percent(vm.reportMetrics.petsApproved,vm.reportMetrics.petsApproved+vm.reportMetrics.petsOnTrack+vm.reportMetrics.petsRejected)}}%;--ontrack:{{vm.percent(vm.reportMetrics.petsOnTrack,vm.reportMetrics.petsApproved+vm.reportMetrics.petsOnTrack+vm.reportMetrics.petsRejected)}}%"
             >
               <span>{{vm.reportMetrics.petsApproved}}</span>
             </div>
@@ -789,8 +784,9 @@
                 {{vm.reportMetrics.petsRejected}}</span
               >
             </div>
+            <p class="report-card-note">Approved {{vm.reportMetrics.petsApproved}} · On track {{vm.reportMetrics.petsOnTrack}} · Rejected {{vm.reportMetrics.petsRejected}}</p>
           </article>
-          <article>
+          <article ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-invoices'">
             <h3>Invoice position</h3>
             <div class="bar-pair">
               <div>
@@ -806,8 +802,9 @@
                 ></i>
               </div>
             </div>
+            <p class="report-card-note">{{vm.reportMetrics.invoicesRaised}} invoices raised across the portfolio.</p>
           </article>
-          <article class="report-table">
+          <article class="report-table" ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-capex'||vm.reportSection==='financial-opex'">
             <h3>Budget utilization</h3>
             <table>
               <tr>
@@ -816,7 +813,7 @@
                 <th>Used</th>
                 <th>Remaining</th>
               </tr>
-              <tr>
+              <tr ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-capex'">
                 <td>CAPEX</td>
                 <td>{{vm.money(vm.reportMetrics.capexBudget)}}</td>
                 <td>{{vm.money(vm.reportMetrics.capexUtilized)}}</td>
@@ -824,7 +821,7 @@
                   {{vm.money(vm.reportMetrics.capexBudget-vm.reportMetrics.capexUtilized)}}
                 </td>
               </tr>
-              <tr>
+              <tr ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-opex'">
                 <td>OPEX</td>
                 <td>{{vm.money(vm.reportMetrics.opexBudget)}}</td>
                 <td>{{vm.money(vm.reportMetrics.opexUtilized)}}</td>
@@ -833,9 +830,20 @@
                 </td>
               </tr>
             </table>
+            <div class="budget-utilization-bars">
+              <div ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-capex'"><span><b>CAPEX</b><strong>{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%</strong></span><div class="progress"><i style="width:{{vm.percent(vm.reportMetrics.capexUtilized,vm.reportMetrics.capexBudget)}}%"></i></div><small>{{vm.money(vm.reportMetrics.capexUtilized)}} used · {{vm.money(vm.reportMetrics.capexBudget-vm.reportMetrics.capexUtilized)}} remaining</small></div>
+              <div ng-if="vm.reportSection==='overview'||vm.reportSection==='financial-opex'"><span><b>OPEX</b><strong>{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%</strong></span><div class="progress goldbar"><i style="width:{{vm.percent(vm.reportMetrics.opexUtilized,vm.reportMetrics.opexBudget)}}%"></i></div><small>{{vm.money(vm.reportMetrics.opexUtilized)}} used · {{vm.money(vm.reportMetrics.opexBudget-vm.reportMetrics.opexUtilized)}} remaining</small></div>
+            </div>
+          </article>
+          <article class="overview-vendors" ng-if="vm.reportSection==='overview'">
+            <div class="report-card-heading"><div><h3>Vendor spend</h3><p>Top vendors by awarded amount</p></div><button type="button" class="btn secondary compact" ng-click="vm.navigateReport('vendor')">View all<i data-lucide="arrow-right"></i></button></div>
+            <div class="table-scroll"><table class="data-table"><thead><tr><th>Vendor</th><th>Awarded</th><th>Utilized</th><th>Utilization</th></tr></thead><tbody>
+              <tr ng-repeat="vendor in (vm.vendorSpendRows|limitTo:5) track by vendor.key"><td><button type="button" class="link-btn vendor-link" ng-click="vm.openVendor360(vendor)">{{vendor.name}}</button></td><td>{{vm.money(vendor.awarded)}}</td><td>{{vm.money(vendor.utilized)}}</td><td><span class="overview-utilization">{{vendor.utilizationPercent}}%</span></td></tr>
+              <tr ng-if="!vm.vendorSpendRows.length"><td colspan="4"><div class="empty inline-empty">{{vm.vendorSpendReady()?'No awarded vendors in view.':'Loading vendor spend…'}}</div></td></tr>
+            </tbody></table></div>
           </article>
         </div>
-        <div class="approval-monitoring" id="approval-monitoring">
+        <div class="approval-monitoring" id="approval-monitoring" ng-if="vm.reportSection==='approval'">
           <div class="section-bar">
             <div>
               <h2>Approval monitoring</h2>
@@ -865,7 +873,9 @@
               </div>
               <div class="filters">
                 <label class="search"><i data-lucide="search"></i><input ng-model="vm.approvalMonitorSearch" ng-change="vm.updateApprovalMonitorView()" placeholder="Search project, PET, vendor, CAM ID" aria-label="Search pending records" /></label>
-                <button type="button" class="btn secondary" ng-click="vm.closeApprovalMonitor()"><i data-lucide="arrow-left"></i>Back to dashboard</button>
+                <select ng-model="vm.approvalMonitorSortKey" ng-change="vm.updateApprovalMonitorView()" aria-label="Sort pending records"><option value="pendingDays">Oldest pending</option><option value="amount">Amount</option><option value="project">Project</option><option value="vendor">Vendor</option><option value="status">Status</option></select>
+                <button type="button" class="icon-btn" ng-click="vm.toggleApprovalMonitorSort()" ng-attr-title="{{vm.approvalMonitorSortDesc?'Descending':'Ascending'}} order" aria-label="Toggle sort direction"><i data-lucide="arrow-up-down"></i></button>
+                <button type="button" class="btn secondary" ng-click="vm.closeApprovalMonitor()"><i data-lucide="arrow-left"></i>All pending stages</button>
               </div>
             </div>
             <div class="table-scroll">
@@ -880,7 +890,7 @@
             <div class="pagination" ng-if="vm.approvalMonitorPageCount>1"><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===1" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.approvalMonitorPage}} of {{vm.approvalMonitorPageCount}}</span><button class="icon-btn" ng-disabled="vm.approvalMonitorPage===vm.approvalMonitorPageCount" ng-click="vm.changeApprovalMonitorPage(vm.approvalMonitorPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
           </div>
         </div>
-        <div class="vendor-spend" id="vendor-spend">
+        <div class="vendor-spend" id="vendor-spend" ng-if="vm.reportSection==='vendor'">
           <div class="section-bar">
             <div>
               <h2>{{vm.vendor360 ? 'Vendor 360' : 'Vendor spend'}}</h2>
@@ -956,12 +966,18 @@
               <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='invoices'}}" ng-class="{active:vm.vendor360Tab==='invoices'}" ng-click="vm.setVendor360Tab('invoices')">All Invoices <b>{{vm.vendor360.invoices.length}}</b></button>
               <button type="button" role="tab" aria-selected="{{vm.vendor360Tab==='contracts'}}" ng-class="{active:vm.vendor360Tab==='contracts'}" ng-click="vm.setVendor360Tab('contracts')">Active LPO commitments <b>{{vm.vendor360.contracts.length}}</b></button>
             </div>
+            <div class="vendor-360-controls">
+              <label class="search"><i data-lucide="search"></i><input ng-model="vm.vendor360Search" ng-change="vm.updateVendor360View()" placeholder="Search this view" aria-label="Search vendor details" /></label>
+              <select ng-model="vm.vendor360SortKey" ng-change="vm.updateVendor360View()" aria-label="Sort vendor details"><option value="project">Project</option><option value="amount">Amount</option><option value="status">Status</option><option value="age">Pending age</option></select>
+              <button type="button" class="icon-btn" ng-click="vm.sortVendor360(vm.vendor360SortKey)" ng-attr-title="{{vm.vendor360SortDesc?'Descending':'Ascending'}} order" aria-label="Toggle sort direction"><i data-lucide="arrow-up-down"></i></button>
+              <span>{{vm.vendor360FilteredCount}} records</span>
+            </div>
             <div class="table-scroll" ng-if="vm.vendor360Tab==='projects'">
               <table class="data-table vendor-360-table">
                 <thead><tr><th>Project ID</th><th>Project name</th><th>Budget type</th><th>Budget source</th><th>Budget lines</th><th>Awarded</th><th>Utilized</th><th>Outstanding</th><th>Pending value</th><th>Action</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="item in vm.vendor360.projects track by item.project.projectId"><td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell wide-cell">{{item.project.projectName}}</span></td><td><span class="budget-type">{{item.project.budgetType||'Not supplied'}}</span></td><td>{{item.project.budgetSource||'Not supplied'}}</td><td><span class="count-chip">{{item.lineCount}}</span></td><td>{{vm.money(item.awarded)}}</td><td>{{vm.money(item.utilized)}}</td><td>{{vm.money(item.awarded-item.utilized)}}</td><td>{{vm.money(item.pendingValue)}}</td><td><button type="button" class="btn compact primary" ng-click="vm.openReportProjectDetails(item.project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
-                  <tr ng-if="!vm.vendor360.projects.length"><td colspan="10"><div class="empty inline-empty"><strong>No linked projects.</strong></div></td></tr>
+                  <tr ng-repeat="item in vm.visibleVendor360Rows track by item.project.projectId"><td>{{vm.projectDisplayId(item.project)}}</td><td title="{{item.project.projectName}}"><span class="truncate-cell wide-cell">{{item.project.projectName}}</span></td><td><span class="budget-type">{{item.project.budgetType||'Not supplied'}}</span></td><td>{{item.project.budgetSource||'Not supplied'}}</td><td><span class="count-chip">{{item.lineCount}}</span></td><td>{{vm.money(item.awarded)}}</td><td>{{vm.money(item.utilized)}}</td><td>{{vm.money(item.awarded-item.utilized)}}</td><td>{{vm.money(item.pendingValue)}}</td><td><button type="button" class="btn compact primary" ng-click="vm.openReportProjectDetails(item.project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+                  <tr ng-if="!vm.visibleVendor360Rows.length"><td colspan="10"><div class="empty inline-empty"><strong>{{vm.vendor360.projects.length?'No projects match your search.':'No linked projects.'}}</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -969,8 +985,8 @@
               <table class="data-table vendor-360-table">
                 <thead><tr><th>PET reference</th><th>Project</th><th>CAM ID</th><th>Status</th><th>CAM created</th><th>CAM approved</th><th>Awarded</th><th>Days pending</th><th>Action</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="entry in (vm.vendor360Tab==='pendingCams'?vm.vendor360.pendingCams:vm.vendor360.cams) track by entry.line.budgetLineId" ng-class="{'pending-row':entry.camPending}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.camId||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.camStatus)">{{entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.camCreatedDate ? (entry.line.camCreatedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{entry.line.camApprovedDate ? (entry.line.camApprovedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td><span class="count-chip pending-chip" ng-if="entry.camPending&&entry.camPendingDays!=null">{{entry.camPendingDays}}</span><span ng-if="!entry.camPending">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
-                  <tr ng-if="!(vm.vendor360Tab==='pendingCams'?vm.vendor360.pendingCams:vm.vendor360.cams).length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingCams'?'No pending CAMs.':'No CAM records.'}}</strong></div></td></tr>
+                  <tr ng-repeat="entry in vm.visibleVendor360Rows track by entry.line.budgetLineId" ng-class="{'pending-row':entry.camPending}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.camId||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.camStatus)">{{entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.camCreatedDate ? (entry.line.camCreatedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{entry.line.camApprovedDate ? (entry.line.camApprovedDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td><span class="count-chip pending-chip" ng-if="entry.camPending&&entry.camPendingDays!=null">{{entry.camPendingDays}}</span><span ng-if="!entry.camPending">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.visibleVendor360Rows.length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingCams'?(vm.vendor360.pendingCams.length?'No CAM records match your search.':'No pending CAMs.'):(vm.vendor360.cams.length?'No CAM records match your search.':'No CAM records.')}}</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -978,8 +994,8 @@
               <table class="data-table vendor-360-table">
                 <thead><tr><th>PET reference</th><th>Project</th><th>LPO number</th><th>Status</th><th>LPO issue date</th><th>Awarded</th><th>Utilized</th><th>Days pending</th><th>Action</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="entry in (vm.vendor360Tab==='pendingLpos'?vm.vendor360.pendingLpos:vm.vendor360.lpos) track by entry.line.budgetLineId" ng-class="{'pending-row':entry.lpoPending}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.lpoStatus||entry.line.camStatus)">{{entry.line.lpoStatus||entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td><span class="count-chip pending-chip" ng-if="entry.lpoPending&&entry.lpoPendingDays!=null">{{entry.lpoPendingDays}}</span><span ng-if="!entry.lpoPending">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
-                  <tr ng-if="!(vm.vendor360Tab==='pendingLpos'?vm.vendor360.pendingLpos:vm.vendor360.lpos).length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingLpos'?'No pending LPOs.':'No LPO records.'}}</strong></div></td></tr>
+                  <tr ng-repeat="entry in vm.visibleVendor360Rows track by entry.line.budgetLineId" ng-class="{'pending-row':entry.lpoPending}"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td><span class="status" ng-class="vm.statusClass(entry.line.lpoStatus||entry.line.camStatus)">{{entry.line.lpoStatus||entry.line.camStatus||'Not supplied'}}</span></td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td><span class="count-chip pending-chip" ng-if="entry.lpoPending&&entry.lpoPendingDays!=null">{{entry.lpoPendingDays}}</span><span ng-if="!entry.lpoPending">—</span></td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.visibleVendor360Rows.length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingLpos'?(vm.vendor360.pendingLpos.length?'No LPO records match your search.':'No pending LPOs.'):(vm.vendor360.lpos.length?'No LPO records match your search.':'No LPO records.')}}</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -987,8 +1003,8 @@
               <table class="data-table vendor-360-table">
                 <thead><tr><th>Invoice no</th><th>Project</th><th>PET reference</th><th>Status</th><th>Amount</th><th>Recorded</th><th>Payment date</th><th>Days pending</th><th>Action</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="item in (vm.vendor360Tab==='pendingInvoices'?vm.vendor360.pendingInvoices:vm.vendor360.invoices)" ng-class="{'pending-row':item.isPending}"><td>{{item.invoice.invoiceNumber}}</td><td title="{{item.entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(item.entry.project)}} · {{item.entry.project.projectName}}</span></td><td>{{item.entry.line.petReference||item.entry.line.petCode}}</td><td><span class="status" ng-class="vm.statusClass(item.invoice.invoiceStatus)">{{item.invoice.invoiceStatus}}</span></td><td>{{vm.money(item.amount)}}</td><td>{{item.invoice.createdUtc ? (item.invoice.createdUtc|date:'dd-MMM-yyyy') : '—'}}</td><td>{{item.invoice.paymentDate ? (item.invoice.paymentDate|date:'dd-MMM-yyyy') : '—'}}</td><td><span class="count-chip pending-chip" ng-if="item.isPending&&item.days!=null">{{item.days}}</span><span ng-if="!item.isPending||item.days==null">—</span></td><td><button type="button" class="icon-btn" ng-click="vm.openVendorInvoice(item)" title="View invoices" aria-label="View invoices"><i data-lucide="eye"></i></button></td></tr>
-                  <tr ng-if="!(vm.vendor360Tab==='pendingInvoices'?vm.vendor360.pendingInvoices:vm.vendor360.invoices).length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingInvoices'?'No pending invoices.':'No invoice records.'}}</strong></div></td></tr>
+                  <tr ng-repeat="item in vm.visibleVendor360Rows" ng-class="{'pending-row':item.isPending}"><td>{{item.invoice.invoiceNumber}}</td><td title="{{item.entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(item.entry.project)}} · {{item.entry.project.projectName}}</span></td><td>{{item.entry.line.petReference||item.entry.line.petCode}}</td><td><span class="status" ng-class="vm.statusClass(item.invoice.invoiceStatus)">{{item.invoice.invoiceStatus}}</span></td><td>{{vm.money(item.amount)}}</td><td>{{item.invoice.createdUtc ? (item.invoice.createdUtc|date:'dd-MMM-yyyy') : '—'}}</td><td>{{item.invoice.paymentDate ? (item.invoice.paymentDate|date:'dd-MMM-yyyy') : '—'}}</td><td><span class="count-chip pending-chip" ng-if="item.isPending&&item.days!=null">{{item.days}}</span><span ng-if="!item.isPending||item.days==null">—</span></td><td><button type="button" class="icon-btn" ng-click="vm.openVendorInvoice(item)" title="View invoices" aria-label="View invoices"><i data-lucide="eye"></i></button></td></tr>
+                  <tr ng-if="!vm.visibleVendor360Rows.length"><td colspan="9"><div class="empty inline-empty"><strong>{{vm.vendor360Tab==='pendingInvoices'?(vm.vendor360.pendingInvoices.length?'No invoices match your search.':'No pending invoices.'):(vm.vendor360.invoices.length?'No invoices match your search.':'No invoice records.')}}</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
@@ -996,75 +1012,79 @@
               <table class="data-table vendor-360-table">
                 <thead><tr><th>PET reference</th><th>Project</th><th>LPO number</th><th>LPO issue date</th><th>Awarded</th><th>Utilized</th><th>Outstanding</th><th>Action</th></tr></thead>
                 <tbody>
-                  <tr ng-repeat="entry in vm.vendor360.contracts track by entry.line.budgetLineId"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td>{{vm.money(entry.amount-entry.invoiced)}}</td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
-                  <tr ng-if="!vm.vendor360.contracts.length"><td colspan="8"><div class="empty inline-empty"><strong>No active LPO commitments.</strong></div></td></tr>
+                  <tr ng-repeat="entry in vm.visibleVendor360Rows track by entry.line.budgetLineId"><td>{{entry.line.petReference||entry.line.petCode}}</td><td title="{{entry.project.projectName}}"><span class="truncate-cell">{{vm.projectDisplayId(entry.project)}} · {{entry.project.projectName}}</span></td><td>{{entry.line.lpoRequest||'—'}}</td><td>{{entry.line.lpoIssueDate ? (entry.line.lpoIssueDate|date:'dd-MMM-yyyy') : '—'}}</td><td>{{vm.money(entry.amount)}}</td><td>{{vm.money(entry.invoiced)}}</td><td>{{vm.money(entry.amount-entry.invoiced)}}</td><td><button type="button" class="icon-btn" ng-if="vm.can('request')" ng-click="vm.editVendorLine(entry)" title="Edit budget line" aria-label="Edit budget line"><i data-lucide="pencil"></i></button></td></tr>
+                  <tr ng-if="!vm.visibleVendor360Rows.length"><td colspan="8"><div class="empty inline-empty"><strong>{{vm.vendor360.contracts.length?'No commitments match your search.':'No active LPO commitments.'}}</strong></div></td></tr>
                 </tbody>
               </table>
             </div>
+            <div class="pagination" ng-if="vm.vendor360PageCount>1"><button class="icon-btn" ng-disabled="vm.vendor360Page===1" ng-click="vm.changeVendor360Page(vm.vendor360Page-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.vendor360Page}} of {{vm.vendor360PageCount}}</span><button class="icon-btn" ng-disabled="vm.vendor360Page===vm.vendor360PageCount" ng-click="vm.changeVendor360Page(vm.vendor360Page+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
           </div>
         </div>
-        <div class="section-bar report-project-bar" ng-if="vm.platformReportRows.length">
-          <div>
-            <h2>Platform-wise OPEX Contracts</h2>
-            <span>Grouped by standardized platform. Select a platform to filter project details.</span>
+        <div class="report-data-view" ng-if="vm.reportSection==='platform-contracts'">
+          <div class="section-bar report-project-bar report-platform-bar">
+            <div><h2>Platform-wise OPEX Contracts</h2><span>{{vm.platformReportFilteredCount}} platform groups · select a row to view related projects</span></div>
+            <div class="filters"><label class="search"><i data-lucide="search"></i><input ng-model="vm.platformReportSearch" ng-change="vm.updatePlatformReportView()" placeholder="Search platform" aria-label="Search platforms" /></label></div>
           </div>
-        </div>
-        <div class="table-scroll" ng-if="vm.platformReportRows.length">
-          <table class="data-table projects platform-report">
-            <thead><tr><th>Platform</th><th>OPEX Contracts</th><th>Invoices</th><th>Total budget</th><th>Invoiced</th><th>Action</th></tr></thead>
-            <tbody>
-              <tr ng-repeat="row in vm.platformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="filter"></i>{{vm.reportProjectPlatformFilter===row.key?'Clear filter':'Filter'}}</button></td></tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="section-bar report-project-bar" ng-if="vm.contractReportRows.length">
-          <div>
-            <h2>Contract register</h2>
-            <span>{{vm.contractReportRows.length}} OPEX Contracts in view</span>
+          <div class="table-scroll">
+            <table class="data-table projects platform-report">
+              <thead><tr>
+                <th aria-sort="{{vm.platformReportSort.key==='name'?(vm.platformReportSort.desc?'descending':'ascending'):'none'}}"><button type="button" class="sort-btn" ng-click="vm.sortPlatformReport('name')">Platform</button></th>
+                <th aria-sort="{{vm.platformReportSort.key==='contracts'?(vm.platformReportSort.desc?'descending':'ascending'):'none'}}"><button type="button" class="sort-btn" ng-click="vm.sortPlatformReport('contracts')">OPEX Contracts</button></th>
+                <th aria-sort="{{vm.platformReportSort.key==='invoiceCount'?(vm.platformReportSort.desc?'descending':'ascending'):'none'}}"><button type="button" class="sort-btn" ng-click="vm.sortPlatformReport('invoiceCount')">Invoices</button></th>
+                <th aria-sort="{{vm.platformReportSort.key==='totalBudget'?(vm.platformReportSort.desc?'descending':'ascending'):'none'}}"><button type="button" class="sort-btn" ng-click="vm.sortPlatformReport('totalBudget')">Total budget</button></th>
+                <th aria-sort="{{vm.platformReportSort.key==='invoicedAmount'?(vm.platformReportSort.desc?'descending':'ascending'):'none'}}"><button type="button" class="sort-btn" ng-click="vm.sortPlatformReport('invoicedAmount')">Invoiced</button></th><th>Action</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="row in vm.visiblePlatformReportRows track by row.key" ng-class="{'platform-selected':vm.reportProjectPlatformFilter===row.key}"><td>{{row.name}}</td><td><span class="count-chip">{{row.contracts}}</span></td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td>{{vm.money(row.totalBudget)}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td><button type="button" class="btn compact secondary" ng-click="vm.filterReportByPlatform(vm.reportProjectPlatformFilter===row.key?null:row)"><i data-lucide="folder-kanban"></i>View projects</button></td></tr>
+                <tr ng-if="!vm.visiblePlatformReportRows.length"><td colspan="6"><div class="empty inline-empty"><strong>{{vm.platformReportRows.length?'No platforms match your search.':'No platform contract records.'}}</strong></div></td></tr>
+              </tbody>
+            </table>
           </div>
+          <div class="pagination" ng-if="vm.platformReportPageCount>1"><button class="icon-btn" ng-disabled="vm.platformReportPage===1" ng-click="vm.changePlatformReportPage(vm.platformReportPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.platformReportPage}} of {{vm.platformReportPageCount}}</span><button class="icon-btn" ng-disabled="vm.platformReportPage===vm.platformReportPageCount" ng-click="vm.changePlatformReportPage(vm.platformReportPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
         </div>
-        <div class="table-scroll" ng-if="vm.contractReportRows.length">
-          <table class="data-table projects">
-            <thead><tr><th>Contract</th><th>Vendor</th><th>Platform</th><th>Status</th><th>Start</th><th>End / expiry</th><th>Budget</th><th>Invoiced</th><th>Pending payments</th><th>Invoice details</th><th>Action</th></tr></thead>
-            <tbody>
-              <tr ng-repeat="row in vm.contractReportRows track by row.project.projectId">
-                <td>{{row.project.contractNumber}}<small>{{row.project.projectName}}</small></td>
-                <td>{{row.project.vendorName||'—'}}</td>
-                <td>{{row.project.platformName||'Not assigned'}}</td>
-                <td><span class="status" ng-class="row.project.isExpiredUnclosed?'rejected':vm.statusClass(row.project.contractStatus)">{{row.project.isExpiredUnclosed?'Expired · Open':row.project.contractStatus}}</span></td>
-                <td>{{row.project.contractStartDate|date:'dd-MMM-yyyy'}}</td>
-                <td>{{row.project.contractEndDate|date:'dd-MMM-yyyy'}}<small ng-if="row.project.daysToExpiry!=null">{{row.project.daysToExpiry<0?'Expired':row.project.daysToExpiry===0?'Expires today':row.project.daysToExpiry+' days remaining'}}</small><small ng-if="row.project.daysToExpiry==null">Expiry not set</small></td>
-                <td>{{vm.money(vm.projectBudgetAmount(row.project))}}</td>
-                <td>{{vm.money(row.invoicedAmount)}}</td>
-                <td>{{vm.money(row.pendingPaymentAmount)}}</td>
-                <td title="{{row.invoiceSummary}}"><span class="truncate-cell wide-cell">{{row.invoiceSummary||'No invoices'}}</span></td>
-                <td><button type="button" class="btn compact secondary" ng-click="vm.openReportContract(row)"><i data-lucide="external-link"></i>Open</button></td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-        <div class="section-bar report-project-bar">
-          <div>
-            <h2>Project details</h2>
-            <span>{{vm.reportProjectFilteredCount}} projects in view</span>
+        <div class="report-data-view" ng-if="vm.reportSection==='contract-register'">
+          <div class="section-bar report-project-bar report-register-bar">
+            <div><h2>Contract register</h2><span>{{vm.contractReportFilteredCount}} contracts in view</span></div>
+            <div class="filters"><label class="search"><i data-lucide="search"></i><input ng-model="vm.contractReportSearch" ng-change="vm.updateContractRegisterView()" placeholder="Search contract, vendor, platform" aria-label="Search contracts" /></label><select ng-model="vm.contractReportStatusFilter" ng-change="vm.updateContractRegisterView()" aria-label="Filter contract status"><option value="">All statuses</option><option value="active">Active</option><option value="Open">Open</option><option value="Closed">Closed</option><option value="expired">Expired and open</option></select></div>
           </div>
-          <div class="filters">
-            <label class="search"><i data-lucide="search"></i><input ng-model="vm.reportProjectSearch" ng-change="vm.updateReportProjectView()" placeholder="Search ID, project, owner" /></label>
-            <select ng-model="vm.reportProjectStatusFilter" ng-change="vm.updateReportProjectView()"><option value="">All statuses</option><option>Active</option><option>Registered</option><option>Pending Review</option><option>Pending Approval</option><option>Approved</option><option>Rejected</option><option>Sent Back</option></select>
-            <select ng-model="vm.reportProjectBudgetTypeFilter" ng-change="vm.updateReportProjectView()"><option value="">All budget types</option><option value="CAPEX">CAPEX</option><option value="OPEX">OPEX</option></select>
-            <select ng-model="vm.reportProjectPlatformFilter" ng-change="vm.updateReportProjectView()"><option value="">All platforms</option><option ng-repeat="platform in vm.reportPlatformOptions track by platform.platformId" value="{{platform.platformId}}">{{platform.name}}</option><option value="none">OPEX Contract - no platform</option></select>
+          <div class="table-scroll">
+            <table class="data-table projects contract-register-table">
+              <thead><tr>
+                <th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('contractNumber')">Contract</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('vendorName')">Vendor</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('platformName')">Platform</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('contractStatus')">Status</button></th><th>Start</th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('expiry')">End / expiry</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('budget')">Budget</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('invoicedAmount')">Invoiced</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortContractReport('pendingPaymentAmount')">Pending payments</button></th><th>Invoice count</th><th>Invoice details</th><th>Action</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="row in vm.visibleContractReportRows track by row.project.projectId">
+                  <td>{{row.project.contractNumber}}<small>{{row.project.projectName}}</small></td><td>{{row.project.vendorName||'—'}}</td><td>{{row.project.platformName||'Not assigned'}}</td><td><span class="status" ng-class="row.project.isExpiredUnclosed?'rejected':vm.statusClass(row.project.contractStatus)">{{row.project.isExpiredUnclosed?'Expired · Open':row.project.contractStatus}}</span></td><td>{{row.project.contractStartDate|date:'dd-MMM-yyyy'}}</td><td>{{row.project.contractEndDate|date:'dd-MMM-yyyy'}}<small ng-if="row.project.daysToExpiry!=null">{{row.project.daysToExpiry<0?'Expired':row.project.daysToExpiry===0?'Expires today':row.project.daysToExpiry+' days remaining'}}</small><small ng-if="row.project.daysToExpiry==null">Expiry not set</small></td><td>{{vm.money(vm.projectBudgetAmount(row.project))}}</td><td>{{vm.money(row.invoicedAmount)}}</td><td>{{vm.money(row.pendingPaymentAmount)}}</td><td><span class="count-chip">{{row.invoiceCount}}</span></td><td title="{{row.invoiceSummary}}"><span class="truncate-cell wide-cell">{{row.invoiceSummary||'No invoices'}}</span></td><td><button type="button" class="btn compact secondary" ng-click="vm.openReportContract(row)"><i data-lucide="external-link"></i>Open</button></td>
+                </tr>
+                <tr ng-if="!vm.visibleContractReportRows.length"><td colspan="12"><div class="empty inline-empty"><strong>{{vm.contractReportRows.length?'No contracts match the selected filters.':'No OPEX Contracts in view.'}}</strong></div></td></tr>
+              </tbody>
+            </table>
           </div>
+          <div class="pagination" ng-if="vm.contractReportPageCount>1"><button class="icon-btn" ng-disabled="vm.contractReportPage===1" ng-click="vm.changeContractReportPage(vm.contractReportPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.contractReportPage}} of {{vm.contractReportPageCount}}</span><button class="icon-btn" ng-disabled="vm.contractReportPage===vm.contractReportPageCount" ng-click="vm.changeContractReportPage(vm.contractReportPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
         </div>
-        <div class="table-scroll">
-          <table class="data-table projects">
-            <thead><tr><th>Project ID</th><th>Project name</th><th>Type</th><th>Budget type</th><th>Accountable Exec Lead</th><th>SME Lead</th><th>Project Manager</th><th>Budget source</th><th>Total budget</th><th>PET items</th><th>Rejected PETs</th><th>Budget lines</th><th>Invoices</th><th>Status</th><th>Action</th></tr></thead>
-            <tbody>
-              <tr ng-repeat="project in vm.visibleReportProjects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small></td><td><span class="budget-type">{{project.budgetType||'Not supplied'}}</span></td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.rejectedPetCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
-              <tr ng-if="!vm.visibleReportProjects.length"><td colspan="15"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects match the selected filter.</strong></div></td></tr>
-            </tbody>
-          </table>
+        <div class="report-data-view" ng-if="vm.reportSection==='projects'">
+          <div class="section-bar report-project-bar">
+            <div><h2>Project details</h2><span>{{vm.reportProjectFilteredCount}} projects in view</span></div>
+            <div class="filters">
+              <label class="search"><i data-lucide="search"></i><input ng-model="vm.reportProjectSearch" ng-change="vm.updateReportProjectView()" placeholder="Search ID, project, owner" aria-label="Search projects" /></label>
+              <select ng-model="vm.reportProjectStatusFilter" ng-change="vm.updateReportProjectView()" aria-label="Filter project status"><option value="">All statuses</option><option>Active</option><option>Registered</option><option>Pending Review</option><option>Pending Approval</option><option>Approved</option><option>Rejected</option><option>Sent Back</option></select>
+              <select ng-model="vm.reportProjectBudgetTypeFilter" ng-change="vm.updateReportProjectView()" aria-label="Filter budget type"><option value="">All budget types</option><option value="CAPEX">CAPEX</option><option value="OPEX">OPEX</option></select>
+              <select ng-model="vm.reportProjectPlatformFilter" ng-change="vm.updateReportProjectView()" aria-label="Filter platform"><option value="">All platforms</option><option ng-repeat="platform in vm.reportPlatformOptions track by platform.platformId" value="{{platform.platformId}}">{{platform.name}}</option><option value="none">OPEX Contract - no platform</option></select>
+            </div>
+          </div>
+          <div class="table-scroll">
+            <table class="data-table projects project-report-table">
+              <thead><tr>
+                <th><button type="button" class="sort-btn" ng-click="vm.sortReportProjects('projectId')">Project ID</button></th><th><button type="button" class="sort-btn" ng-click="vm.sortReportProjects('projectName')">Project name</button></th><th>Type</th><th><button type="button" class="sort-btn" ng-click="vm.sortReportProjects('budgetType')">Budget type</button></th><th>Accountable Exec Lead</th><th>SME Lead</th><th>Project Manager</th><th>Budget source</th><th><button type="button" class="sort-btn" ng-click="vm.sortReportProjects('budget')">Total budget</button></th><th>PET items</th><th>Rejected PETs</th><th>Budget lines</th><th>Invoices</th><th><button type="button" class="sort-btn" ng-click="vm.sortReportProjects('status')">Status</button></th><th>Action</th>
+              </tr></thead>
+              <tbody>
+                <tr ng-repeat="project in vm.visibleReportProjects track by project.projectId"><td>{{vm.projectDisplayId(project)}}</td><td title="{{project.projectName}}"><span class="truncate-cell wide-cell">{{project.projectName}}</span></td><td>{{project.projectType}}<small ng-if="project.platformName" class="platform-tag" title="Platform">{{project.platformName}}</small></td><td><span class="budget-type">{{project.budgetType||'Not supplied'}}</span></td><td>{{project.accountableExecLead}}</td><td>{{project.smeLead}}</td><td>{{project.projectManager}}</td><td title="{{project.budgetSource}}"><span class="truncate-cell">{{project.budgetSource||'Not supplied'}}</span></td><td>{{vm.money(vm.projectBudgetAmount(project))}}</td><td><span class="count-chip">{{project.spendRequestCount}}</span></td><td><span class="count-chip">{{project.rejectedPetCount}}</span></td><td><span class="count-chip">{{project.budgetLineCount}}</span></td><td><span class="count-chip">{{project.invoiceCount}}</span></td><td><span class="status" ng-class="vm.statusClass(project.status)">{{project.status}}</span></td><td><button class="btn compact primary" ng-click="vm.openReportProjectDetails(project)"><i data-lucide="bar-chart-3"></i>View Report</button></td></tr>
+                <tr ng-if="!vm.visibleReportProjects.length"><td colspan="15"><div class="empty inline-empty"><i data-lucide="folder-open"></i><strong>No projects match the selected filter.</strong></div></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pagination" ng-if="vm.reportProjectPageCount>1"><button class="icon-btn" ng-disabled="vm.reportProjectPage===1" ng-click="vm.changeReportProjectPage(vm.reportProjectPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.reportProjectPage}} of {{vm.reportProjectPageCount}}</span><button class="icon-btn" ng-disabled="vm.reportProjectPage===vm.reportProjectPageCount" ng-click="vm.changeReportProjectPage(vm.reportProjectPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
         </div>
-        <div class="pagination" ng-if="vm.reportProjectPageCount>1"><button class="icon-btn" ng-disabled="vm.reportProjectPage===1" ng-click="vm.changeReportProjectPage(vm.reportProjectPage-1)" title="Previous page"><i data-lucide="chevron-left"></i></button><span>Page {{vm.reportProjectPage}} of {{vm.reportProjectPageCount}}</span><button class="icon-btn" ng-disabled="vm.reportProjectPage===vm.reportProjectPageCount" ng-click="vm.changeReportProjectPage(vm.reportProjectPage+1)" title="Next page"><i data-lucide="chevron-right"></i></button></div>
       </section>
     </main>
 
@@ -2124,6 +2144,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=44"></script>
+    <script src="app/app.js?v=45"></script>
   </body>
 </html>
