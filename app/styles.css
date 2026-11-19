@@ -4159,13 +4159,25 @@ th[aria-sort="descending"] .sort-btn:after {
 }
 @media (max-width: 760px) {
   .executive-kpis {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .executive-kpis .executive-kpi:nth-child(3) {
     grid-column: auto;
   }
   .executive-kpi {
-    min-height: 68px;
+    min-height: 84px;
+    align-items: flex-start;
+  }
+  .executive-kpi .metric-icon {
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+  }
+  .executive-kpi .metric-copy > span,
+  .executive-kpi .metric-copy small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
   }
   .report-view-heading h2 {
     font-size: 18px;
