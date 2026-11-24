@@ -8,6 +8,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Globalization;
+using System.Text;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Http;
@@ -111,7 +112,7 @@ namespace DFM.Web.Controllers
         {
             try
             {
-                return Ok(Db.Query(@"SELECT i.InvoiceId,i.BudgetLineId,bl.PetId,COALESCE(i.ProjectId,pet.ProjectId) ProjectId,i.VendorName,i.InvoiceNumber,i.InvoiceAmount,i.InvoiceStatus,i.PaymentDate,i.CreatedUtc
+                return Ok(Db.Query(@"SELECT i.InvoiceId,i.BudgetLineId,bl.PetId,COALESCE(i.ProjectId,pet.ProjectId) ProjectId,i.VendorName,i.InvoiceNumber,i.InvoiceAmount,i.InvoiceStatus,i.PaymentDate,i.InvoiceDate,i.VendorSubmissionDate,i.SystemEntryDate,i.Department,i.CreatedUtc
                     FROM dbo.Invoices i
                     LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId
                     LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
@@ -149,7 +150,37 @@ namespace DFM.Web.Controllers
         public IHttpActionResult ProjectAudit(int projectId)
         {
             if (!CanAccessProject(projectId)) return Content(HttpStatusCode.Forbidden, "You are not authorized to view this project activity.");
-            return Ok(Db.Query(@"SELECT EntityType,EntityId,ActionName,UserEmail,Detail,ActionUtc,OldValue,NewValue FROM (
+            return Ok(ProjectAuditRows(projectId));
+        }
+
+        [HttpGet, Route("projects/{projectId:int}/audit/export")]
+        public HttpResponseMessage ExportProjectAudit(int projectId)
+        {
+            if (!CanAccessProject(projectId)) return Request.CreateErrorResponse(HttpStatusCode.Forbidden, "You are not authorized to view this project activity.");
+            var rows = ProjectAuditRows(projectId);
+            var csv = new StringBuilder();
+            csv.AppendLine("Action,Record Type,Record ID,User,Details,Before,After,When (UTC)");
+            foreach (var row in rows)
+            {
+                csv.Append(CsvField(row["ActionName"])).Append(',')
+                    .Append(CsvField(row["EntityType"])).Append(',')
+                    .Append(CsvField(row["EntityId"])).Append(',')
+                    .Append(CsvField(row["UserEmail"])).Append(',')
+                    .Append(CsvField(row["Detail"])).Append(',')
+                    .Append(CsvField(row["OldValue"])).Append(',')
+                    .Append(CsvField(row["NewValue"])).Append(',')
+                    .Append(CsvField(row["ActionUtc"])).AppendLine();
+            }
+            var response = new HttpResponseMessage(HttpStatusCode.OK);
+            response.Content = new ByteArrayContent(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(csv.ToString())).ToArray());
+            response.Content.Headers.ContentType = new MediaTypeHeaderValue("text/csv");
+            response.Content.Headers.ContentDisposition = new ContentDispositionHeaderValue("attachment") { FileName = "project-activity-" + projectId + ".csv" };
+            return response;
+        }
+
+        private List<Dictionary<string, object>> ProjectAuditRows(int projectId)
+        {
+            return Db.Query(@"SELECT EntityType,EntityId,ActionName,UserEmail,Detail,ActionUtc,OldValue,NewValue FROM (
                 SELECT 'Project' EntityType,p.ProjectId EntityId,'Created' ActionName,COALESCE(p.CreatedBy,p.RequestorEmail) UserEmail,p.ProjectName Detail,p.CreatedUtc ActionUtc,CAST(NULL AS nvarchar(max)) OldValue,CAST(NULL AS nvarchar(max)) NewValue FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='Project' AND a.EntityId=p.ProjectId AND a.ActionName='Create')
                 UNION ALL SELECT 'PETRequest',pet.PetId,'Created',pet.CreatedBy,pet.Code,pet.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.PETRequests pet WHERE pet.ProjectId=@ProjectId
                 UNION ALL SELECT 'SpendItem',s.SpendItemId,'Created',s.CreatedBy,s.Description,s.CreatedUtc,CAST(NULL AS nvarchar(max)),CAST(NULL AS nvarchar(max)) FROM dbo.SpendItems s JOIN dbo.PETRequests pet ON pet.PetId=s.PetId WHERE pet.ProjectId=@ProjectId AND NOT EXISTS(SELECT 1 FROM dbo.AuditLog a WHERE a.EntityType='SpendItem' AND a.EntityId=s.SpendItemId AND a.ActionName='Create')
@@ -161,7 +192,18 @@ namespace DFM.Web.Controllers
                     OR (a.EntityType='BudgetLine' AND a.EntityId IN (SELECT bl.BudgetLineId FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE pet.ProjectId=@ProjectId))
                     OR (a.EntityType='Invoice' AND a.EntityId IN (SELECT i.InvoiceId FROM dbo.Invoices i LEFT JOIN dbo.BudgetLines bl ON bl.BudgetLineId=i.BudgetLineId LEFT JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId WHERE i.ProjectId=@ProjectId OR pet.ProjectId=@ProjectId))
                 UNION ALL SELECT 'Workflow',h.PetId,h.ToStatus,h.ActionBy,h.Comments,h.ActionUtc,CONVERT(nvarchar(max),h.FromStatus),CONVERT(nvarchar(max),h.ToStatus) FROM dbo.WorkflowHistory h JOIN dbo.PETRequests pet ON pet.PetId=h.PetId WHERE pet.ProjectId=@ProjectId
-            ) activity ORDER BY ActionUtc DESC", P("@ProjectId", projectId)));
+            ) activity ORDER BY ActionUtc DESC", P("@ProjectId", projectId));
+        }
+
+        private static string CsvField(object value)
+        {
+            if (value == null || value == DBNull.Value) return "";
+            var text = value is DateTime
+                ? ((DateTime)value).ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                : Convert.ToString(value, CultureInfo.InvariantCulture);
+            var first = text.TrimStart();
+            if (value is string && (first.StartsWith("=") || first.StartsWith("+") || first.StartsWith("-") || first.StartsWith("@"))) text = "'" + text;
+            return "\"" + text.Replace("\"", "\"\"") + "\"";
         }
 
         private bool CanAccessProject(int projectId)
@@ -413,8 +455,8 @@ namespace DFM.Web.Controllers
                     invoiceSummary.InvoiceSummary
                     FROM dbo.vw_ProjectPortfolio p
                     OUTER APPLY (SELECT COUNT(*) InvoiceCount,
-                        SUM(i.InvoiceAmount) InvoicedAmount,
-                        SUM(CASE WHEN i.InvoiceStatus NOT IN ('Paid','Settled') THEN i.InvoiceAmount ELSE 0 END) PendingPaymentAmount,
+                        SUM(CASE WHEN i.InvoiceStatus<>'Rejected' THEN i.InvoiceAmount ELSE 0 END) InvoicedAmount,
+                        SUM(CASE WHEN i.InvoiceStatus NOT IN ('Paid','Settled','Rejected') THEN i.InvoiceAmount ELSE 0 END) PendingPaymentAmount,
                         STUFF((SELECT ', ' + ISNULL(i2.InvoiceNumber,'') + ' [' + ISNULL(i2.InvoiceStatus,'') + '] ' + CONVERT(nvarchar(30),i2.InvoiceAmount)
                             FROM dbo.Invoices i2 WHERE i2.ProjectId=p.ProjectId ORDER BY i2.InvoiceId
                             FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,'') InvoiceSummary
@@ -424,6 +466,65 @@ namespace DFM.Web.Controllers
                 return Ok(new { vendor = vendor, contracts = contracts });
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpGet, Route("projects/{projectId:int}/opex-budgets")]
+        public IHttpActionResult OpexContractBudgets(int projectId)
+        {
+            try
+            {
+                var project = Db.Query("SELECT ContractBudget FROM dbo.Projects WHERE ProjectId=@ProjectId AND ProjectType=N'OPEX Contract'", P("@ProjectId", projectId)).FirstOrDefault();
+                if (project == null) return NotFound();
+                return Ok(new { contractBudget = project["ContractBudget"], budgets = OpexBudgetRows(projectId), history = Db.Query("SELECT BudgetYear,PreviousAnnualBudget,AnnualBudget,PreviousCarryForwardAmount,CarryForwardAmount,PreviousReturnedAmount,ReturnedAmount,ChangedUtc,ChangedBy FROM dbo.OpexContractBudgetHistory WHERE ProjectId=@ProjectId ORDER BY ChangedUtc DESC,BudgetHistoryId DESC", P("@ProjectId", projectId)) });
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        [ApiAuthorize("Admin", "Master"), HttpPost, Route("projects/{projectId:int}/opex-budgets")]
+        public IHttpActionResult SaveOpexContractBudget(int projectId, OpexContractBudgetRequest value)
+        {
+            if (value == null) return BadRequest("Annual OPEX budget details are required.");
+            if (value.BudgetYear < 2000 || value.BudgetYear > 2100) return BadRequest("Budget year must be between 2000 and 2100.");
+            if (value.AnnualBudget < 0 || value.CarryForwardAmount < 0 || value.ReturnedAmount < 0) return BadRequest("Budget, carry-forward, and returned amounts cannot be negative.");
+            try
+            {
+                Db.Execute(@"SET XACT_ABORT ON; BEGIN TRAN;
+                    DECLARE @ContractBudget DECIMAL(19,2),@Utilized DECIMAL(19,2),@OtherAnnualBudget DECIMAL(19,2),
+                        @OldAnnualBudget DECIMAL(19,2),@OldCarryForward DECIMAL(19,2),@OldReturned DECIMAL(19,2);
+                    SELECT @ContractBudget=ContractBudget FROM dbo.Projects WITH(UPDLOCK,HOLDLOCK) WHERE ProjectId=@ProjectId AND ProjectType=N'OPEX Contract';
+                    IF @ContractBudget IS NULL THROW 50090,'OPEX Contract was not found or has no contract budget.',1;
+                    SELECT @Utilized=ISNULL(SUM(InvoiceAmount),0) FROM dbo.Invoices WHERE ProjectId=@ProjectId AND YEAR(InvoiceDate)=@BudgetYear AND InvoiceStatus<>'Rejected';
+                    SELECT @OtherAnnualBudget=ISNULL(SUM(AnnualBudget),0) FROM dbo.OpexContractBudgets WITH(UPDLOCK,HOLDLOCK) WHERE ProjectId=@ProjectId AND BudgetYear<>@BudgetYear;
+                    IF @OtherAnnualBudget+@AnnualBudget>@ContractBudget THROW 50091,'Annual budgets cannot exceed the OPEX Contract budget.',1;
+                    IF @ReturnedAmount>@AnnualBudget+@CarryForwardAmount-@Utilized THROW 50092,'Returned amount cannot exceed the remaining annual budget.',1;
+                    SELECT @OldAnnualBudget=AnnualBudget,@OldCarryForward=CarryForwardAmount,@OldReturned=ReturnedAmount
+                    FROM dbo.OpexContractBudgets WITH(UPDLOCK,HOLDLOCK) WHERE ProjectId=@ProjectId AND BudgetYear=@BudgetYear;
+                    IF @OldAnnualBudget IS NULL
+                        INSERT dbo.OpexContractBudgets(ProjectId,BudgetYear,AnnualBudget,CarryForwardAmount,ReturnedAmount,CreatedBy,UpdatedBy)
+                        VALUES(@ProjectId,@BudgetYear,@AnnualBudget,@CarryForwardAmount,@ReturnedAmount,@User,@User);
+                    ELSE
+                        UPDATE dbo.OpexContractBudgets SET AnnualBudget=@AnnualBudget,CarryForwardAmount=@CarryForwardAmount,ReturnedAmount=@ReturnedAmount,UpdatedUtc=SYSUTCDATETIME(),UpdatedBy=@User
+                        WHERE ProjectId=@ProjectId AND BudgetYear=@BudgetYear;
+                    INSERT dbo.OpexContractBudgetHistory(ProjectId,BudgetYear,PreviousAnnualBudget,AnnualBudget,PreviousCarryForwardAmount,CarryForwardAmount,PreviousReturnedAmount,ReturnedAmount,ChangedBy)
+                    VALUES(@ProjectId,@BudgetYear,@OldAnnualBudget,@AnnualBudget,@OldCarryForward,@CarryForwardAmount,@OldReturned,@ReturnedAmount,@User);
+                    COMMIT;",
+                    P("@ProjectId", projectId), P("@BudgetYear", value.BudgetYear), P("@AnnualBudget", value.AnnualBudget), P("@CarryForwardAmount", value.CarryForwardAmount), P("@ReturnedAmount", value.ReturnedAmount), P("@User", User.Identity.Name));
+                return Ok(OpexBudgetRows(projectId).FirstOrDefault(row => Convert.ToInt32(row["BudgetYear"]) == value.BudgetYear));
+            }
+            catch (SqlException ex) { return BadRequest(ex.Message); }
+        }
+
+        private static List<Dictionary<string, object>> OpexBudgetRows(int projectId)
+        {
+            return Db.Query(@"SELECT b.OpexContractBudgetId,b.ProjectId,b.BudgetYear,b.AnnualBudget,b.CarryForwardAmount,b.ReturnedAmount,
+                ISNULL(usage.Utilized,0) Utilized,ISNULL(usage.PendingPaymentAmount,0) PendingPaymentAmount,
+                b.AnnualBudget+b.CarryForwardAmount-b.ReturnedAmount-ISNULL(usage.Utilized,0) Outstanding,
+                b.CreatedUtc,b.CreatedBy,b.UpdatedUtc,b.UpdatedBy
+                FROM dbo.OpexContractBudgets b
+                OUTER APPLY (SELECT SUM(CASE WHEN i.InvoiceStatus<>'Rejected' THEN i.InvoiceAmount ELSE 0 END) Utilized,
+                    SUM(CASE WHEN i.InvoiceStatus NOT IN ('Paid','Settled','Rejected') THEN i.InvoiceAmount ELSE 0 END) PendingPaymentAmount
+                    FROM dbo.Invoices i WHERE i.ProjectId=b.ProjectId AND YEAR(i.InvoiceDate)=b.BudgetYear) usage
+                WHERE b.ProjectId=@ProjectId ORDER BY b.BudgetYear DESC", P("@ProjectId", projectId));
         }
 
         [HttpGet, Route("gl-funds")]
@@ -472,14 +573,31 @@ namespace DFM.Web.Controllers
                     bl.CamStatus,
                     bl.LpoRequest,
                     bl.LpoStatus,
-                    bl.CreatedUtc BudgetLineCreatedUtc
+                    bl.CreatedUtc BudgetLineCreatedUtc,
+                    (SELECT ISNULL(SUM(i.InvoiceAmount),0) FROM dbo.Invoices i WHERE i.BudgetLineId=bl.BudgetLineId AND i.InvoiceStatus<>'Rejected') InvoicedAmount,
+                    (SELECT ISNULL(SUM(i.InvoiceAmount),0) FROM dbo.Invoices i WHERE i.BudgetLineId=bl.BudgetLineId AND i.InvoiceStatus NOT IN ('Paid','Settled','Rejected')) PendingPaymentAmount,
+                    CAST(NULL AS nvarchar(100)) ContractNumber
                 FROM dbo.BudgetLines bl
                 JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId
                 JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId
                 LEFT JOIN dbo.BudgetSources bs ON bs.BudgetSourceId=p.BudgetSourceId
                 LEFT JOIN dbo.JiraIssues ji ON ji.JiraKey=p.JiraKey
                 WHERE UPPER(LTRIM(RTRIM(ISNULL(bl.GlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))
-                ORDER BY p.ProjectCode, pet.Code, bl.BudgetLineId", P("@GlNumber", glNumber)));
+                UNION ALL
+                SELECT p.ProjectId,p.ProjectCode,COALESCE(NULLIF(ji.DemandId,''),NULLIF(p.JiraKey,''),p.ProjectCode),p.ProjectName,p.ProjectType,p.ProjectManager,p.BudgetType,
+                    bs.ExternalId,bs.Description,CAST(NULL AS int),CAST(NULL AS nvarchar(50)),p.ContractStatus,p.ContractBudget,CAST('AED' AS char(3)),CAST(NULL AS datetime2),CAST(NULL AS int),
+                    p.ContractNumber,v.Name,p.ContractDescription,p.ContractBudget,p.ContractBudget,CAST('AED' AS char(3)),p.ContractGlNumber,p.MemoCamId,p.MemoCamStatus,p.LpoSoNumber,p.ContractStatus,p.CreatedUtc,
+                    ISNULL(invoiceSummary.InvoicedAmount,0),ISNULL(invoiceSummary.PendingPaymentAmount,0),p.ContractNumber
+                FROM dbo.Projects p
+                LEFT JOIN dbo.BudgetSources bs ON bs.BudgetSourceId=p.BudgetSourceId
+                LEFT JOIN dbo.JiraIssues ji ON ji.JiraKey=p.JiraKey
+                LEFT JOIN dbo.Vendors v ON v.VendorId=p.VendorId
+                OUTER APPLY (SELECT
+                    SUM(CASE WHEN i.InvoiceStatus<>'Rejected' THEN i.InvoiceAmount ELSE 0 END) InvoicedAmount,
+                    SUM(CASE WHEN i.InvoiceStatus NOT IN ('Paid','Settled','Rejected') THEN i.InvoiceAmount ELSE 0 END) PendingPaymentAmount
+                    FROM dbo.Invoices i WHERE i.ProjectId=p.ProjectId) invoiceSummary
+                WHERE p.ProjectType=N'OPEX Contract' AND UPPER(LTRIM(RTRIM(ISNULL(p.ContractGlNumber,''))))=UPPER(LTRIM(RTRIM(@GlNumber)))
+                ORDER BY ProjectCode,PetCode,BudgetLineId,ContractNumber", P("@GlNumber", glNumber)));
             }
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
@@ -792,6 +910,15 @@ namespace DFM.Web.Controllers
             if (value.ContractStartDate.HasValue && value.ContractEndDate.HasValue && value.ContractEndDate.Value.Date < value.ContractStartDate.Value.Date) throw new ArgumentException("Contract end date cannot be before the start date.");
             if (value.ContractBudget.HasValue && value.ContractBudget.Value < 0) throw new ArgumentException("Contract budget cannot be negative.");
             value.ContractNumber = string.IsNullOrWhiteSpace(value.ContractNumber) ? null : value.ContractNumber.Trim();
+            value.ContractGlNumber = string.IsNullOrWhiteSpace(value.ContractGlNumber) ? null : value.ContractGlNumber.Trim().ToUpperInvariant();
+            if (value.ContractGlNumber != null)
+            {
+                if (value.ContractGlNumber.Length > 50) throw new ArgumentException("Contract GL Number cannot exceed 50 characters.");
+                var gl = Db.Query(@"SELECT g.IsActive,CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.Projects p WHERE p.ProjectId=@ProjectId AND UPPER(LTRIM(RTRIM(p.ContractGlNumber)))=@GlNumber) THEN 1 ELSE 0 END AS bit) IsCurrent
+                    FROM dbo.GLFunds g WHERE UPPER(LTRIM(RTRIM(g.GlNumber)))=@GlNumber", P("@ProjectId", value.ProjectId), P("@GlNumber", value.ContractGlNumber)).FirstOrDefault();
+                if (gl == null) throw new ArgumentException("Contract GL Number must exist in GL Management.");
+                if (!Convert.ToBoolean(gl["IsActive"]) && !Convert.ToBoolean(gl["IsCurrent"])) throw new ArgumentException("Selected contract GL is inactive. Choose an active GL.");
+            }
             value.ContractStatus = string.IsNullOrWhiteSpace(value.ContractStatus) ? "Open" : value.ContractStatus.Trim();
             if (value.ContractStatus != "Open" && value.ContractStatus != "Closed") throw new ArgumentException("Contract status must be Open or Closed.");
             var camStatuses = new[] { "Raised to Vendor", "CAM In Progress", "Memo in Progress", "Memo Approved", "LPO in Progress", "LPO Approved", "Completed" };
@@ -1321,6 +1448,19 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
                     : Db.Query(@"SELECT p.ProjectId,p.ProjectType,p.RequestorEmail,CAST(NULL AS decimal(19,2)) ContractBudget FROM dbo.BudgetLines bl JOIN dbo.PETRequests pet ON pet.PetId=bl.PetId JOIN dbo.Projects p ON p.ProjectId=pet.ProjectId WHERE bl.BudgetLineId=@BudgetLineId", P("@BudgetLineId", value.BudgetLineId)).FirstOrDefault();
                 if (project == null) throw new ArgumentException(value.ProjectId.HasValue ? "OPEX Contract was not found." : "Budget line was not found.");
                 var isOpexContract = OpexContract.IsProjectType(Convert.ToString(project["ProjectType"]));
+                var previousInvoice = value.InvoiceId.HasValue
+                    ? Db.Query("SELECT * FROM dbo.Invoices WHERE InvoiceId=@InvoiceId", P("@InvoiceId", value.InvoiceId.Value)).FirstOrDefault()
+                    : null;
+                if (!value.InvoiceDate.HasValue)
+                    value.InvoiceDate = previousInvoice != null && previousInvoice["InvoiceDate"] != null
+                        ? Convert.ToDateTime(previousInvoice["InvoiceDate"]).Date
+                        : DateTime.UtcNow.Date;
+                value.Department = (value.Department ?? "").Trim();
+                if (value.Department.Length > 200) throw new ArgumentException("Department cannot exceed 200 characters.");
+                var status = (value.InvoiceStatus ?? "").Trim();
+                var previousStatus = previousInvoice == null ? "" : Convert.ToString(previousInvoice["InvoiceStatus"]);
+                if (status == "Resubmitted" && !string.Equals(previousStatus, "Rejected", StringComparison.OrdinalIgnoreCase)) throw new ArgumentException("Only a rejected invoice can be resubmitted.");
+                if (string.Equals(previousStatus, "Rejected", StringComparison.OrdinalIgnoreCase) && status != "Rejected" && status != "Resubmitted") throw new ArgumentException("A rejected invoice must be resubmitted before it can move to another status.");
                 if (isOpexContract)
                 {
                     if (!value.ProjectId.HasValue || value.BudgetLineId.HasValue) throw new ArgumentException("OPEX Contract invoices must be linked directly to the contract.");
@@ -1328,22 +1468,20 @@ DELETE FROM dbo.BudgetLines WHERE BudgetLineId=@BudgetLineId;",
                     if (string.IsNullOrWhiteSpace(value.InvoiceNumber)) throw new ArgumentException("Invoice number is required.");
                     if (string.IsNullOrWhiteSpace(value.VendorName)) throw new ArgumentException("Vendor is required.");
                     if (value.InvoiceAmount <= 0) throw new ArgumentException("Invoice amount must be greater than zero.");
-                    if (value.InvoiceStatus != "In Progress" && value.InvoiceStatus != "Paid") throw new ArgumentException("OPEX Contract invoice status must be In Progress or Paid.");
+                    if (status != "In Progress" && status != "Rejected" && status != "Resubmitted" && status != "Paid") throw new ArgumentException("OPEX Contract invoice status must be In Progress, Rejected, Resubmitted, or Paid.");
                     if (value.InvoiceStatus == "Paid" && !value.PaymentDate.HasValue) throw new ArgumentException("Payment date is required for a Paid invoice.");
                     if (value.InvoiceStatus == "In Progress") value.PaymentDate = null;
-                    var total = Db.Query("SELECT ISNULL(SUM(InvoiceAmount),0) Total FROM dbo.Invoices WHERE ProjectId=@ProjectId AND (@InvoiceId IS NULL OR InvoiceId<>@InvoiceId)", P("@ProjectId", value.ProjectId), P("@InvoiceId", value.InvoiceId)).FirstOrDefault();
+                    var total = Db.Query("SELECT ISNULL(SUM(InvoiceAmount),0) Total FROM dbo.Invoices WHERE ProjectId=@ProjectId AND InvoiceStatus<>'Rejected' AND (@InvoiceId IS NULL OR InvoiceId<>@InvoiceId)", P("@ProjectId", value.ProjectId), P("@InvoiceId", value.InvoiceId)).FirstOrDefault();
                     var contractBudget = project["ContractBudget"] == null || project["ContractBudget"] == DBNull.Value ? 0 : Convert.ToDecimal(project["ContractBudget"]);
                     if (Convert.ToDecimal(total["Total"]) + value.InvoiceAmount > contractBudget) throw new ArgumentException("Invoice total cannot exceed the OPEX Contract budget.");
                 }
                 else
                 {
                     if (value.ProjectId.HasValue || !value.BudgetLineId.HasValue) throw new ArgumentException("Regular Project invoices must be linked to a Budget Line.");
+                    if (status != "Raised" && status != "Received" && status != "Outstanding" && status != "Rejected" && status != "Resubmitted" && status != "Settled" && status != "Paid") throw new ArgumentException("Select a valid invoice status.");
                     AmountValidation.ValidateInvoiceAmount(value.BudgetLineId.Value, value.InvoiceId, value.InvoiceAmount);
                 }
-                var previousInvoice = value.InvoiceId.HasValue
-                    ? Db.Query("SELECT * FROM dbo.Invoices WHERE InvoiceId=@InvoiceId", P("@InvoiceId", value.InvoiceId.Value)).FirstOrDefault()
-                    : null;
-                var saved = Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User,@Project", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", value.InvoiceStatus), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name), P("@Project", value.ProjectId)).FirstOrDefault();
+                var saved = Db.Query("EXEC dbo.sp_SaveInvoice @Id,@Line,@Vendor,@Justification,@Gl,@Number,@Amount,@Status,@PaymentDate,@User,@Project,@InvoiceDate,@VendorSubmissionDate,@Department", P("@Id", value.InvoiceId), P("@Line", value.BudgetLineId), P("@Vendor", value.VendorName), P("@Justification", value.Justification), P("@Gl", value.GlNumber), P("@Number", value.InvoiceNumber), P("@Amount", value.InvoiceAmount), P("@Status", status), P("@PaymentDate", value.PaymentDate), P("@User", User.Identity.Name), P("@Project", value.ProjectId), P("@InvoiceDate", value.InvoiceDate), P("@VendorSubmissionDate", value.VendorSubmissionDate), P("@Department", value.Department)).FirstOrDefault();
                 var invoiceId = value.InvoiceId ?? Convert.ToInt32(saved["InvoiceId"]);
                 Db.Execute("UPDATE dbo.Invoices SET UpdatedBy=@User,UpdatedUtc=SYSUTCDATETIME() WHERE InvoiceId=@Id", P("@User", User.Identity.Name), P("@Id", invoiceId));
                 var currentInvoice = Db.Query("SELECT * FROM dbo.Invoices WHERE InvoiceId=@InvoiceId", P("@InvoiceId", invoiceId)).FirstOrDefault();

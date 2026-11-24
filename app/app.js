@@ -75,6 +75,7 @@
         "financial-capex": { title: "CAPEX budget utilization", description: "Approved commitments against the CAPEX budget." },
         "financial-opex": { title: "OPEX budget utilization", description: "Approved commitments against the OPEX budget." },
         "financial-invoices": { title: "Invoice position", description: "Outstanding and settled invoices across the portfolio." },
+        "financial-years": { title: "Multi-year expenditure", description: "Invoice expenditure by year, department, vendor, platform, and project." },
         vendor: { title: "Vendor spend", description: "Awarded value, utilization, outstanding balance, and pending items by vendor." },
         "platform-contracts": { title: "Platform-wise OPEX Contracts", description: "Contract and invoice exposure grouped by platform." },
         "contract-register": { title: "Contract register", description: "OPEX Contract status, value, expiry, and invoice position." },
@@ -135,6 +136,14 @@
       vm.reportProjectFilteredCount = 0;
       vm.visibleReportProjects = [];
       vm.reportProjectSort = { key: "projectName", desc: false };
+      vm.expenditureYear = "";
+      vm.expenditureStartDate = null;
+      vm.expenditureEndDate = null;
+      vm.expenditureDimension = "department";
+      vm.expenditureYearOptions = [];
+      vm.yearlyExpenditureRows = [];
+      vm.dimensionExpenditureRows = [];
+      vm.expenditureSummary = { invoiceCount: 0, capex: 0, opex: 0, total: 0 };
       vm.platformReportSearch = "";
       vm.platformReportSort = { key: "name", desc: false };
       vm.platformReportPage = 1;
@@ -1750,7 +1759,7 @@
           metrics.petsRejected += Number(project && project.rejectedPetCount) || 0;
         }
         metrics.invoicesRaised += invoices.length || Number(project && project.invoiceCount) || 0;
-        metrics.invoicesOutstanding += invoices.filter(function (invoice) { return ["raised", "outstanding", "received"].indexOf(String(invoice.invoiceStatus || "").toLowerCase()) >= 0; }).length;
+        metrics.invoicesOutstanding += invoices.filter(function (invoice) { return ["raised", "outstanding", "received", "in progress", "resubmitted"].indexOf(String(invoice.invoiceStatus || "").toLowerCase()) >= 0; }).length;
         metrics.invoicesSettled += invoices.filter(function (invoice) { return ["settled", "paid"].indexOf(String(invoice.invoiceStatus || "").toLowerCase()) >= 0; }).length;
         var budget = projectBudgetAmount(project);
         var approvedAmount = pets.filter(function (pet) { return sameStatus(pet.status, "Approved"); }).reduce(function (total, pet) { return total + parseNumericInput(pet.requestedAmount); }, 0);
@@ -1864,7 +1873,7 @@
           return sameStatus(project.contractStatus || "Open", "Open") && !project.isExpiredUnclosed;
         }).length;
         vm.contractReportRows = contracts.map(function (project) {
-          var invoices = directContractInvoices(project);
+          var invoices = directContractInvoices(project).filter(function (invoice) { return !sameStatus(invoice.invoiceStatus, "Rejected"); });
           var pendingInvoices = invoices.filter(function (invoice) { return !sameStatus(invoice.invoiceStatus, "Paid") && !sameStatus(invoice.invoiceStatus, "Settled"); });
           return {
             project: project,
@@ -1882,6 +1891,53 @@
       vm.openReportContract = function (row) {
         if (row && row.project) vm.openProject(row.project);
       };
+      vm.openOpexBudget = function (project) {
+        if (!project || (!vm.hasRole("Admin") && !vm.hasRole("Master"))) return;
+        vm.opexBudgetRows = [];
+        vm.opexBudgetHistory = [];
+        vm.opexBudgetLoading = true;
+        vm.opexBudgetError = "";
+        vm.modal = { type: "opexBudget", kicker: "OPEX CONTRACT BUDGET", title: "Annual budgets · " + (project.contractNumber || project.projectName), submit: "Save annual budget", projectId: project.projectId, contractBudget: vm.projectBudgetAmount(project) };
+        vm.form = { budgetYear: new Date().getFullYear(), annualBudget: 0, carryForwardAmount: 0, returnedAmount: 0 };
+        $http.get("api/portfolio/projects/" + project.projectId + "/opex-budgets").then(function (response) {
+          var data = response.data || {};
+          vm.opexBudgetRows = data.budgets || [];
+          vm.opexBudgetHistory = data.history || [];
+          vm.modal.contractBudget = data.contractBudget == null ? vm.modal.contractBudget : Number(data.contractBudget);
+          vm.selectOpexBudgetYear();
+          vm.opexBudgetLoading = false;
+        }, function (response) {
+          vm.opexBudgetLoading = false;
+          vm.opexBudgetError = responseMessage(response, "Unable to load annual OPEX budgets.");
+        });
+        redraw();
+      };
+      vm.selectOpexBudgetYear = function () {
+        var year = Number(vm.form && vm.form.budgetYear);
+        var row = (vm.opexBudgetRows || []).filter(function (item) { return Number(item.budgetYear || item.BudgetYear) === year; })[0];
+        vm.form.annualBudget = row ? Number(row.annualBudget != null ? row.annualBudget : row.AnnualBudget) : 0;
+        vm.form.carryForwardAmount = row ? Number(row.carryForwardAmount != null ? row.carryForwardAmount : row.CarryForwardAmount) : 0;
+        vm.form.returnedAmount = row ? Number(row.returnedAmount != null ? row.returnedAmount : row.ReturnedAmount) : 0;
+      };
+      function saveOpexContractBudget() {
+        var payload = {
+          budgetYear: Number(vm.form.budgetYear),
+          annualBudget: parseNumericInput(vm.form.annualBudget),
+          carryForwardAmount: parseNumericInput(vm.form.carryForwardAmount) || 0,
+          returnedAmount: parseNumericInput(vm.form.returnedAmount) || 0,
+        };
+        if (payload.annualBudget == null || payload.carryForwardAmount < 0 || payload.returnedAmount < 0) { noticeError("Enter valid non-negative budget amounts."); return; }
+        $http.post("api/portfolio/projects/" + vm.modal.projectId + "/opex-budgets", payload).then(function () {
+          notice("Annual OPEX budget saved");
+          $http.get("api/portfolio/projects/" + vm.modal.projectId + "/opex-budgets").then(function (response) {
+            var data = response.data || {};
+            vm.opexBudgetRows = data.budgets || [];
+            vm.opexBudgetHistory = data.history || [];
+            vm.selectOpexBudgetYear();
+            redraw();
+          }, function (response) { vm.opexBudgetError = responseMessage(response, "Budget saved, but the latest history could not be loaded."); redraw(); });
+        }, function (response) { noticeError(responseMessage(response, "Unable to save the annual OPEX budget.")); });
+      }
       // Platform-wise summary of OPEX Contracts, grouped by the standardized Platform ID.
       function buildPlatformReport(projects) {
         var optionsById = {};
@@ -1897,7 +1953,7 @@
           group.contracts++;
           group.petCount += Number(project.petCount) || 0;
           group.budgetLineCount += Number(project.budgetLineCount) || 0;
-          var invoices = directContractInvoices(project);
+          var invoices = directContractInvoices(project).filter(function (invoice) { return !sameStatus(invoice.invoiceStatus, "Rejected"); });
           group.invoiceCount += invoices.length;
           group.totalBudget += Number(vm.projectBudgetAmount(project)) || 0;
           group.invoicedAmount += invoices.reduce(function (total, invoice) { return total + (parseNumericInput(invoice.invoiceAmount) || 0); }, 0);
@@ -1907,6 +1963,7 @@
           if (b.key === "none") return -1;
           return String(a.name).localeCompare(String(b.name));
         });
+        vm.platformReportRows.forEach(function (row) { row.outstandingAmount = row.totalBudget - row.invoicedAmount; });
       }
       vm.filterReportByPlatform = function (row) {
         vm.reportProjectPlatformFilter = row ? row.key : "";
@@ -1948,7 +2005,7 @@
         var filtered = (vm.contractReportRows || []).filter(function (row) {
           var project = row.project;
           var statusMatch = !statusFilter || (statusFilter === "expired" ? !!project.isExpiredUnclosed : statusFilter === "active" ? sameStatus(project.contractStatus || "Open", "Open") && !project.isExpiredUnclosed : sameStatus(project.contractStatus || "Open", statusFilter));
-          var queryMatch = !query || [project.contractNumber, project.projectName, project.vendorName, project.platformName, project.contractStatus, row.invoiceSummary].join(" ").toLowerCase().indexOf(query) >= 0;
+          var queryMatch = !query || [project.contractNumber, project.contractYear, project.projectName, project.vendorName, project.platformName, project.contractStatus, row.invoiceSummary].join(" ").toLowerCase().indexOf(query) >= 0;
           return statusMatch && queryMatch;
         }).sort(function (a, b) {
           function sortValue(row) {
@@ -2128,7 +2185,7 @@
         });
       }
       // Existing business statuses: invoice "outstanding" set (vw_ManagementDashboard), GL exclusions (sp_SaveBudgetLine), budget line Status dropdown.
-      var pendingInvoiceStatuses = ["Raised", "Received", "Outstanding"];
+      var pendingInvoiceStatuses = ["Raised", "Received", "Outstanding", "In Progress", "Resubmitted"];
       var excludedBudgetLineStatuses = ["Rejected", "Cancelled"];
       var lpoStageStatuses = ["LPO in Progress", "LPO Approved", "Completed"];
       function statusIn(status, list) {
@@ -2166,7 +2223,7 @@
           var project = projectsById[String(line.projectId)];
           if (!project || lineIndex[id]) return;
           var key = vendorKey(line.vendor);
-          var vendor = vendors[key] || (vendors[key] = { key: key, name: String(line.vendor || "").trim() || "Not supplied", lines: [], invoices: [], projectMap: {}, projects: [], awarded: 0, utilized: 0, camPendingCount: 0, lpoPendingCount: 0, invoicePendingCount: 0, pendingValue: 0, oldest: null });
+          var vendor = vendors[key] || (vendors[key] = { key: key, name: String(line.vendor || "").trim() || "Not supplied", lines: [], invoices: [], directContracts: {}, projectMap: {}, projects: [], awarded: 0, utilized: 0, camPendingCount: 0, lpoPendingCount: 0, invoicePendingCount: 0, pendingValue: 0, oldest: null });
           var pending = pendingByLine[id] || null;
           var countsInSummary = sameStatus(line.petStatus, "Approved") && !statusIn(line.camStatus, excludedBudgetLineStatuses);
           var entry = {
@@ -2189,7 +2246,7 @@
           var projectKey = String(project.projectId);
           var projectEntry = vendor.projectMap[projectKey];
           if (!projectEntry) {
-            projectEntry = vendor.projectMap[projectKey] = { project: project, lineCount: 0, awarded: 0, utilized: 0, pendingValue: 0 };
+            projectEntry = vendor.projectMap[projectKey] = { project: project, lineCount: 0, contractCount: 0, awarded: 0, utilized: 0, pendingValue: 0 };
             vendor.projects.push(projectEntry);
           }
           projectEntry.lineCount++;
@@ -2205,8 +2262,40 @@
           projectEntry.pendingValue += pending.amount;
           notePendingItem(vendor, { type: pending.stage === "cam" ? "CAM" : "LPO", reference: line.camId || line.petReference || line.petCode, days: pending.pendingDays });
         });
+        (vm.projects || []).filter(vm.isOpexContract).forEach(function (project) {
+          var name = String(project.vendorName || "").trim();
+          if (!name) return;
+          var key = vendorKey(name);
+          var vendor = vendors[key] || (vendors[key] = { key: key, name: name, lines: [], invoices: [], directContracts: {}, projectMap: {}, projects: [], awarded: 0, utilized: 0, camPendingCount: 0, lpoPendingCount: 0, invoicePendingCount: 0, pendingValue: 0, oldest: null });
+          var projectKey = String(project.projectId);
+          var projectEntry = vendor.projectMap[projectKey];
+          if (!projectEntry) {
+            projectEntry = vendor.projectMap[projectKey] = { project: project, lineCount: 0, contractCount: 0, awarded: 0, utilized: 0, pendingValue: 0 };
+            vendor.projects.push(projectEntry);
+          }
+          var amount = parseNumericInput(vm.projectBudgetAmount(project));
+          var contractEntry = {
+            project: project,
+            vendor: vendor,
+            line: { petReference: project.contractNumber, vendor: name, camId: project.memoCamId, camStatus: project.memoCamStatus, lpoRequest: project.lpoSoNumber, lpoStatus: project.contractStatus },
+            amount: amount,
+            invoiced: 0,
+            countsInSummary: true,
+            directContract: true
+          };
+          vendor.directContracts[projectKey] = contractEntry;
+          vendor.hasAwardedLine = true;
+          vendor.awarded += amount;
+          projectEntry.contractCount++;
+          projectEntry.awarded += amount;
+        });
         vendorInvoiceSourceRows().forEach(function (invoice) {
           var entry = lineIndex[String(invoice.budgetLineId)];
+          if (!entry && invoice.projectId != null) {
+            var contractProject = projectsById[String(invoice.projectId)];
+            var contractVendor = contractProject && vendors[vendorKey(contractProject.vendorName)];
+            entry = contractVendor && contractVendor.directContracts[String(contractProject.projectId)];
+          }
           var invoiceKey = invoice.invoiceId != null ? String(invoice.invoiceId) : "";
           if (!entry || (invoiceKey && seenInvoices[invoiceKey])) return;
           if (invoiceKey) seenInvoices[invoiceKey] = true;
@@ -2215,12 +2304,13 @@
           var isPending = statusIn(invoice.invoiceStatus, pendingInvoiceStatuses);
           var item = { invoice: invoice, entry: entry, amount: parseNumericInput(invoice.invoiceAmount), isPending: isPending, days: isPending ? daysSince(invoice.createdUtc) : null };
           vendor.invoices.push(item);
-          entry.invoiced += item.amount;
-          if (entry.countsInSummary) {
+          var isRejected = sameStatus(invoice.invoiceStatus, "Rejected");
+          if (!isRejected) entry.invoiced += item.amount;
+          if (entry.countsInSummary && !isRejected) {
             vendor.utilized += item.amount;
             projectEntry.utilized += item.amount;
           }
-          if (!entry.countsInSummary || !isPending) return;
+          if (!entry.countsInSummary || !isPending || isRejected) return;
           vendor.invoicePendingCount++;
           vendor.pendingValue += item.amount;
           projectEntry.pendingValue += item.amount;
@@ -2236,6 +2326,55 @@
         rows.forEach(function (vendor, index) { vendor.rank = index + 1; });
         return rows;
       }
+      vm.expenditureDimensionLabel = function () {
+        return { department: "Department", vendor: "Vendor", platform: "Platform", project: "Project" }[vm.expenditureDimension] || "Department";
+      };
+      vm.updateExpenditureReport = function () {
+        var projectsById = {};
+        var years = {};
+        var annual = {};
+        var dimensions = {};
+        var summary = { invoiceCount: 0, capex: 0, opex: 0, total: 0 };
+        var startDate = localDateOnly(vm.expenditureStartDate);
+        var endDate = localDateOnly(vm.expenditureEndDate);
+        (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
+        (vm.vendorInvoiceSource || []).forEach(function (invoice) {
+          if (sameStatus(invoice.invoiceStatus, "Rejected")) return;
+          var invoiceDate = localDateOnly(invoice.invoiceDate || invoice.createdUtc);
+          if (!invoiceDate || (startDate && invoiceDate < startDate) || (endDate && invoiceDate > endDate)) return;
+          var year = String(invoiceDate.getFullYear());
+          years[year] = true;
+          if (vm.expenditureYear && vm.expenditureYear !== year) return;
+          var project = projectsById[String(invoice.projectId)] || null;
+          var budgetType = project && (vm.isOpexContract(project) || String(project.budgetType || "").toUpperCase() === "OPEX") ? "OPEX" : "CAPEX";
+          var amount = parseNumericInput(invoice.invoiceAmount) || 0;
+          var yearRow = annual[year] || (annual[year] = { year: year, invoiceCount: 0, capex: 0, opex: 0, total: 0 });
+          yearRow.invoiceCount++;
+          yearRow[budgetType.toLowerCase()] += amount;
+          yearRow.total += amount;
+          summary.invoiceCount++;
+          summary[budgetType.toLowerCase()] += amount;
+          summary.total += amount;
+          var dimension = vm.expenditureDimension;
+          var name = dimension === "department" ? (invoice.department || "Not supplied")
+            : dimension === "vendor" ? (invoice.vendorName || (project && project.vendorName) || "Not supplied")
+              : dimension === "platform" ? ((project && project.platformName) || "Not assigned")
+                : (project ? vm.projectDisplayId(project) + " · " + project.projectName : "Project not supplied");
+          var key = name.toLowerCase();
+          var row = dimensions[key] || (dimensions[key] = { name: name, projectId: dimension === "project" && project ? project.projectId : null, invoiceCount: 0, capex: 0, opex: 0, total: 0 });
+          row.invoiceCount++;
+          row[budgetType.toLowerCase()] += amount;
+          row.total += amount;
+        });
+        vm.expenditureYearOptions = Object.keys(years).sort().reverse();
+        vm.yearlyExpenditureRows = Object.keys(annual).map(function (year) { return annual[year]; }).sort(function (a, b) { return Number(b.year) - Number(a.year); });
+        vm.dimensionExpenditureRows = Object.keys(dimensions).map(function (key) { return dimensions[key]; }).sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name); });
+        vm.expenditureSummary = summary;
+      };
+      vm.openExpenditureProject = function (row) {
+        var project = row && (vm.projects || []).filter(function (item) { return Number(item.projectId) === Number(row.projectId); })[0];
+        if (project) vm.openReportProjectDetails(project);
+      };
       vm.vendorSpendReady = function () {
         return vm.demo || (vm.approvalMonitorLoaded && vm.vendor360LinesLoaded && vm.vendorInvoicesLoaded && !vm.approvalMonitorError && !vm.vendor360LineError && !vm.vendorInvoiceError);
       };
@@ -2380,6 +2519,7 @@
       vm.openVendorInvoice = function (item) {
         if (!item) return;
         var entry = item.entry;
+        if (entry.directContract) { vm.openContractInvoice(entry.project, item.invoice); return; }
         function openLine() {
           var pet = projectPetById(entry.project, entry.line.petId);
           var line = pet && (pet.budgetLines || []).filter(function (candidate) { return Number(candidate.budgetLineId) === Number(entry.line.budgetLineId); })[0];
@@ -3140,6 +3280,20 @@
           redraw();
         });
       };
+      vm.exportProjectActivity = function () {
+        if (!vm.selectedProject || vm.demo || vm.projectActivityLoading) return;
+        $http.get("api/portfolio/projects/" + vm.selectedProject.projectId + "/audit/export", { responseType: "blob" }).then(function (response) {
+          var blob = new Blob([response.data], { type: response.headers("Content-Type") || "text/csv;charset=utf-8" });
+          var url = window.URL.createObjectURL(blob);
+          var link = document.createElement("a");
+          link.href = url;
+          link.download = "project-activity-" + vm.selectedProject.projectId + ".csv";
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          setTimeout(function () { window.URL.revokeObjectURL(url); }, 60000);
+        }, function () { noticeError("Unable to export project activity."); });
+      };
       vm.openHistory = function (project, pet) {
         vm.selectedProject = project;
         vm.selectedPet = pet;
@@ -3221,6 +3375,10 @@
         );
         if (vm.form.paymentDate)
           vm.form.paymentDate = new Date(vm.form.paymentDate);
+        if (vm.form.invoiceDate)
+          vm.form.invoiceDate = new Date(vm.form.invoiceDate);
+        if (vm.form.vendorSubmissionDate)
+          vm.form.vendorSubmissionDate = new Date(vm.form.vendorSubmissionDate);
         vm.modal = {
           type: "invoice",
           kicker: "INVOICE REGISTER",
@@ -3554,6 +3712,123 @@
       vm.download = function (kind) {
         window.location.href = "templates/" + kind + "-upload-template.csv";
       };
+      function csvColumn(label, key) {
+        return { label: label, value: function (row) { return row && row[key]; } };
+      }
+      function downloadCsv(name, columns, rows) {
+        function field(value) {
+          if (value === null || typeof value === "undefined") return "\"\"";
+          var text = value instanceof Date ? value.toISOString() : String(value);
+          if (typeof value === "string" && /^\s*[=+\-@]/.test(text)) text = "'" + text;
+          return "\"" + text.replace(/\"/g, "\"\"") + "\"";
+        }
+        var lines = [columns.map(function (column) { return field(column.label); }).join(",")];
+        (rows || []).forEach(function (row) {
+          lines.push(columns.map(function (column) { return field(column.value(row)); }).join(","));
+        });
+        var blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+        var url = window.URL.createObjectURL(blob);
+        var link = document.createElement("a");
+        link.href = url;
+        link.download = "Falcon_" + name + ".csv";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(function () { window.URL.revokeObjectURL(url); }, 60000);
+      }
+      vm.exportReport = function (section) {
+        var columns = [];
+        var rows = [];
+        if (section === "vendor" && vm.vendor360 && vm.vendor360.vendor) {
+          var selectedRows = vm.vendor360[vm.vendor360Tab] || [];
+          columns = [
+            { label: "Project ID", value: function (row) { var project = row.project || (row.entry && row.entry.project); return project && vm.projectDisplayId(project); } },
+            { label: "Project", value: function (row) { var project = row.project || (row.entry && row.entry.project); return project && project.projectName; } },
+            { label: "Reference", value: function (row) { return (row.invoice && row.invoice.invoiceNumber) || (row.line && (row.line.petReference || row.line.camId)) || (row.entry && row.entry.line && row.entry.line.petReference); } },
+            { label: "Status", value: function (row) { return (row.invoice && row.invoice.invoiceStatus) || (row.line && (row.line.lpoStatus || row.line.camStatus)); } },
+            { label: "Amount", value: function (row) { return row.amount != null ? row.amount : row.awarded; } },
+            { label: "Invoice Date", value: function (row) { return row.invoice && row.invoice.invoiceDate; } },
+            { label: "Vendor Submission Date", value: function (row) { return row.invoice && row.invoice.vendorSubmissionDate; } },
+            { label: "System Entry Date", value: function (row) { return row.invoice && row.invoice.systemEntryDate; } }
+          ];
+          downloadCsv("Vendor_" + vm.vendor360.vendor.name.replace(/[^a-z0-9]+/gi, "_"), columns, selectedRows);
+          return;
+        }
+        if (section === "vendor") {
+          columns = [csvColumn("Vendor", "name"), csvColumn("Awarded", "awarded"), csvColumn("Utilized", "utilized"), csvColumn("Outstanding", "outstanding"), csvColumn("Pending Value", "pendingValue"), csvColumn("Pending Items", "pendingCount")];
+          rows = vm.vendorSpendRows;
+        } else if (section === "platform-contracts") {
+          columns = [csvColumn("Platform", "name"), csvColumn("Contracts", "contracts"), csvColumn("Invoices", "invoiceCount"), csvColumn("Budget", "totalBudget"), csvColumn("Invoiced", "invoicedAmount"), csvColumn("Outstanding", "outstandingAmount")];
+          rows = vm.platformReportRows;
+        } else if (section === "contract-register") {
+          columns = [
+            { label: "Contract Number", value: function (row) { return row.project.contractNumber; } },
+            { label: "Project", value: function (row) { return row.project.projectName; } },
+            { label: "Vendor", value: function (row) { return row.project.vendorName; } },
+            { label: "Platform", value: function (row) { return row.project.platformName; } },
+            { label: "Status", value: function (row) { return row.project.contractStatus; } },
+            { label: "Start Date", value: function (row) { return row.project.contractStartDate; } },
+            { label: "End Date", value: function (row) { return row.project.contractEndDate; } },
+            { label: "Budget", value: function (row) { return vm.projectBudgetAmount(row.project); } },
+            csvColumn("Invoiced", "invoicedAmount"), csvColumn("Pending Payments", "pendingPaymentAmount"), csvColumn("Invoice Count", "invoiceCount"), csvColumn("Invoice Details", "invoiceSummary")
+          ];
+          rows = vm.contractReportRows;
+        } else if (section === "projects") {
+          columns = [
+            { label: "Project ID", value: function (row) { return vm.projectDisplayId(row); } },
+            csvColumn("Project", "projectName"), csvColumn("Project Type", "projectType"), csvColumn("Budget Type", "budgetType"), csvColumn("Budget Source", "budgetSource"),
+            { label: "Budget", value: function (row) { return vm.projectBudgetAmount(row); } },
+            csvColumn("Utilized", "utilization"), csvColumn("Vendor", "vendorName"), csvColumn("Platform", "platformName"), csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")
+          ];
+          rows = vm.projects;
+        } else if (section === "approval") {
+          columns = [
+            { label: "Project ID", value: function (row) { return vm.projectDisplayId(row.project); } },
+            { label: "Project", value: function (row) { return row.project.projectName; } },
+            { label: "PET Reference", value: function (row) { return row.line.petReference || row.line.petCode; } },
+            { label: "Vendor", value: function (row) { return row.line.vendor; } },
+            { label: "Status", value: function (row) { return row.line.camStatus; } },
+            { label: "Amount", value: function (row) { return row.line.cost; } },
+            { label: "GL Number", value: function (row) { return row.line.glNumber; } }
+          ];
+          rows = buildApprovalMonitorRows();
+        } else if (section === "financial-years") {
+          columns = [csvColumn("Breakdown", "breakdown"), csvColumn("Year or Group", "name"), csvColumn("CAPEX", "capex"), csvColumn("OPEX", "opex"), csvColumn("Total", "total"), csvColumn("Invoice Count", "invoiceCount")];
+          rows = vm.yearlyExpenditureRows.map(function (row) { return angular.extend({ breakdown: "Year", name: row.year }, row); }).concat(vm.dimensionExpenditureRows.map(function (row) { return angular.extend({ breakdown: vm.expenditureDimensionLabel() }, row); }));
+        } else {
+          columns = [csvColumn("Metric", "metric"), csvColumn("Value", "value")];
+          rows = [
+            { metric: "Registered projects", value: vm.reportMetrics.projectsRegistered },
+            { metric: "Approved PETs", value: vm.reportMetrics.petsApproved },
+            { metric: "Pending approvals", value: vm.reportMetrics.petsOnTrack },
+            { metric: "Invoices raised", value: vm.reportMetrics.invoicesRaised },
+            { metric: "Outstanding invoices", value: vm.reportMetrics.invoicesOutstanding },
+            { metric: "CAPEX budget", value: vm.reportMetrics.capexBudget },
+            { metric: "CAPEX utilized", value: vm.reportMetrics.capexUtilized },
+            { metric: "OPEX budget", value: vm.reportMetrics.opexBudget },
+            { metric: "OPEX utilized", value: vm.reportMetrics.opexUtilized }
+          ];
+        }
+        downloadCsv("Report_" + String(section || "Dashboard").replace(/[^a-z0-9]+/gi, "_"), columns, rows);
+      };
+      vm.exportActiveRecords = function () {
+        if (vm.tab === "reports") { vm.exportReport(vm.reportSection); return; }
+        var columns = [];
+        var rows = [];
+        if (vm.tab === "portfolio") {
+          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row); } }, csvColumn("Project", "projectName"), csvColumn("Type", "projectType"), csvColumn("Budget Type", "budgetType"), csvColumn("Budget", "budget"), csvColumn("Vendor", "vendorName"), csvColumn("Platform", "platformName"), csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")];
+          rows = vm.projects;
+        } else if (vm.tab === "approvals") {
+          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row.project); } }, { label: "Project", value: function (row) { return row.project.projectName; } }, { label: "PET", value: function (row) { return row.pet.code; } }, { label: "Status", value: function (row) { return row.pet.status; } }, { label: "Amount", value: function (row) { return row.requestedAmount; } }];
+          rows = vm.approvalItems;
+        } else if (vm.tab === "budgets") { columns = [csvColumn("Type", "budgetType"), csvColumn("Source", "externalId"), csvColumn("Description", "description"), csvColumn("Budget", "budget"), csvColumn("Utilized", "utilization"), csvColumn("Available", "availableBudget")]; rows = vm.budgets; }
+        else if (vm.tab === "currencies") { columns = [csvColumn("Code", "code"), csvColumn("Name", "name"), csvColumn("Rate to Local", "rateToLocal"), csvColumn("Active", "isActive")]; rows = vm.currencies; }
+        else if (vm.tab === "vendors") { columns = [csvColumn("Vendor", "name"), csvColumn("Active", "isActive"), csvColumn("Created", "createdUtc"), csvColumn("Updated", "updatedUtc")]; rows = vm.vendors; }
+        else if (vm.tab === "platforms") { columns = [csvColumn("Platform", "name"), csvColumn("Description", "description"), csvColumn("Contracts", "contractCount"), csvColumn("Active", "isActive")]; rows = vm.platforms; }
+        else if (vm.tab === "gl") { columns = [csvColumn("GL Number", "glNumber"), csvColumn("Name", "glName"), csvColumn("Fund Amount", "fundAmount"), csvColumn("Reserved", "reservedAmount"), csvColumn("Available", "availableBalance"), csvColumn("Active", "isActive")]; rows = vm.glFunds; }
+        else if (vm.tab === "roles") { columns = [csvColumn("Name", "displayName"), csvColumn("Email", "email"), csvColumn("Roles", "roleList"), csvColumn("Active", "isActive"), csvColumn("Portal Access", "portalAccess")]; rows = vm.roleUsers; }
+        downloadCsv("Records_" + String(vm.tab).replace(/[^a-z0-9]+/gi, "_"), columns, rows);
+      };
       vm.canChangeNonProjectOpex = function (row) {
         return vm.can("request") && (vm.hasRole("Master") || createdByCurrentUser(row));
       };
@@ -3770,6 +4045,7 @@
       }
       vm.saveModal = function () {
         var type = vm.modal.type;
+        if (type === "opexBudget") { saveOpexContractBudget(); return; }
         if (type === "profile") { saveDelegation(); return; }
         if (type === "user") { vm.saveManagedUser(); return; }
         if (type === "upload" && vm.modal.kind === "nonProject") { saveNonProjectOpexUpload(); return; }
@@ -4431,7 +4707,7 @@
           prepareProjects();
           vm.updateView(true);
           vm.updateReportView();
-          $q.all([loadApprovalMonitoring(), loadVendor360Lines(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); vm.updateReportProjectView(true); redraw(); });
+          $q.all([loadApprovalMonitoring(), loadVendor360Lines(), loadVendorInvoices()]).then(function () { vm.updateVendorSpendView(true); vm.updateReportProjectView(true); vm.updateExpenditureReport(); redraw(); });
           redraw();
         }, function (response) {
           if (response && response.status === 401) vm.signOut();
