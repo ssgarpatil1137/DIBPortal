@@ -1,0 +1,11 @@
+USE DFM;
+GO
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
+IF COL_LENGTH('dbo.Platforms','Department') IS NULL
+BEGIN
+    ALTER TABLE dbo.Platforms ADD Department NVARCHAR(200) NULL;
+END;
+GO

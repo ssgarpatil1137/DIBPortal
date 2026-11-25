@@ -1302,8 +1302,12 @@
       }
       function optionKey(value) {
         var key = String(value || "").trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-        return key === "eal" ? "eai" : key;
+        return key === "eal" || key === "eais" ? "eai" : key;
       }
+      vm.departmentDisplayName = function (value) {
+        var text = String(value || "").trim();
+        return optionKey(text) === "eai" ? "EAIS" : text;
+      };
       function validatePetRequiredDropdowns(row, rowLabel) {
         if (!validOption(row && row.department, vm.departmentOptions)) { noticeError("Department is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.unitType, vm.unitTypeOptions)) { noticeError("Unit Type is required on " + rowLabel + "."); return false; }
@@ -2356,7 +2360,7 @@
           summary[budgetType.toLowerCase()] += amount;
           summary.total += amount;
           var dimension = vm.expenditureDimension;
-          var name = dimension === "department" ? (invoice.department || "Not supplied")
+          var name = dimension === "department" ? (vm.departmentDisplayName(invoice.department) || "Not supplied")
             : dimension === "vendor" ? (invoice.vendorName || (project && project.vendorName) || "Not supplied")
               : dimension === "platform" ? ((project && project.platformName) || "Not assigned")
                 : (project ? vm.projectDisplayId(project) + " · " + project.projectName : "Project not supplied");
@@ -2809,7 +2813,7 @@
       vm.updatePlatformView = function (keepPage) {
         var query = (vm.platformSearch || "").toLowerCase();
         var filtered = (vm.platforms || []).filter(function (platform) {
-          return !query || [platform.name, platform.description, platform.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
+          return !query || [platform.name, platform.description, platform.department, vm.departmentDisplayName(platform.department), platform.isActive ? "active" : "inactive"].join(" ").toLowerCase().indexOf(query) >= 0;
         });
         vm.platformFilteredCount = filtered.length;
         vm.platformPageCount = Math.max(1, Math.ceil(filtered.length / vm.platformPageSize));
@@ -3504,6 +3508,7 @@
       vm.openPlatform = function (platform) {
         vm.selectedPlatform = platform || null;
         vm.form = angular.copy(platform || { name: "", description: "", isActive: true });
+        vm.form.department = normalizeDepartmentOption(vm.form.department);
         vm.modal = {
           type: "platform",
           kicker: "MASTER CONTROL",
@@ -3858,7 +3863,7 @@
         } else if (vm.tab === "budgets") { columns = [csvColumn("Type", "budgetType"), csvColumn("Source", "externalId"), csvColumn("Description", "description"), csvColumn("Budget", "budget"), csvColumn("Utilized", "utilization"), csvColumn("Available", "availableBudget")]; rows = vm.budgets; }
         else if (vm.tab === "currencies") { columns = [csvColumn("Code", "code"), csvColumn("Name", "name"), csvColumn("Rate to Local", "rateToLocal"), csvColumn("Active", "isActive")]; rows = vm.currencies; }
         else if (vm.tab === "vendors") { columns = [csvColumn("Vendor", "name"), csvColumn("Active", "isActive"), csvColumn("Created", "createdUtc"), csvColumn("Updated", "updatedUtc")]; rows = vm.vendors; }
-        else if (vm.tab === "platforms") { columns = [csvColumn("Platform", "name"), csvColumn("Description", "description"), csvColumn("Contracts", "contractCount"), csvColumn("Active", "isActive")]; rows = vm.platforms; }
+        else if (vm.tab === "platforms") { columns = [csvColumn("Platform", "name"), { label: "Department", value: function (row) { return vm.departmentDisplayName(row.department); } }, csvColumn("Description", "description"), csvColumn("Contracts", "contractCount"), csvColumn("Active", "isActive")]; rows = vm.platforms; }
         else if (vm.tab === "gl") { columns = [csvColumn("GL Number", "glNumber"), csvColumn("Name", "glName"), csvColumn("Fund Amount", "fundAmount"), csvColumn("Reserved", "reservedAmount"), csvColumn("Available", "availableBalance"), csvColumn("Active", "isActive")]; rows = vm.glFunds; }
         else if (vm.tab === "roles") { columns = [csvColumn("Name", "displayName"), csvColumn("Email", "email"), csvColumn("Roles", "roleList"), csvColumn("Active", "isActive"), csvColumn("Portal Access", "portalAccess")]; rows = vm.roleUsers; }
         downloadCsv("Records_" + String(vm.tab).replace(/[^a-z0-9]+/gi, "_"), columns, rows);
@@ -4586,6 +4591,7 @@
           if (!vm.form || !String(vm.form.name || "").trim()) { noticeError("Platform name is required."); return; }
           vm.form.name = String(vm.form.name || "").trim();
           vm.form.description = String(vm.form.description || "").trim();
+          vm.form.department = normalizeDepartmentOption(vm.form.department) || null;
           if (vm.form.name.length > 200) { noticeError("Platform name cannot exceed 200 characters."); return; }
           if (vm.form.description.length > 500) { noticeError("Description cannot exceed 500 characters."); return; }
           if (!validatePlatformDuplicate(vm.form)) return;

@@ -674,19 +674,19 @@
         <div class="section-bar">
           <div>
             <h2>Platform Master</h2>
-            <span>Maintain standardized platform values used by OPEX Contracts and platform-wise reporting.</span>
+            <span>Maintain standardized platform values and linked departments used by OPEX Contracts and reporting.</span>
           </div>
           <button class="btn secondary" ng-click="vm.openPlatform()"><i data-lucide="plus"></i>Add Platform</button>
           <div class="filters">
-            <label class="search"><i data-lucide="search"></i><input ng-model="vm.platformSearch" ng-change="vm.updatePlatformView()" placeholder="Search platform, description, status" /></label>
+            <label class="search"><i data-lucide="search"></i><input ng-model="vm.platformSearch" ng-change="vm.updatePlatformView()" placeholder="Search platform, department, description, status" /></label>
           </div>
         </div>
         <div class="table-scroll">
           <table class="data-table vendor-register">
-            <thead><tr><th>Platform name</th><th>Description</th><th>OPEX Contracts</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead>
+            <thead><tr><th>Platform name</th><th>Department</th><th>Description</th><th>OPEX Contracts</th><th>Status</th><th>Updated</th><th>Action</th></tr></thead>
             <tbody>
-              <tr ng-repeat="platform in vm.visiblePlatforms track by platform.platformId"><td>{{platform.name}}</td><td title="{{platform.description}}"><span class="truncate-cell wide-cell">{{platform.description}}</span></td><td><span class="count-chip">{{platform.contractCount||0}}</span></td><td><span class="status" ng-class="platform.isActive?'approved':'rejected'">{{platform.isActive?'Active':'Inactive'}}</span></td><td title="{{platform.updatedBy}}">{{platform.updatedUtc|date:'dd-MMM-yyyy'}}</td><td><button class="icon-btn" title="Edit platform" ng-click="vm.openPlatform(platform)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{platform.isActive?'Disable':'Enable'}} platform" ng-click="vm.togglePlatform(platform)"><i data-lucide="power"></i></button></td></tr>
-              <tr ng-if="!vm.visiblePlatforms.length"><td colspan="6"><div class="empty inline-empty"><i data-lucide="layers"></i><strong>No platforms match the search.</strong></div></td></tr>
+              <tr ng-repeat="platform in vm.visiblePlatforms track by platform.platformId"><td>{{platform.name}}</td><td>{{vm.departmentDisplayName(platform.department)||'—'}}</td><td title="{{platform.description}}"><span class="truncate-cell wide-cell">{{platform.description}}</span></td><td><span class="count-chip">{{platform.contractCount||0}}</span></td><td><span class="status" ng-class="platform.isActive?'approved':'rejected'">{{platform.isActive?'Active':'Inactive'}}</span></td><td title="{{platform.updatedBy}}">{{platform.updatedUtc|date:'dd-MMM-yyyy'}}</td><td><button class="icon-btn" title="Edit platform" ng-click="vm.openPlatform(platform)"><i data-lucide="pencil"></i></button><button class="icon-btn" title="{{platform.isActive?'Disable':'Enable'}} platform" ng-click="vm.togglePlatform(platform)"><i data-lucide="power"></i></button></td></tr>
+              <tr ng-if="!vm.visiblePlatforms.length"><td colspan="7"><div class="empty inline-empty"><i data-lucide="layers"></i><strong>No platforms match the search.</strong></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1211,7 +1211,7 @@
               ><label ng-if="vm.form.isOpexContract">Accountable Exec Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExecLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">Accountable Executive<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.accountableExec" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory" required><option value="">Select user</option></select></label
               ><label ng-if="vm.form.isOpexContract">SME Lead<select falcon-select2 data-placeholder="Search user" ng-model="vm.form.smeLead" ng-options="u.displayName as vm.userDirectoryLabel(u) for u in vm.userDirectory"><option value="">Select user</option></select></label
-              ><label ng-if="vm.form.isOpexContract">Platform<select falcon-select2 data-placeholder="Search platform" ng-model="vm.form.platformId" ng-options="pl.platformId as pl.name for pl in vm.platformOptions()" ng-required="!vm.form.isEdit"><option value="">Select platform</option></select></label
+              ><label ng-if="vm.form.isOpexContract">Platform<select falcon-select2 data-placeholder="Search platform" ng-model="vm.form.platformId" ng-options="pl.platformId as (pl.name + (pl.department ? ' · ' + vm.departmentDisplayName(pl.department) : '')) for pl in vm.platformOptions()" ng-required="!vm.form.isEdit"><option value="">Select platform</option></select></label
               ><label ng-if="vm.form.isOpexContract">Vendor<select falcon-select2 data-placeholder="Search vendor" ng-model="vm.form.vendorId" ng-options="vendor.vendorId as vendor.name for vendor in vm.contractVendorOptions()" ng-required="!vm.form.isEdit"><option value="">Select vendor</option></select></label
               ><div class="full platform-inline-add" ng-if="vm.form.isOpexContract&&(vm.hasRole('Admin')||vm.hasRole('Master'))">
                 <button type="button" class="btn compact secondary" ng-if="!vm.form.addingVendor" ng-click="vm.form.addingVendor=true"><i data-lucide="plus"></i>Add new vendor</button>
@@ -1948,6 +1948,7 @@
                   ng-model="vm.form.name"
                   maxlength="200"
                   required /></label
+              ><label>Department<select ng-model="vm.form.department" ng-options="department as vm.departmentDisplayName(department) for department in vm.departmentOptions"><option value="">Select department</option></select></label
               ><label class="full"
                 >Description<input
                   ng-model="vm.form.description"
@@ -2194,6 +2195,6 @@
     <script src="vendor/select2.min.js"></script>
     <script src="vendor/angular.min.js"></script>
     <script src="vendor/lucide.min.js"></script>
-    <script src="app/app.js?v=51"></script>
+    <script src="app/app.js?v=52"></script>
   </body>
 </html>

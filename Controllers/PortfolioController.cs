@@ -633,7 +633,7 @@ namespace DFM.Web.Controllers
             catch (SqlException ex) { return BadRequest(ex.Message); }
         }
 
-        private const string PlatformSelect = @"SELECT pl.PlatformId,pl.Name,pl.Description,pl.IsActive,pl.CreatedUtc,pl.CreatedBy,pl.UpdatedUtc,pl.UpdatedBy,
+        private const string PlatformSelect = @"SELECT pl.PlatformId,pl.Name,pl.Description,pl.Department,pl.IsActive,pl.CreatedUtc,pl.CreatedBy,pl.UpdatedUtc,pl.UpdatedBy,
             (SELECT COUNT(*) FROM dbo.Projects p WHERE p.PlatformId=pl.PlatformId) ContractCount
             FROM dbo.Platforms pl";
 
@@ -654,19 +654,22 @@ namespace DFM.Web.Controllers
             if (value == null) return BadRequest("Platform details are required.");
             value.Name = (value.Name ?? "").Trim();
             value.Description = (value.Description ?? "").Trim();
+            value.Department = (value.Department ?? "").Trim();
+            if (string.Equals(value.Department, "EAIS", StringComparison.OrdinalIgnoreCase)) value.Department = "EA&I";
             if (value.Name.Length == 0) return BadRequest("Platform name is required.");
             if (value.Name.Length > 200) return BadRequest("Platform name cannot exceed 200 characters.");
             if (value.Description.Length > 500) return BadRequest("Description cannot exceed 500 characters.");
+            if (value.Department.Length > 200) return BadRequest("Department cannot exceed 200 characters.");
             try
             {
                 return Ok(Db.Query(@"DECLARE @SavedPlatformId INT = NULLIF(@PlatformId,0);
                     IF @SavedPlatformId IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Platforms WHERE PlatformId=@SavedPlatformId) THROW 50070,'Platform was not found.',1;
                     IF EXISTS(SELECT 1 FROM dbo.Platforms WHERE NormalizedName=UPPER(@Name) AND (@SavedPlatformId IS NULL OR PlatformId<>@SavedPlatformId)) THROW 50071,'Platform already exists.',1;
                     IF @SavedPlatformId IS NULL
-                    BEGIN INSERT dbo.Platforms(Name,Description,IsActive,CreatedBy,UpdatedBy) VALUES(@Name,NULLIF(@Description,''),@IsActive,@User,@User); SET @SavedPlatformId=CONVERT(INT,SCOPE_IDENTITY()); END
-                    ELSE UPDATE dbo.Platforms SET Name=@Name,Description=NULLIF(@Description,''),IsActive=@IsActive,UpdatedUtc=SYSUTCDATETIME(),UpdatedBy=@User WHERE PlatformId=@SavedPlatformId;
+                    BEGIN INSERT dbo.Platforms(Name,Description,Department,IsActive,CreatedBy,UpdatedBy) VALUES(@Name,NULLIF(@Description,''),NULLIF(@Department,''),@IsActive,@User,@User); SET @SavedPlatformId=CONVERT(INT,SCOPE_IDENTITY()); END
+                    ELSE UPDATE dbo.Platforms SET Name=@Name,Description=NULLIF(@Description,''),Department=NULLIF(@Department,''),IsActive=@IsActive,UpdatedUtc=SYSUTCDATETIME(),UpdatedBy=@User WHERE PlatformId=@SavedPlatformId;
                     " + PlatformSelect + " WHERE pl.PlatformId=@SavedPlatformId",
-                    P("@PlatformId", value.PlatformId ?? 0), P("@Name", value.Name), P("@Description", value.Description), P("@IsActive", value.IsActive), P("@User", User.Identity.Name)).FirstOrDefault());
+                    P("@PlatformId", value.PlatformId ?? 0), P("@Name", value.Name), P("@Description", value.Description), P("@Department", value.Department), P("@IsActive", value.IsActive), P("@User", User.Identity.Name)).FirstOrDefault());
             }
             catch (SqlException ex) { return BadRequest(ex.Number == 2601 || ex.Number == 2627 ? "Platform already exists." : ex.Message); }
         }
