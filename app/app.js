@@ -127,7 +127,9 @@
       vm.reportProjectStatusFilter = "";
       vm.reportProjectBudgetTypeFilter = "";
       vm.reportProjectPlatformFilter = "";
+      vm.reportProjectDepartmentFilter = "";
       vm.reportPlatformOptions = [];
+      vm.reportDepartmentOptions = [];
       vm.platformReportRows = [];
       vm.contractReportRows = [];
       vm.reportProjectPage = 1;
@@ -140,9 +142,11 @@
       vm.expenditureStartDate = null;
       vm.expenditureEndDate = null;
       vm.expenditureDimension = "department";
+      vm.expenditureDepartmentFilter = "";
       vm.expenditureYearOptions = [];
       vm.yearlyExpenditureRows = [];
       vm.dimensionExpenditureRows = [];
+      vm.departmentProjectRows = [];
       vm.expenditureSummary = { invoiceCount: 0, capex: 0, opex: 0, total: 0 };
       vm.platformReportSearch = "";
       vm.platformReportSort = { key: "name", desc: false };
@@ -1308,6 +1312,59 @@
         var text = String(value || "").trim();
         return optionKey(text) === "eai" ? "EAIS" : text;
       };
+      function projectPlatform(project) {
+        if (!project || !project.platformId) return null;
+        return (vm.platforms || []).filter(function (platform) { return String(platform.platformId) === String(project.platformId); })[0] || null;
+      }
+      vm.projectPlatformName = function (project) {
+        var platform = projectPlatform(project);
+        return project && project.platformName || platform && platform.name || "Not assigned";
+      };
+      vm.projectPlatformDepartment = function (project) {
+        var platform = projectPlatform(project);
+        return vm.departmentDisplayName(project && project.platformDepartment || platform && platform.department || "");
+      };
+      function projectDepartments(project) {
+        var departments = [];
+        var projectDepartment = vm.departmentDisplayName(project && project.department);
+        var platformDepartment = vm.projectPlatformDepartment(project);
+        if (projectDepartment) departments.push(projectDepartment);
+        if (platformDepartment) departments.push(platformDepartment);
+        ((project && project.pets) || []).forEach(function (pet) {
+          (pet.spendItems || []).forEach(function (item) {
+            var department = vm.departmentDisplayName(item.department);
+            if (department && departments.indexOf(department) < 0) departments.push(department);
+          });
+        });
+        (vm.vendorInvoiceSource || []).forEach(function (invoice) {
+          if (String(invoice.projectId) !== String(project && project.projectId)) return;
+          var department = vm.departmentDisplayName(invoice.department) || "Not supplied";
+          if (departments.indexOf(department) < 0) departments.push(department);
+        });
+        return departments;
+      }
+      function projectMatchesDepartment(project, department) {
+        return !department || projectDepartments(project).indexOf(department) >= 0;
+      }
+      function reportDepartmentOptions() {
+        var options = [];
+        (vm.departmentOptions || []).forEach(function (department) {
+          var label = vm.departmentDisplayName(department);
+          if (label && options.indexOf(label) < 0) options.push(label);
+        });
+        (vm.platforms || []).forEach(function (platform) {
+          var label = vm.departmentDisplayName(platform.department);
+          if (label && options.indexOf(label) < 0) options.push(label);
+        });
+        (vm.vendorInvoiceSource || []).forEach(function (invoice) {
+          var label = vm.departmentDisplayName(invoice.department) || "Not supplied";
+          if (options.indexOf(label) < 0) options.push(label);
+        });
+        (vm.projects || []).forEach(function (project) {
+          projectDepartments(project).forEach(function (label) { if (label && options.indexOf(label) < 0) options.push(label); });
+        });
+        return options.sort(function (a, b) { return a.localeCompare(b); });
+      }
       function validatePetRequiredDropdowns(row, rowLabel) {
         if (!validOption(row && row.department, vm.departmentOptions)) { noticeError("Department is required on " + rowLabel + "."); return false; }
         if (!validOption(row && row.unitType, vm.unitTypeOptions)) { noticeError("Unit Type is required on " + rowLabel + "."); return false; }
@@ -1839,13 +1896,16 @@
       vm.updateReportProjectView = function (keepPage) {
         var query = (vm.reportProjectSearch || "").toLowerCase();
         var platformFilter = String(vm.reportProjectPlatformFilter || "");
+        var departmentFilter = String(vm.reportProjectDepartmentFilter || "");
+        vm.reportDepartmentOptions = reportDepartmentOptions();
         var filtered = (vm.projects || []).filter(function (project) {
           var statusMatch = projectHasStatus(project, project.pets || [], vm.reportProjectStatusFilter);
           var budgetTypeMatch = !vm.reportProjectBudgetTypeFilter || String(project.budgetType || "").toUpperCase() === vm.reportProjectBudgetTypeFilter;
           var platformMatch = !platformFilter ||
             (platformFilter === "none" ? vm.isOpexContract(project) && !project.platformId : String(project.platformId || "") === platformFilter);
-          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.contractNumber, project.vendorName, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, project.platformName, project.status].join(" ").toLowerCase().indexOf(query) >= 0;
-          return statusMatch && budgetTypeMatch && platformMatch && queryMatch;
+          var departmentMatch = projectMatchesDepartment(project, departmentFilter);
+          var queryMatch = !query || [vm.projectDisplayId(project), project.projectCode, project.jiraKey, project.projectName, project.projectType, project.contractNumber, project.contractYear, project.vendorName, project.budgetType, project.accountableExecLead, project.smeLead, project.projectManager, project.requestorName, project.requestorEmail, project.budgetSource, vm.projectPlatformName(project), vm.projectPlatformDepartment(project), project.status].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && budgetTypeMatch && platformMatch && departmentMatch && queryMatch;
         });
         buildPlatformReport(vm.projects);
         buildContractReport(vm.projects);
@@ -1945,15 +2005,15 @@
       // Platform-wise summary of OPEX Contracts, grouped by the standardized Platform ID.
       function buildPlatformReport(projects) {
         var optionsById = {};
-        (vm.platforms || []).forEach(function (platform) { optionsById[platform.platformId] = { platformId: String(platform.platformId), name: platform.name }; });
+        (vm.platforms || []).forEach(function (platform) { optionsById[platform.platformId] = { platformId: String(platform.platformId), name: platform.name, department: vm.departmentDisplayName(platform.department) }; });
         (vm.projects || []).forEach(function (project) {
-          if (project.platformId && !optionsById[project.platformId]) optionsById[project.platformId] = { platformId: String(project.platformId), name: project.platformName || "Platform " + project.platformId };
+          if (project.platformId && !optionsById[project.platformId]) optionsById[project.platformId] = { platformId: String(project.platformId), name: project.platformName || "Platform " + project.platformId, department: vm.projectPlatformDepartment(project) };
         });
         vm.reportPlatformOptions = Object.keys(optionsById).map(function (key) { return optionsById[key]; }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
         var groups = {};
         (projects || []).filter(vm.isOpexContract).forEach(function (project) {
           var key = project.platformId ? String(project.platformId) : "none";
-          var group = groups[key] || (groups[key] = { key: key, name: project.platformId ? (project.platformName || (optionsById[project.platformId] || {}).name) : "Not assigned", contracts: 0, petCount: 0, budgetLineCount: 0, invoiceCount: 0, totalBudget: 0, invoicedAmount: 0 });
+          var group = groups[key] || (groups[key] = { key: key, name: project.platformId ? (project.platformName || (optionsById[project.platformId] || {}).name) : "Not assigned", department: vm.projectPlatformDepartment(project), contracts: 0, petCount: 0, budgetLineCount: 0, invoiceCount: 0, totalBudget: 0, invoicedAmount: 0 });
           group.contracts++;
           group.petCount += Number(project.petCount) || 0;
           group.budgetLineCount += Number(project.budgetLineCount) || 0;
@@ -1980,7 +2040,7 @@
         var query = String(vm.platformReportSearch || "").trim().toLowerCase();
         var sort = vm.platformReportSort;
         var filtered = (vm.platformReportRows || []).filter(function (row) {
-          return !query || [row.name, row.contracts, row.invoiceCount].join(" ").toLowerCase().indexOf(query) >= 0;
+          return !query || [row.name, row.department, row.contracts, row.invoiceCount].join(" ").toLowerCase().indexOf(query) >= 0;
         }).sort(function (a, b) {
           var left = a[sort.key];
           var right = b[sort.key];
@@ -2009,8 +2069,9 @@
         var filtered = (vm.contractReportRows || []).filter(function (row) {
           var project = row.project;
           var statusMatch = !statusFilter || (statusFilter === "expired" ? !!project.isExpiredUnclosed : statusFilter === "active" ? sameStatus(project.contractStatus || "Open", "Open") && !project.isExpiredUnclosed : sameStatus(project.contractStatus || "Open", statusFilter));
-          var queryMatch = !query || [project.contractNumber, project.contractYear, project.projectName, project.vendorName, project.platformName, project.contractStatus, row.invoiceSummary].join(" ").toLowerCase().indexOf(query) >= 0;
-          return statusMatch && queryMatch;
+          var departmentMatch = projectMatchesDepartment(project, vm.reportProjectDepartmentFilter);
+          var queryMatch = !query || [project.contractNumber, project.contractYear, project.projectName, project.vendorName, vm.projectPlatformName(project), vm.projectPlatformDepartment(project), project.contractStatus, row.invoiceSummary].join(" ").toLowerCase().indexOf(query) >= 0;
+          return statusMatch && departmentMatch && queryMatch;
         }).sort(function (a, b) {
           function sortValue(row) {
             if (sort.key === "expiry") return row.project.daysToExpiry == null ? Number.MAX_VALUE : Number(row.project.daysToExpiry);
@@ -2325,6 +2386,16 @@
           vendor.outstanding = vendor.awarded - vendor.utilized;
           vendor.pendingCount = vendor.camPendingCount + vendor.lpoPendingCount + vendor.invoicePendingCount;
           vendor.utilizationPercent = vm.percent(vendor.utilized, vendor.awarded);
+          var platformNames = [];
+          var departmentNames = [];
+          vendor.projects.forEach(function (item) {
+            var platformName = vm.projectPlatformName(item.project);
+            var departmentName = vm.projectPlatformDepartment(item.project) || "Not assigned";
+            if (platformNames.indexOf(platformName) < 0) platformNames.push(platformName);
+            if (departmentNames.indexOf(departmentName) < 0) departmentNames.push(departmentName);
+          });
+          vendor.platformSummary = platformNames.join(", ");
+          vendor.departmentSummary = departmentNames.join(", ");
           return vendor;
         }).sort(function (a, b) { return b.awarded - a.awarded || b.utilized - a.utilized || a.name.localeCompare(b.name); });
         rows.forEach(function (vendor, index) { vendor.rank = index + 1; });
@@ -2338,9 +2409,14 @@
         var years = {};
         var annual = {};
         var dimensions = {};
+        var departmentProjects = {};
         var summary = { invoiceCount: 0, capex: 0, opex: 0, total: 0 };
         var startDate = localDateOnly(vm.expenditureStartDate);
         var endDate = localDateOnly(vm.expenditureEndDate);
+        var departmentFilter = String(vm.expenditureDepartmentFilter || "");
+        function addUnique(list, value) {
+          if (value && list.indexOf(value) < 0) list.push(value);
+        }
         (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
         (vm.vendorInvoiceSource || []).forEach(function (invoice) {
           if (sameStatus(invoice.invoiceStatus, "Rejected")) return;
@@ -2348,32 +2424,83 @@
           if (!invoiceDate || (startDate && invoiceDate < startDate) || (endDate && invoiceDate > endDate)) return;
           var year = String(invoiceDate.getFullYear());
           years[year] = true;
-          if (vm.expenditureYear && vm.expenditureYear !== year) return;
           var project = projectsById[String(invoice.projectId)] || null;
+          var platformName = vm.projectPlatformName(project);
+          var platformDepartment = vm.projectPlatformDepartment(project);
+          var departmentName = vm.departmentDisplayName(invoice.department) || platformDepartment || "Not supplied";
           var budgetType = project && (vm.isOpexContract(project) || String(project.budgetType || "").toUpperCase() === "OPEX") ? "OPEX" : "CAPEX";
           var amount = parseNumericInput(invoice.invoiceAmount) || 0;
-          var yearRow = annual[year] || (annual[year] = { year: year, invoiceCount: 0, capex: 0, opex: 0, total: 0 });
+          var yearRow = annual[year] || (annual[year] = { year: year, invoiceCount: 0, capex: 0, opex: 0, total: 0, platforms: [], departments: [] });
           yearRow.invoiceCount++;
           yearRow[budgetType.toLowerCase()] += amount;
           yearRow.total += amount;
+          addUnique(yearRow.platforms, platformName !== "Not assigned" ? platformName : "");
+          addUnique(yearRow.departments, departmentName);
+          if (vm.expenditureYear && vm.expenditureYear !== year) return;
           summary.invoiceCount++;
           summary[budgetType.toLowerCase()] += amount;
           summary.total += amount;
           var dimension = vm.expenditureDimension;
-          var name = dimension === "department" ? (vm.departmentDisplayName(invoice.department) || "Not supplied")
+          var name = dimension === "department" ? departmentName
             : dimension === "vendor" ? (invoice.vendorName || (project && project.vendorName) || "Not supplied")
-              : dimension === "platform" ? ((project && project.platformName) || "Not assigned")
+              : dimension === "platform" ? platformName
                 : (project ? vm.projectDisplayId(project) + " · " + project.projectName : "Project not supplied");
           var key = name.toLowerCase();
-          var row = dimensions[key] || (dimensions[key] = { name: name, projectId: dimension === "project" && project ? project.projectId : null, invoiceCount: 0, capex: 0, opex: 0, total: 0 });
+          var row = dimensions[key] || (dimensions[key] = { name: name, projectId: dimension === "project" && project ? project.projectId : null, invoiceCount: 0, capex: 0, opex: 0, total: 0, platforms: [], departments: [], projectIds: [] });
           row.invoiceCount++;
           row[budgetType.toLowerCase()] += amount;
           row.total += amount;
+          addUnique(row.platforms, platformName !== "Not assigned" ? platformName : "");
+          addUnique(row.departments, departmentName);
+          if (project) addUnique(row.projectIds, String(project.projectId));
+          if (departmentFilter && project && (departmentName === departmentFilter || platformDepartment === departmentFilter)) {
+            var detailKey = String(project.projectId);
+            var detail = departmentProjects[detailKey] || (departmentProjects[detailKey] = {
+              projectId: project.projectId, projectName: project.projectName, projectDisplayId: vm.projectDisplayId(project), projectType: project.projectType,
+              contractNumber: project.contractNumber, contractYear: project.contractYear, vendorName: project.vendorName,
+              platform: platformName, platformDepartment: platformDepartment || "Not assigned", invoiceDepartments: [],
+              invoiceCount: 0, capex: 0, opex: 0, total: 0
+            });
+            detail.invoiceCount++;
+            detail[budgetType.toLowerCase()] += amount;
+            detail.total += amount;
+            addUnique(detail.invoiceDepartments, departmentName);
+          }
         });
+        if (departmentFilter) {
+          (vm.projects || []).filter(function (project) {
+            return vm.isOpexContract(project) && vm.projectPlatformDepartment(project) === departmentFilter;
+          }).forEach(function (project) {
+            var key = String(project.projectId);
+            if (!departmentProjects[key]) departmentProjects[key] = {
+              projectId: project.projectId, projectName: project.projectName, projectDisplayId: vm.projectDisplayId(project), projectType: project.projectType,
+              contractNumber: project.contractNumber, contractYear: project.contractYear, vendorName: project.vendorName,
+              platform: vm.projectPlatformName(project), platformDepartment: vm.projectPlatformDepartment(project), invoiceDepartments: [],
+              invoiceCount: 0, capex: 0, opex: 0, total: 0
+            };
+          });
+        }
         vm.expenditureYearOptions = Object.keys(years).sort().reverse();
-        vm.yearlyExpenditureRows = Object.keys(annual).map(function (year) { return annual[year]; }).sort(function (a, b) { return Number(b.year) - Number(a.year); });
-        vm.dimensionExpenditureRows = Object.keys(dimensions).map(function (key) { return dimensions[key]; }).sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name); });
+        vm.expenditureDepartmentOptions = reportDepartmentOptions();
+        vm.yearlyExpenditureRows = Object.keys(annual).map(function (year) {
+          var row = annual[year];
+          row.platformSummary = row.platforms.join(", ");
+          row.departmentSummary = row.departments.join(", ");
+          return row;
+        }).sort(function (a, b) { return Number(b.year) - Number(a.year); });
+        vm.dimensionExpenditureRows = Object.keys(dimensions).map(function (key) {
+          var row = dimensions[key];
+          row.platformSummary = row.platforms.join(", ");
+          row.departmentSummary = row.departments.join(", ");
+          row.projectCount = row.projectIds.length;
+          return row;
+        }).sort(function (a, b) { return b.total - a.total || a.name.localeCompare(b.name); });
+        vm.departmentProjectRows = Object.keys(departmentProjects).map(function (key) { return departmentProjects[key]; }).sort(function (a, b) { return b.total - a.total || a.projectName.localeCompare(b.projectName); });
         vm.expenditureSummary = summary;
+      };
+      vm.filterExpenditureDepartment = function (department) {
+        vm.expenditureDepartmentFilter = department || "";
+        vm.updateExpenditureReport();
       };
       vm.openExpenditureProject = function (row) {
         var project = row && (vm.projects || []).filter(function (item) { return Number(item.projectId) === Number(row.projectId); })[0];
@@ -2483,7 +2610,7 @@
           var project = item.project || (entry && entry.project);
           var line = item.line || (entry && entry.line);
           var invoice = item.invoice || null;
-          var searchValue = [vm.vendor360.vendor.name, project && vm.projectDisplayId(project), project && project.projectName, project && project.budgetSource, line && line.petReference, line && line.petCode, line && line.vendor, line && line.justification, line && line.camId, line && line.camStatus, line && line.lpoRequest, line && line.lpoStatus, invoice && invoice.invoiceNumber, invoice && invoice.invoiceStatus].join(" ").toLowerCase();
+          var searchValue = [vm.vendor360.vendor.name, project && vm.projectDisplayId(project), project && project.projectName, project && project.budgetSource, project && vm.projectPlatformName(project), project && vm.projectPlatformDepartment(project), line && line.petReference, line && line.petCode, line && line.vendor, line && line.justification, line && line.camId, line && line.camStatus, line && line.lpoRequest, line && line.lpoStatus, invoice && invoice.invoiceNumber, invoice && invoice.invoiceStatus].join(" ").toLowerCase();
           return !query || searchValue.indexOf(query) >= 0;
         }).sort(function (a, b) {
           function sortValue(item) {
@@ -3757,6 +3884,8 @@
           columns = [
             { label: "Project ID", value: function (row) { var project = row.project || (row.entry && row.entry.project); return project && vm.projectDisplayId(project); } },
             { label: "Project", value: function (row) { var project = row.project || (row.entry && row.entry.project); return project && project.projectName; } },
+            { label: "Platform", value: function (row) { var project = row.project || (row.entry && row.entry.project); return vm.projectPlatformName(project); } },
+            { label: "Platform Department", value: function (row) { var project = row.project || (row.entry && row.entry.project); return vm.projectPlatformDepartment(project); } },
             { label: "Reference", value: function (row) { return (row.invoice && row.invoice.invoiceNumber) || (row.line && (row.line.petReference || row.line.camId)) || (row.entry && row.entry.line && row.entry.line.petReference); } },
             { label: "Status", value: function (row) { return (row.invoice && row.invoice.invoiceStatus) || (row.line && (row.line.lpoStatus || row.line.camStatus)); } },
             { label: "Amount", value: function (row) { return row.amount != null ? row.amount : row.awarded; } },
@@ -3768,17 +3897,18 @@
           return;
         }
         if (section === "vendor") {
-          columns = [csvColumn("Vendor", "name"), csvColumn("Awarded", "awarded"), csvColumn("Utilized", "utilized"), csvColumn("Outstanding", "outstanding"), csvColumn("Pending Value", "pendingValue"), csvColumn("Pending Items", "pendingCount")];
+          columns = [csvColumn("Vendor", "name"), csvColumn("Platforms", "platformSummary"), csvColumn("Departments", "departmentSummary"), csvColumn("Awarded", "awarded"), csvColumn("Utilized", "utilized"), csvColumn("Outstanding", "outstanding"), csvColumn("Pending Value", "pendingValue"), csvColumn("Pending Items", "pendingCount")];
           rows = vm.vendorSpendRows;
         } else if (section === "platform-contracts") {
-          columns = [csvColumn("Platform", "name"), csvColumn("Contracts", "contracts"), csvColumn("Invoices", "invoiceCount"), csvColumn("Budget", "totalBudget"), csvColumn("Invoiced", "invoicedAmount"), csvColumn("Outstanding", "outstandingAmount")];
+          columns = [csvColumn("Platform", "name"), csvColumn("Department", "department"), csvColumn("Contracts", "contracts"), csvColumn("Invoices", "invoiceCount"), csvColumn("Budget", "totalBudget"), csvColumn("Invoiced", "invoicedAmount"), csvColumn("Outstanding", "outstandingAmount")];
           rows = vm.platformReportRows;
         } else if (section === "contract-register") {
           columns = [
             { label: "Contract Number", value: function (row) { return row.project.contractNumber; } },
             { label: "Project", value: function (row) { return row.project.projectName; } },
             { label: "Vendor", value: function (row) { return row.project.vendorName; } },
-            { label: "Platform", value: function (row) { return row.project.platformName; } },
+            { label: "Platform", value: function (row) { return vm.projectPlatformName(row.project); } },
+            { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(row.project); } },
             { label: "Status", value: function (row) { return row.project.contractStatus; } },
             { label: "Start Date", value: function (row) { return row.project.contractStartDate; } },
             { label: "End Date", value: function (row) { return row.project.contractEndDate; } },
@@ -3791,13 +3921,15 @@
             { label: "Project ID", value: function (row) { return vm.projectDisplayId(row); } },
             csvColumn("Project", "projectName"), csvColumn("Project Type", "projectType"), csvColumn("Budget Type", "budgetType"), csvColumn("Budget Source", "budgetSource"),
             { label: "Budget", value: function (row) { return vm.projectBudgetAmount(row); } },
-            csvColumn("Utilized", "utilization"), csvColumn("Vendor", "vendorName"), csvColumn("Platform", "platformName"), csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")
+            csvColumn("Utilized", "utilization"), csvColumn("Vendor", "vendorName"), { label: "Platform", value: function (row) { return vm.projectPlatformName(row); } }, { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(row); } }, csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")
           ];
           rows = vm.projects;
         } else if (section === "approval") {
           columns = [
             { label: "Project ID", value: function (row) { return vm.projectDisplayId(row.project); } },
             { label: "Project", value: function (row) { return row.project.projectName; } },
+            { label: "Platform", value: function (row) { return vm.projectPlatformName(row.project); } },
+            { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(row.project); } },
             { label: "PET Reference", value: function (row) { return row.line.petReference || row.line.petCode; } },
             { label: "Vendor", value: function (row) { return row.line.vendor; } },
             { label: "Status", value: function (row) { return row.line.camStatus; } },
@@ -3825,6 +3957,8 @@
             { label: "Project ID", value: function (row) { var project = projectsById[String(row.projectId)]; return project && vm.projectDisplayId(project); } },
             { label: "Project", value: function (row) { var project = projectsById[String(row.projectId)]; return project && project.projectName; } },
             { label: "Project Type", value: function (row) { var project = projectsById[String(row.projectId)]; return project && project.projectType; } },
+            { label: "Platform", value: function (row) { return vm.projectPlatformName(projectsById[String(row.projectId)]); } },
+            { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(projectsById[String(row.projectId)]); } },
             csvColumn("PET ID", "petId"), csvColumn("Budget Line ID", "budgetLineId"),
             csvColumn("Vendor", "vendorName"), csvColumn("Invoice Number", "invoiceNumber"), csvColumn("Amount", "invoiceAmount"),
             csvColumn("Status", "invoiceStatus"), csvColumn("Invoice Date", "invoiceDate"), csvColumn("Vendor Submission Date", "vendorSubmissionDate"),
@@ -3832,7 +3966,7 @@
           ];
           rows = vendorInvoiceSourceRows();
         } else if (section === "financial-years") {
-          columns = [csvColumn("Breakdown", "breakdown"), csvColumn("Year or Group", "name"), csvColumn("CAPEX", "capex"), csvColumn("OPEX", "opex"), csvColumn("Total", "total"), csvColumn("Invoice Count", "invoiceCount")];
+          columns = [csvColumn("Breakdown", "breakdown"), csvColumn("Year or Group", "name"), csvColumn("Platforms", "platformSummary"), csvColumn("Departments", "departmentSummary"), csvColumn("CAPEX", "capex"), csvColumn("OPEX", "opex"), csvColumn("Total", "total"), csvColumn("Invoice Count", "invoiceCount")];
           rows = vm.yearlyExpenditureRows.map(function (row) { return angular.extend({ breakdown: "Year", name: row.year }, row); }).concat(vm.dimensionExpenditureRows.map(function (row) { return angular.extend({ breakdown: vm.expenditureDimensionLabel() }, row); }));
         } else {
           columns = [csvColumn("Metric", "metric"), csvColumn("Value", "value")];
@@ -3855,10 +3989,10 @@
         var columns = [];
         var rows = [];
         if (vm.tab === "portfolio") {
-          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row); } }, csvColumn("Project", "projectName"), csvColumn("Type", "projectType"), csvColumn("Budget Type", "budgetType"), csvColumn("Budget", "budget"), csvColumn("Vendor", "vendorName"), csvColumn("Platform", "platformName"), csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")];
+          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row); } }, csvColumn("Project", "projectName"), csvColumn("Type", "projectType"), csvColumn("Budget Type", "budgetType"), csvColumn("Budget", "budget"), csvColumn("Vendor", "vendorName"), { label: "Platform", value: function (row) { return vm.projectPlatformName(row); } }, { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(row); } }, csvColumn("Contract Number", "contractNumber"), csvColumn("Contract Year", "contractYear"), csvColumn("Status", "status")];
           rows = vm.projects;
         } else if (vm.tab === "approvals") {
-          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row.project); } }, { label: "Project", value: function (row) { return row.project.projectName; } }, { label: "PET", value: function (row) { return row.pet.code; } }, { label: "Status", value: function (row) { return row.pet.status; } }, { label: "Amount", value: function (row) { return row.requestedAmount; } }];
+          columns = [{ label: "Project ID", value: function (row) { return vm.projectDisplayId(row.project); } }, { label: "Project", value: function (row) { return row.project.projectName; } }, { label: "Platform", value: function (row) { return vm.projectPlatformName(row.project); } }, { label: "Platform Department", value: function (row) { return vm.projectPlatformDepartment(row.project); } }, { label: "PET", value: function (row) { return row.pet.code; } }, { label: "Status", value: function (row) { return row.pet.status; } }, { label: "Amount", value: function (row) { return row.requestedAmount; } }];
           rows = vm.approvalItems;
         } else if (vm.tab === "budgets") { columns = [csvColumn("Type", "budgetType"), csvColumn("Source", "externalId"), csvColumn("Description", "description"), csvColumn("Budget", "budget"), csvColumn("Utilized", "utilization"), csvColumn("Available", "availableBudget")]; rows = vm.budgets; }
         else if (vm.tab === "currencies") { columns = [csvColumn("Code", "code"), csvColumn("Name", "name"), csvColumn("Rate to Local", "rateToLocal"), csvColumn("Active", "isActive")]; rows = vm.currencies; }
