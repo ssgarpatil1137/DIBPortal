@@ -496,6 +496,7 @@ namespace DFM.Web.Controllers
                     SELECT @Utilized=ISNULL(SUM(InvoiceAmount),0) FROM dbo.Invoices WHERE ProjectId=@ProjectId AND YEAR(InvoiceDate)=@BudgetYear AND InvoiceStatus<>'Rejected';
                     SELECT @OtherAnnualBudget=ISNULL(SUM(AnnualBudget),0) FROM dbo.OpexContractBudgets WITH(UPDLOCK,HOLDLOCK) WHERE ProjectId=@ProjectId AND BudgetYear<>@BudgetYear;
                     IF @OtherAnnualBudget+@AnnualBudget>@ContractBudget THROW 50091,'Annual budgets cannot exceed the OPEX Contract budget.',1;
+                    IF @AnnualBudget+@CarryForwardAmount-@ReturnedAmount<@Utilized THROW 50093,'Annual allocation cannot be less than invoices already charged to that year.',1;
                     IF @ReturnedAmount>@AnnualBudget+@CarryForwardAmount-@Utilized THROW 50092,'Returned amount cannot exceed the remaining annual budget.',1;
                     SELECT @OldAnnualBudget=AnnualBudget,@OldCarryForward=CarryForwardAmount,@OldReturned=ReturnedAmount
                     FROM dbo.OpexContractBudgets WITH(UPDLOCK,HOLDLOCK) WHERE ProjectId=@ProjectId AND BudgetYear=@BudgetYear;

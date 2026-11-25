@@ -3737,6 +3737,14 @@
         setTimeout(function () { window.URL.revokeObjectURL(url); }, 60000);
       }
       vm.exportReport = function (section) {
+        if (section === "financial-invoices" && !vm.demo && !vm.vendorInvoicesLoaded) {
+          loadVendorInvoices().then(function () {
+            if (vm.vendorInvoiceError) noticeError(vm.vendorInvoiceError);
+            else vm.exportReport(section);
+          });
+          return;
+        }
+        if (section === "financial-invoices" && !vm.demo && vm.vendorInvoiceError) { noticeError(vm.vendorInvoiceError); return; }
         var columns = [];
         var rows = [];
         if (section === "vendor" && vm.vendor360 && vm.vendor360.vendor) {
@@ -3792,6 +3800,32 @@
             { label: "GL Number", value: function (row) { return row.line.glNumber; } }
           ];
           rows = buildApprovalMonitorRows();
+        } else if (section === "financial-pets") {
+          columns = [csvColumn("PET Status", "status"), csvColumn("Count", "count")];
+          rows = [
+            { status: "Approved", count: vm.reportMetrics.petsApproved },
+            { status: "On track", count: vm.reportMetrics.petsOnTrack },
+            { status: "Rejected", count: vm.reportMetrics.petsRejected }
+          ];
+        } else if (section === "financial-capex" || section === "financial-opex") {
+          var isCapexReport = section === "financial-capex";
+          var reportBudget = isCapexReport ? vm.reportMetrics.capexBudget : vm.reportMetrics.opexBudget;
+          var reportUtilized = isCapexReport ? vm.reportMetrics.capexUtilized : vm.reportMetrics.opexUtilized;
+          columns = [csvColumn("Fund", "fund"), csvColumn("Budget", "budget"), csvColumn("Utilized", "utilized"), csvColumn("Remaining", "remaining"), csvColumn("Utilization percent", "utilizationPercent")];
+          rows = [{ fund: isCapexReport ? "CAPEX" : "OPEX", budget: reportBudget, utilized: reportUtilized, remaining: reportBudget - reportUtilized, utilizationPercent: vm.percent(reportUtilized, reportBudget) }];
+        } else if (section === "financial-invoices") {
+          var projectsById = {};
+          (vm.projects || []).forEach(function (project) { projectsById[String(project.projectId)] = project; });
+          columns = [
+            { label: "Project ID", value: function (row) { var project = projectsById[String(row.projectId)]; return project && vm.projectDisplayId(project); } },
+            { label: "Project", value: function (row) { var project = projectsById[String(row.projectId)]; return project && project.projectName; } },
+            { label: "Project Type", value: function (row) { var project = projectsById[String(row.projectId)]; return project && project.projectType; } },
+            csvColumn("PET ID", "petId"), csvColumn("Budget Line ID", "budgetLineId"),
+            csvColumn("Vendor", "vendorName"), csvColumn("Invoice Number", "invoiceNumber"), csvColumn("Amount", "invoiceAmount"),
+            csvColumn("Status", "invoiceStatus"), csvColumn("Invoice Date", "invoiceDate"), csvColumn("Vendor Submission Date", "vendorSubmissionDate"),
+            csvColumn("System Entry Date", "systemEntryDate"), csvColumn("Department", "department"), csvColumn("Payment Date", "paymentDate")
+          ];
+          rows = vendorInvoiceSourceRows();
         } else if (section === "financial-years") {
           columns = [csvColumn("Breakdown", "breakdown"), csvColumn("Year or Group", "name"), csvColumn("CAPEX", "capex"), csvColumn("OPEX", "opex"), csvColumn("Total", "total"), csvColumn("Invoice Count", "invoiceCount")];
           rows = vm.yearlyExpenditureRows.map(function (row) { return angular.extend({ breakdown: "Year", name: row.year }, row); }).concat(vm.dimensionExpenditureRows.map(function (row) { return angular.extend({ breakdown: vm.expenditureDimensionLabel() }, row); }));
